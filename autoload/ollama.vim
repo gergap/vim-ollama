@@ -1,7 +1,7 @@
 " autoload/ollama.vim
-let s:ns_id = nvim_create_namespace('ollama.suggestion')
 let s:timer_id = -1
 let s:suggestion = ''
+let s:match_id = -1
 
 function! ollama#schedule()
   if s:timer_id != -1
@@ -23,15 +23,18 @@ function! ollama#show_suggestion(suggestion)
   if !empty(a:suggestion)
     let s:suggestion = a:suggestion
     let l:current_col = col('.')
-    call nvim_buf_clear_namespace(0, s:ns_id, 0, -1)
-    call nvim_buf_set_extmark(0, s:ns_id, line('.'), l:current_col - 1, {'virt_text': [[s:suggestion, 'Comment']]})
+    call ollama#clear_preview()
+    let s:match_id = matchaddpos('Comment', [[line('.'), l:current_col, len(s:suggestion)]])
   else
     call ollama#clear_preview()
   endif
 endfunction
 
 function! ollama#clear_preview()
-  call nvim_buf_clear_namespace(0, s:ns_id, 0, -1)
+  if s:match_id != -1
+    call matchdelete(s:match_id)
+    let s:match_id = -1
+  endif
 endfunction
 
 function! ollama#insert_suggestion()
@@ -47,4 +50,3 @@ function! ollama#insert_suggestion()
   endif
   return ''
 endfunction
-
