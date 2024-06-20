@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # python/ollama.py
 import sys
 import json
@@ -11,6 +12,8 @@ def get_suggestions(prompt):
     data = {
         'prompt': prompt
     }
+    print('test data', end='')
+    return
     response = requests.post(url, headers=headers, json=data)
     suggestions = response.json().get('suggestions', [])
     if suggestions:
