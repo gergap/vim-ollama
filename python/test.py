@@ -38,4 +38,4 @@ def generate_code_completion(prompt):
 if __name__ == "__main__":
     prompt = sys.stdin.read()
     response = generate_code_completion(prompt)
-    print(response)
+    print(response, end='')

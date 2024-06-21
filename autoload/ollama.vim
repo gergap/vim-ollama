@@ -39,6 +39,8 @@ function! ollama#Schedule()
         call timer_stop(s:timer_id)
         let s:timer_id = -1
     endif
+    let s:suggestion = ''
+    call ollama#UpdatePreview(s:suggestion)
     let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
 endfunction
 
@@ -68,11 +70,11 @@ function! s:HandleExit(job, exit_code)
         echohl ErrorMsg
         echom "Process exited with code: " . a:exit_code
         echohl None
+        call ollama#ClearPreview()
     endif
     " release reference to job object
     let s:job = v:null
     let s:prompt = ''
-    call ollama#ClearPreview()
 endfunction
 
 function! ollama#GetSuggestion(timer)
@@ -191,6 +193,7 @@ function! ollama#InsertSuggestion()
 
         " Get the current indentation level
         let l:indent = indent(line('.'))
+        let l:indent = 0
 
         " Insert the first line with current cursor position
         let l:new_line = l:before_cursor . l:text[0] . l:after_cursor
