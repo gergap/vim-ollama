@@ -21,22 +21,87 @@ if s:has_vim_ghost_text && empty(prop_type_get(s:annot_hlgroup))
 endif
 
 function! ollama#Schedule()
+    call ollama#logger#Debug("Scheduling timer...")
     if s:timer_id != -1
+        call ollama#logger#Debug("Killing existing timer.")
+        " remove exiting timer before scheduling new one
         call timer_stop(s:timer_id)
+        let s:timer_id = -1
     endif
     let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
 endfunction
 
+" handle output on stdout
+function! s:HandleCompletion(job, data)
+    call ollama#logger#Debug("Received completion: ".a:data)
+    if !empty(a:data)
+        "let l:suggestion = join(a:data, "\n")
+        let s:suggestion = a:data
+        call ollama#UpdatePreview(s:suggestion)
+    endif
+endfunction
+
+" handle output on stderr
+function! s:HandleError(job, data)
+    call ollama#logger#Debug("Received stderr: ".a:data)
+    if !empty(a:data)
+        echohl ErrorMsg
+        echom "Error: " . join(a:data, "\n")
+        echohl None
+    endif
+endfunction
+
+function! s:HandleExit(job, exit_code)
+    call ollama#logger#Debug("Process exited: ".a:exit_code)
+    if a:exit_code != 0
+        echohl ErrorMsg
+        echom "Process exited with code: " . a:exit_code
+        echohl None
+    endif
+    " release reference to job object
+    let s:job = v:null
+    let s:prompt = ''
+    call ollama#ClearPreview()
+endfunction
+
 function! ollama#GetSuggestion(timer)
+    call ollama#logger#Debug("GetSuggestion")
+    " reset timer handle when called
+    let s:timer_id = -1
     let l:current_line = getline('.')
     let l:current_col = col('.')
     let l:prefix = strpart(l:current_line, 0, l:current_col - 1)
-    let l:command = printf('python3 %s/python/ollama.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
-    let l:suggestion = system(l:command, l:prefix)
-    call ollama#UpdatePreview(l:suggestion)
+    let l:command = printf('python3 %s/python/test.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
+    let l:job_options = {
+        \ 'out_mode': 'raw',
+        \ 'out_cb': function('s:HandleCompletion'),
+        \ 'err_cb': function('s:HandleError'),
+        \ 'exit_cb': function('s:HandleExit')
+        \ }
+
+    if (s:prompt == l:prefix)
+        call ollama#logger#Debug("Ignoring search for '".l:prefix."'. Already running.")
+        return
+    endif
+    " save current search
+    let s:prompt = l:prefix
+
+    if s:job isnot v:null
+        call ollama#logger#Debug("Terminating existing job.")
+        call job_stop(s:job)
+        let s:job = v:null
+    endif
+
+    call ollama#logger#Debug("Starting job for '".l:prefix."'...")
+    " create job object and hold reference to avoid closing channels
+    let s:job = job_start(l:command, l:job_options)
+    let channel = job_getchannel(s:job)
+    call ch_sendraw(channel, l:prefix)
+    call ch_close_in(channel)
 endfunction
 
 function! ollama#UpdatePreview(suggestion)
+    call ollama#logger#Debug("UpdatePreview: suggestion='".a:suggestion."'")
     if !empty(a:suggestion)
         let s:suggestion = a:suggestion
         let text = split(s:suggestion, "\r\n\\=\\|\n", 1)
@@ -61,30 +126,37 @@ function! ollama#UpdatePreview(suggestion)
 endfunction
 
 function! ollama#ClearPreview()
+    call ollama#logger#Debug("ClearPreview")
     call prop_remove({'type': s:hlgroup, 'all': v:true})
     call prop_remove({'type': s:annot_hlgroup, 'all': v:true})
 endfunction
 
 function! ollama#Clear() abort
+    call ollama#logger#Debug("Clear")
     if s:timer_id != -1
         "call timer_stop(remove(g:, '_ollama_timer'))
         call timer_stop(s:timer_id)
+    endif
+    if s:job isnot v:null
+        call job_stop(s:job)
+        let s:job = v:null
     endif
     "if exists('b:_ollama')
     "    call copilot#client#Cancel(get(b:_ollama, 'first', {}))
     "    call copilot#client#Cancel(get(b:_ollama, 'cycling', {}))
     "endif
-    call s:UpdatePreview()
+    call ollama#ClearPreview()
     unlet! b:_ollama
     return ''
 endfunction
 
 function! ollama#Dismiss() abort
+    call ollama#logger#Debug("Dismiss")
     call ollama#Clear()
-    call ollama#UpdatePreview()
 endfunction
 
 function! ollama#InsertSuggestion()
+    call ollama#logger#Debug("InsertSuggestion")
     if !empty(s:suggestion)
         let l:current_col = col('.')
         let l:line = getline('.')
