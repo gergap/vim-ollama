@@ -13,7 +13,7 @@ if !exists('g:ollama_api_url')
     let g:ollama_api_url = 'http://tux:5000/api/suggestions'
 endif
 if !exists('g:ollama_debounce_time')
-    let g:ollama_debounce_time = 300
+    let g:ollama_debounce_time = 500
 endif
 
 " Defines the color scheme for ollama suggestions
