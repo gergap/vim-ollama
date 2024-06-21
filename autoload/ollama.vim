@@ -5,6 +5,7 @@ scriptencoding utf-8
 let s:timer_id = -1
 " a running REST API job
 let s:job = v:null
+let s:kill_job = v:null
 " fill-in-the-middle
 let s:prefix_text = '<PRE> '
 let s:middle_text = ' <MID>'
@@ -67,9 +68,14 @@ endfunction
 function! s:HandleExit(job, exit_code)
     call ollama#logger#Debug("Process exited: ".a:exit_code)
     if a:exit_code != 0
-        echohl ErrorMsg
-        echo "Process exited with code: " . a:exit_code
-        echohl None
+        " Don't log errors if we killed the job, this is expected
+        if a:job isnot s:kill_job
+            echohl ErrorMsg
+            echo "Process exited with code: " . a:exit_code
+            echohl None
+        else
+            call ollama#logger#Debug("Process terminated as expected")
+        endif
         call ollama#ClearPreview()
     endif
     " release reference to job object
@@ -113,10 +119,10 @@ function! ollama#GetSuggestion(timer)
     " save current search
     let s:prompt = l:prompt
 
+    " Kill any running job and replace with new one
     if s:job isnot v:null
         call ollama#logger#Debug("Terminating existing job.")
-        call job_stop(s:job)
-        let s:job = v:null
+        call s:KillJob()
     endif
 
     call ollama#logger#Debug("Starting job for '".l:prompt."'...")
@@ -158,16 +164,21 @@ function! ollama#ClearPreview()
     call prop_remove({'type': s:annot_hlgroup, 'all': v:true})
 endfunction
 
+function! s:KillJob()
+    if s:job isnot v:null
+        let s:kill_job = s:job
+        call job_stop(s:job)
+        let s:job = v:null
+    endif
+endfunction
+
 function! ollama#Clear() abort
     call ollama#logger#Debug("Clear")
     if s:timer_id != -1
         "call timer_stop(remove(g:, '_ollama_timer'))
         call timer_stop(s:timer_id)
     endif
-    if s:job isnot v:null
-        call job_stop(s:job)
-        let s:job = v:null
-    endif
+    call s:KillJob()
     "if exists('b:_ollama')
     "    call copilot#client#Cancel(get(b:_ollama, 'first', {}))
     "    call copilot#client#Cancel(get(b:_ollama, 'cycling', {}))
