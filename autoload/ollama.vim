@@ -68,7 +68,7 @@ function! s:HandleExit(job, exit_code)
     call ollama#logger#Debug("Process exited: ".a:exit_code)
     if a:exit_code != 0
         echohl ErrorMsg
-        echom "Process exited with code: " . a:exit_code
+        echo "Process exited with code: " . a:exit_code
         echohl None
         call ollama#ClearPreview()
     endif
@@ -83,7 +83,7 @@ function! ollama#GetSuggestion(timer)
     let s:timer_id = -1
     let l:current_line = line('.')
     let l:current_col = col('.')
-    let l:context_lines = 10
+    let l:context_lines = 30
 
     " Get the lines before and after the current line
     let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
@@ -98,7 +98,7 @@ function! ollama#GetSuggestion(timer)
     let l:prompt = s:prefix_text . l:prefix . s:suffix_text . l:suffix . s:middle_text
 
     " Adjust the command to use the prompt as stdin input
-    let l:command = printf('python3 %s/python/test.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
+    let l:command = printf('python3 %s/python/ollama.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
     let l:job_options = {
         \ 'out_mode': 'raw',
         \ 'out_cb': function('s:HandleCompletion'),

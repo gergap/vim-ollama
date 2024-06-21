@@ -1,37 +1,38 @@
 #!/usr/bin/env python3
-# python/ollama.py
-import sys
-import json
 import requests
+import sys
 
-def get_suggestions(prompt):
-    url = sys.argv[1]
+# Replace with your actual API key and endpoint
+ENDPOINT = 'http://tux:11434/api/generate'
+MODEL = 'codellama:code'
+
+def generate_code_completion(prompt):
     headers = {
         'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Host': 'tux:11434'
     }
-    data = {
-        'prompt': prompt
-    }
-    # Hack a few test suggestions
-    if (prompt == 'int main'):
-        print('(int argc, char *argv[])', end='')
-        return
-    if (prompt.endswith('printf')):
-        print('("Hello, World\\n");')
-        return
-    if (prompt.endswith('for')):
-        print('(int i=0; i<count; i++) {\n    // TODO\n}')
-        return
-    return
 
-    response = requests.post(url, headers=headers, json=data)
-    suggestions = response.json().get('suggestions', [])
-    if suggestions:
-        print(suggestions[0])
+    data = {
+        'model': MODEL,
+        'prompt': prompt,
+        'stream': False,
+        'options': {
+            'temperature': 0,
+            'top_p': 0.95
+        },
+        'num_predict': 10
+    }
+
+    response = requests.post(ENDPOINT, headers=headers, json=data)
+
+    if response.status_code == 200:
+        completion = response.json().get('response')
+        return completion.strip()
     else:
-        print('')
+        raise Exception(f"Error: {response.status_code} - {response.text}")
 
 if __name__ == "__main__":
     prompt = sys.stdin.read()
-    get_suggestions(prompt)
-
+    response = generate_code_completion(prompt)
+    print(response, end='')
