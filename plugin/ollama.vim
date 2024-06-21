@@ -35,7 +35,7 @@ endfunction
 augroup ollama
     autocmd!
     autocmd CursorMovedI          * call ollama#Schedule()
-    autocmd InsertLeave           * call ollama#ClearPreview()
+    autocmd InsertLeave           * call ollama#Dismiss()
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 

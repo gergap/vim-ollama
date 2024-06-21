@@ -1,8 +1,15 @@
 " autoload/ollama.vim
 scriptencoding utf-8
 
+" numeric timer Id
 let s:timer_id = -1
+" a running REST API job
+let s:job = v:null
+" current prompt
+let s:prompt = ''
+" current suggestions
 let s:suggestion = ''
+" text property id for ghost text
 let s:prop_id = -1
 
 let s:has_nvim_ghost_text = has('nvim-0.6') && exists('*nvim_buf_get_mark')
