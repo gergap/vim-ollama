@@ -38,19 +38,30 @@ async def main():
     conversation_history = []
 
     while True:
-        user_message = input("\nYou: ").strip()
-        if user_message.lower() in ['exit', 'quit']:
-            print("Exiting the chat.")
-            break
+        try:
+            user_message = input("You: ").strip()
+            if user_message.lower() in ['exit', 'quit']:
+                print("Exiting the chat.")
+                exit(0)
 
-        conversation_history.append({"role": "user", "content": user_message})
+            conversation_history.append({"role": "user", "content": user_message})
 
-        await stream_chat_message(conversation_history)
+            task = asyncio.create_task(stream_chat_message(conversation_history))
+            await task
 
-        # Append assistant's message to conversation history to maintain context
-        # Here we assume that the assistant's response is printed out line by line
-        # Adjust as necessary depending on how the response is formatted
+        except KeyboardInterrupt:
+            print("\nStreaming interrupted. Showing prompt again...")
+            # Cancel the current task to clean up properly
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    while True:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            print("Canceled.")
+    print("\nExiting the chat. (outer)")
