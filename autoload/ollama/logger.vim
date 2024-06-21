@@ -29,7 +29,8 @@ function! ollama#logger#Raw(level, message) abort
   let lines = type(a:message) == v:t_list ? copy(a:message) : split(a:message, "\n", 1)
   let lines[0] = strftime('[%Y-%m-%d %H:%M:%S] ') . get(s:level_prefixes, a:level, '[UNKNOWN] ') . get(lines, 0, '')
   try
-    if !filewritable(s:log_file)
+    if filewritable(s:log_file)
+      call writefile(lines, s:log_file, 'a')
       return
     endif
     call map(lines, { k, L -> type(L) == v:t_func ? call(L, []) : L })
