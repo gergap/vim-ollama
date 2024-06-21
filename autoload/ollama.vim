@@ -5,6 +5,10 @@ scriptencoding utf-8
 let s:timer_id = -1
 " a running REST API job
 let s:job = v:null
+" fill-in-the-middle
+let s:prefix_text = '<PRE> '
+let s:middle_text = ' <MID>'
+let s:suffix_text = ' <SUF>'
 " current prompt
 let s:prompt = ''
 " current suggestions
@@ -75,9 +79,23 @@ function! ollama#GetSuggestion(timer)
     call ollama#logger#Debug("GetSuggestion")
     " reset timer handle when called
     let s:timer_id = -1
-    let l:current_line = getline('.')
+    let l:current_line = line('.')
     let l:current_col = col('.')
-    let l:prefix = strpart(l:current_line, 0, l:current_col - 1)
+    let l:context_lines = 10
+
+    " Get the lines before and after the current line
+    let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
+    let l:suffix_lines = getline(l:current_line + 1, min([line('$'), l:current_line + l:context_lines]))
+
+    " Combine prefix lines and current line's prefix part
+    let l:prefix = join(l:prefix_lines, "\n") . "\n" . strpart(getline('.'), 0, l:current_col - 1)
+    " Combine suffix lines and current line's suffix part
+    let l:suffix = strpart(getline('.'), l:current_col - 1) . "\n" . join(l:suffix_lines, "\n")
+
+    " Create the prompt using the specified syntax
+    let l:prompt = s:prefix_text . l:prefix . s:suffix_text . l:suffix . s:middle_text
+
+    " Adjust the command to use the prompt as stdin input
     let l:command = printf('python3 %s/python/test.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
     let l:job_options = {
         \ 'out_mode': 'raw',
@@ -86,12 +104,12 @@ function! ollama#GetSuggestion(timer)
         \ 'exit_cb': function('s:HandleExit')
         \ }
 
-    if (s:prompt == l:prefix)
-        call ollama#logger#Debug("Ignoring search for '".l:prefix."'. Already running.")
+    if (s:prompt == l:prompt)
+        call ollama#logger#Debug("Ignoring search for '".l:prompt."'. Already running.")
         return
     endif
     " save current search
-    let s:prompt = l:prefix
+    let s:prompt = l:prompt
 
     if s:job isnot v:null
         call ollama#logger#Debug("Terminating existing job.")
@@ -99,11 +117,11 @@ function! ollama#GetSuggestion(timer)
         let s:job = v:null
     endif
 
-    call ollama#logger#Debug("Starting job for '".l:prefix."'...")
+    call ollama#logger#Debug("Starting job for '".l:prompt."'...")
     " create job object and hold reference to avoid closing channels
     let s:job = job_start(l:command, l:job_options)
     let channel = job_getchannel(s:job)
-    call ch_sendraw(channel, l:prefix)
+    call ch_sendraw(channel, l:prompt)
     call ch_close_in(channel)
 endfunction
 
