@@ -99,7 +99,7 @@ function! ollama#GetSuggestion(timer)
     let l:prompt = s:prefix_text . l:prefix . s:suffix_text . l:suffix . s:middle_text
 
     " Adjust the command to use the prompt as stdin input
-    let l:command = printf('python3 %s/python/ollama.py %s', expand('<sfile>:h:h'), g:ollama_api_url)
+    let l:command = printf('python3 %s/python/ollama.py -m %s -u %s', expand('<sfile>:h:h'), g:ollama_model, g:ollama_host)
     let l:job_options = {
         \ 'out_mode': 'raw',
         \ 'out_cb': function('s:HandleCompletion'),

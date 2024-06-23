@@ -9,8 +9,12 @@ if v:version < 800 || !exists('##InsertLeavePre')
 endif
 
 " Default settings
-if !exists('g:ollama_api_url')
-    let g:ollama_api_url = 'http://tux:5000/api/suggestions'
+if !exists('g:ollama_host')
+    let g:ollama_host = 'http://tux:11434'
+endif
+if !exists('g:ollama_model')
+    let g:ollama_model = 'codellama:code'
+    let g:ollama_model = 'llama3'
 endif
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
