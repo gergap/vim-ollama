@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# This script uses the generate API endpoint for oneshot code completion.
+# This script uses the chat API endpoint which allows to create conversations
+# and supports sending the history of messages as context.
 import requests
 import sys
 import argparse
@@ -54,12 +55,21 @@ def generate_code_completion(prompt, baseurl, model):
         'Accept': '*/*',
         'Host': baseurl.split('//')[1].split('/')[0]
     }
-    endpoint = baseurl + "/api/generate"
+    endpoint = baseurl + "/api/chat"
     log_debug('endpoint: ' + endpoint)
 
     data = {
         'model': model,
-        'prompt': prompt,
+        'messages': [
+            {
+                'role': 'system',
+                'content': 'Respond with just one sentence.'
+            },
+            {
+                'role': 'user',
+                'content': prompt
+            }
+        ],
         'stream': False,
         'options': {
             'temperature': 0,
@@ -73,8 +83,9 @@ def generate_code_completion(prompt, baseurl, model):
     if response.status_code == 200:
         json_response = response.json()
         log_debug('response: ' + json.dumps(json_response, indent=4))
-        completion = response.json().get('response')
-        return completion.strip()
+        message = response.json().get('message')
+        content = message.get('content') if message else ''
+        return content.strip()
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
