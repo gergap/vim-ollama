@@ -34,12 +34,7 @@ endif
 
 function! ollama#Schedule()
     call ollama#logger#Debug("Scheduling timer...")
-    if s:timer_id != -1
-        call ollama#logger#Debug("Killing existing timer.")
-        " remove exiting timer before scheduling new one
-        call timer_stop(s:timer_id)
-        let s:timer_id = -1
-    endif
+    call s:KillTimer()
     let s:suggestion = ''
     call ollama#UpdatePreview(s:suggestion)
     let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
@@ -172,17 +167,18 @@ function! s:KillJob()
     endif
 endfunction
 
+function! s:KillTimer()
+    if s:timer_id != -1
+        call ollama#logger#Debug("Killing existing timer.")
+        call timer_stop(s:timer_id)
+        let s:timer = -1
+    endif
+endfunction
+
 function! ollama#Clear() abort
     call ollama#logger#Debug("Clear")
-    if s:timer_id != -1
-        "call timer_stop(remove(g:, '_ollama_timer'))
-        call timer_stop(s:timer_id)
-    endif
+    call s:KillTimer()
     call s:KillJob()
-    "if exists('b:_ollama')
-    "    call copilot#client#Cancel(get(b:_ollama, 'first', {}))
-    "    call copilot#client#Cancel(get(b:_ollama, 'cycling', {}))
-    "endif
     call ollama#ClearPreview()
     unlet! b:_ollama
     return ''
@@ -225,3 +221,6 @@ function! ollama#InsertSuggestion()
     endif
     return ''
 endfunction
+
+
+
