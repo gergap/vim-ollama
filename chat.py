@@ -61,24 +61,34 @@ async def stream_chat_message(messages, endpoint, model):
     }
     log_debug('request: ' + json.dumps(data, indent=4))
 
-    async with httpx.AsyncClient() as client:
-        async with client.stream('POST', endpoint, headers=headers, json=data) as response:
-            if response.status_code == 200:
-                async for line in response.aiter_lines():
-                    if line:
-                        message = json.loads(line)
-                        if 'message' in message and 'content' in message['message']:
-                            content = message['message']['content']
-#                            messages.append({"role": "assistant", "content": content})
-                            print(content, end='', flush=True)
-                            if '<EOT>' in content:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            async with client.stream('POST', endpoint, headers=headers, json=data) as response:
+                if response.status_code == 200:
+                    async for line in response.aiter_lines():
+                        if line:
+                            message = json.loads(line)
+                            if 'message' in message and 'content' in message['message']:
+                                content = message['message']['content']
+#                                messages.append({"role": "assistant", "content": content})
+                                print(content, end='', flush=True)
+                                if '<EOT>' in content:
+                                    return
+                            # Stop if response contains an indication of completion
+                            if message.get('done', False):
+                                print('<EOT>', flush=True)
                                 return
-                        # Stop if response contains an indication of completion
-                        if message.get('done', False):
-                            print('<EOT>', flush=True)
-                            return
-            else:
-                raise Exception(f"Error: {response.status_code} - {response.text}")
+                else:
+                    raise Exception(f"Error: {response.status_code} - {response.text}")
+    except httpx.ReadTimeout:
+        print("Read timeout occurred. Please try again.")
+        log_debug("Read timeout occurred.")
+    except asyncio.CancelledError:
+        log_debug("Task was cancelled.")
+        raise
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        log_debug(f"An error occurred: {str(e)}")
 
 async def main(baseurl, model):
     conversation_history = []
