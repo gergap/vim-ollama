@@ -69,11 +69,13 @@ async def stream_chat_message(messages, endpoint, model):
                         message = json.loads(line)
                         if 'message' in message and 'content' in message['message']:
                             content = message['message']['content']
+#                            messages.append({"role": "assistant", "content": content})
                             print(content, end='', flush=True)
                             if '<EOT>' in content:
                                 return
                         # Stop if response contains an indication of completion
                         if message.get('done', False):
+                            print('<EOT>', flush=True)
                             return
             else:
                 raise Exception(f"Error: {response.status_code} - {response.text}")
