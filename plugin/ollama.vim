@@ -56,5 +56,5 @@ runtime autoload/ollama.vim
 
 
 " Define a command to start the chat session
-command! -range=% OllamaReview call ollama#review#Review()
+command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! OllamaChat call ollama#review#Chat()
