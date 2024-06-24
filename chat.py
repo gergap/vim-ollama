@@ -85,26 +85,45 @@ async def main(baseurl, model):
     endpoint = baseurl + "/api/chat"
     log_debug('endpoint: ' + endpoint)
 
+    multiline_input = False
+    multiline_message = []
+
     while True:
         try:
             user_message = input("").strip()
-            if user_message.lower() in ['exit', 'quit']:
-                print("Exiting the chat.")
-                exit(0)
 
-            conversation_history.append({"role": "user", "content": user_message})
+            if multiline_input:
+                if user_message == '"""':
+                    multiline_input = False
+                    complete_message = "\n".join(multiline_message)
+                    conversation_history.append({"role": "user", "content": complete_message})
+                    multiline_message = []
 
-            task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
-            await task
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    await task
+                else:
+                    multiline_message.append(user_message)
+            else:
+                if user_message == '"""':
+                    multiline_input = True
+                    multiline_message = []
+                elif user_message.lower() in ['exit', 'quit']:
+                    print("Exiting the chat.")
+                    exit(0)
+                else:
+                    conversation_history.append({"role": "user", "content": user_message})
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    await task
 
         except KeyboardInterrupt:
             print("\nStreaming interrupted. Showing prompt again...")
             # Cancel the current task to clean up properly
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            if 'task' in locals():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 if __name__ == "__main__":
     setup_logging()
@@ -118,3 +137,4 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
+
