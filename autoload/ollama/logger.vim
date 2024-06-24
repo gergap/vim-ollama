@@ -1,7 +1,6 @@
 if !exists('s:log_file')
   let s:log_file = tempname() . '-ollama.log'
   let s:log_file = '/home/gergap/work/vim-ollama/ollama.log'
-  echom("log_file=".s:log_file)
   try
     call writefile([], s:log_file)
   catch
