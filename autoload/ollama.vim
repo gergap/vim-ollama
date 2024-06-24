@@ -101,7 +101,16 @@ function! ollama#GetSuggestion(timer)
     let l:suffix = strpart(getline('.'), l:current_col - 1) . "\n" . join(l:suffix_lines, "\n")
 
     " Create the prompt using the specified syntax
-    let l:prompt = s:prefix_text . l:prefix . s:suffix_text . l:suffix . s:middle_text
+    if (g:ollama_model == 'llama3')
+        " TODO: make this working!!!
+        " llama3 does not support fill-in-the-middle, so we use a carefully
+        " engineered prompt instead and hope for the best.
+        let l:prompt = "You are a code completion model. When provided with some code, complete the code marked with _____. Output only the completion. Output no other code. Output no other text.\n"
+        let l:prompt .= "```\n".l:prefix."_____\n".l:suffix."\n```"
+    else
+        " Regular fill-in-the-middle for codellama using configured tokens
+        let l:prompt = s:prefix_text . l:prefix . s:suffix_text . l:suffix . s:middle_text
+    endif
 
     " Adjust the command to use the prompt as stdin input
     let l:command = printf('python3 %s/python/ollama.py -m %s -u %s', expand('<sfile>:h:h'), g:ollama_model, g:ollama_host)
