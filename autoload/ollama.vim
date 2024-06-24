@@ -34,6 +34,11 @@ endif
 
 function! ollama#Schedule()
     call ollama#logger#Debug("Scheduling timer...")
+    " get current buffer type
+    if &buftype=='prompt'
+        call ollama#logger#Debug("Ignoring prompt buffer")
+        return
+    endif
     call s:KillTimer()
     let s:suggestion = ''
     call ollama#UpdatePreview(s:suggestion)
