@@ -13,8 +13,12 @@ if !exists('g:ollama_host')
     let g:ollama_host = 'http://tux:11434'
 endif
 if !exists('g:ollama_model')
+    " default code completion model
     let g:ollama_model = 'codellama:code'
-    let g:ollama_model = 'llama3'
+endif
+if !exists('g:ollama_chat_model')
+    " default chat model
+    let g:ollama_chat_model = 'llama3'
 endif
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
@@ -39,8 +43,8 @@ endfunction
 " Create autocommand group
 augroup ollama
     autocmd!
-    autocmd CursorMovedI          * call ollama#Schedule()
-    autocmd InsertLeave           * call ollama#Dismiss()
+    autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
+    autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 
@@ -52,5 +56,5 @@ runtime autoload/ollama.vim
 
 
 " Define a command to start the chat session
-command! -nargs=1 OllamaReview call ollama#review#Review(<f-args>)
-command! -nargs=1 OllamaChat call ollama#review#Chat(<f-args>)
+command! -range=% OllamaReview call ollama#review#Review()
+command! OllamaChat call ollama#review#Chat()

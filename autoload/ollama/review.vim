@@ -46,31 +46,35 @@ let s:bufnr = -1
 "    let b:chatbot_channel = s:channel
 "endfunction
 
+func! ollama#review#KillChatBot()
+    call ollama#logger#Debug("KillChatBot")
+    call job_stop(s:job)
+endfunc
+
 function! s:StartChat(lines) abort
     " Create a channel log so we can see what happens.
     call ch_logfile('logfile', 'w')
 
     " Function handling a line of text that has been typed.
-    func TextEntered(text)
+    func! TextEntered(text)
         call ollama#logger#Debug("TextEntered: ".a:text)
         " Send the text to a shell with Enter appended.
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
-    func GotOutput(channel, msg)
+    func! GotOutput(channel, msg)
         call ollama#logger#Debug("GotOutput: ".a:msg)
         call append(line("$") - 1, a:msg)
 "        call appendbufline(s:buf, '$', split(a:msg, "\n"))
     endfunc
 
     " Function handling the shell exits: close the window.
-    func JobExit(job, status)
+    func! JobExit(job, status)
         call ollama#logger#Debug("JobExit: ".a:status)
         " set to nofile to avoid saveing prompts
-        setlocal buftype=nofile
-"        quit!
-        bd!
+        call append(line("$") - 1, "Chat process terminated with exit code ".a:status)
+        call append(line("$") - 1, "Run 'OllamaChate' again to restart it or 'bd!' to delete this buffer.")
     endfunc
 
     " Redirect job's IO to buffer
@@ -116,6 +120,10 @@ function! s:StartChat(lines) abort
     " connect buffer with job
     call prompt_setcallback(buf, function("TextEntered"))
     eval prompt_setprompt(buf, ">>> ")
+
+    " add key mapping for CTRL-C to terminate the chat script
+    execute 'nnoremap <buffer> <C-C> :call ollama#review#KillChatBot()<CR>'
+    execute 'inoremap <buffer> <C-C> <esc>:call ollama#review#KillChatBot()<CR>'
 
     " start accepting shell commands
     startinsert
@@ -184,7 +192,6 @@ function ollama#review#Review() range
     call s:StartChat(lines)
 endfunction
 
-function ollama#review#Chat() range
+function ollama#review#Chat()
     call s:StartChat([])
 endfunction
-
