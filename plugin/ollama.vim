@@ -33,6 +33,7 @@ endfunction
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
     inoremap <silent> <Tab> <C-R>=ollama#InsertSuggestion()<CR>
+    vmap <silent> <leader>r :call ollama#review#Review()<CR>
 endfunction
 
 " Create autocommand group
@@ -50,3 +51,6 @@ call s:MapTab()
 runtime autoload/ollama.vim
 
 
+" Define a command to start the chat session
+command! -nargs=1 OllamaReview call ollama#review#Review(<f-args>)
+command! -nargs=1 OllamaChat call ollama#review#Chat(<f-args>)
