@@ -190,6 +190,21 @@ function ollama#review#Review() range
     call s:StartChat(lines)
 endfunction
 
+function ollama#review#Task(prompt) range
+    let num_lines = a:lastline - a:firstline
+    let lines = getline(a:firstline, a:lastline)
+
+    call insert(lines, '"""', 0)
+    call insert(lines, a:prompt, 1)
+    call insert(lines, "```", 2)
+    call add(lines, "```")
+    call add(lines, '"""')
+
+    call ollama#logger#Debug("Prompt:".join(lines, "\n"))
+
+    call s:StartChat(lines)
+endfunction
+
 function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
