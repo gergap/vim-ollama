@@ -79,7 +79,9 @@ function! s:HandleExit(job, exit_code)
         call ollama#ClearPreview()
     endif
     " release reference to job object
-    let s:job = v:null
+    if s:job is a:job
+        let s:job = v:null
+    endif
     let s:prompt = ''
 endfunction
 
@@ -174,19 +176,27 @@ function! ollama#ClearPreview()
 endfunction
 
 function! s:KillJob()
-    if s:job isnot v:null
-        let s:kill_job = s:job
-        call job_stop(s:job)
-        let s:job = v:null
-    endif
+    try
+        if s:job isnot v:null
+            call ollama#logger#Debug("Killing existing job.")
+            let s:kill_job = s:job
+            call job_stop(s:job, "kill")
+        endif
+    catch
+        call ollama#logger#Error("KillJob failed")
+    endtry
 endfunction
 
 function! s:KillTimer()
-    if s:timer_id != -1
-        call ollama#logger#Debug("Killing existing timer.")
-        call timer_stop(s:timer_id)
-        let s:timer = -1
-    endif
+    try
+        if s:timer_id != -1
+            call ollama#logger#Debug("Killing existing timer.")
+            call timer_stop(s:timer_id)
+            let s:timer = -1
+        endif
+    catch
+        call ollama#logger#Error("KillTimer failed")
+    endtry
 endfunction
 
 function! ollama#Clear() abort
