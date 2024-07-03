@@ -45,16 +45,15 @@ augroup ollama
     autocmd!
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
     autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
+    autocmd InsertEnter           * if &buftype != 'prompt' | call s:MapTab() | endif
     autocmd BufDelete             * if &buftype == 'prompt' | call ollama#review#KillChatBot() | endif
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 
 call s:ColorScheme()
-call s:MapTab()
 
 " Load autoload functions
 runtime autoload/ollama.vim
-
 
 " Define a command to start the chat session
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
