@@ -102,9 +102,17 @@ function! ollama#GetSuggestion(timer)
     let l:suffix_lines = getline(l:current_line + 1, min([line('$'), l:current_line + l:context_lines]))
 
     " Combine prefix lines and current line's prefix part
-    let l:prefix = join(l:prefix_lines, "\n") . "\n" . strpart(getline('.'), 0, l:current_col - 1)
+    let l:prefix = join(l:prefix_lines, "\n")
+    if !empty(l:prefix)
+        let l:prefix .= "\n"
+    endif
+    let l:prefix .= strpart(getline('.'), 0, l:current_col - 1)
     " Combine suffix lines and current line's suffix part
-    let l:suffix = strpart(getline('.'), l:current_col - 1) . "\n" . join(l:suffix_lines, "\n")
+    let l:suffix = strpart(getline('.'), l:current_col - 1)
+    if !empty(l:suffix)
+        let l:suffix .= "\n"
+    endif
+    let l:suffix .= join(l:suffix_lines, "\n")
 
     " Create the prompt using the specified syntax
     if (g:ollama_model == 'llama3')
