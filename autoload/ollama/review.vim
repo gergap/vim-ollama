@@ -145,7 +145,7 @@ function! s:StartChat(lines) abort
 "    setlocal filetype=ollama-chat
     setlocal filetype=markdown
     setlocal buftype=prompt
-    setlocal bufhidden=wipe
+    "setlocal bufhidden=wipe
     setlocal noswapfile
     setlocal modifiable
     setlocal wrap
