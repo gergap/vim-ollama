@@ -255,7 +255,7 @@ function! ollama#InsertSuggestion()
         call ollama#ClearPreview()
         let s:suggestion = ''
     endif
-    return ''
+    return '\t'
 endfunction
 
 

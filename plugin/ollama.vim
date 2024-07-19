@@ -34,9 +34,17 @@ function! s:ColorScheme() abort
     hi def link OllamaAnnotation MoreMsg
 endfunction
 
+function! s:HandleTabCompletion() abort
+    let suggestion = ollama#InsertSuggestion()
+    if suggestion ==# '\t'
+        return "\<Tab>"
+    endif
+    return suggestion
+endfunction
+
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
-    inoremap <silent> <Tab> <C-R>=ollama#InsertSuggestion()<CR>
+    inoremap <silent> <Tab> <C-R>=<SID>HandleTabCompletion()<CR>
     vmap <silent> <leader>r :call ollama#review#Review()<CR>
 endfunction
 
