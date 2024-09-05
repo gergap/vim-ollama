@@ -12,7 +12,7 @@ from logging.handlers import RotatingFileHandler
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
 
-def setup_logging(log_file='ollama.log', log_level=logging.DEBUG):
+def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
     """
     Set up logging configuration.
     """
@@ -21,10 +21,10 @@ def setup_logging(log_file='ollama.log', log_level=logging.DEBUG):
     logger.setLevel(log_level)
 
     # Create a file handler which logs even debug messages
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    if not os.path.exists('/tmp/logs'):
+        os.makedirs('/tmp/logs')
 
-    log_path = os.path.join('logs', log_file)
+    log_path = os.path.join('/tmp/logs', log_file)
     fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=2)
     fh.setLevel(log_level)
 
