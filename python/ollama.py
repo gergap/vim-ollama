@@ -74,6 +74,14 @@ def generate_code_completion(prompt, baseurl, model):
         json_response = response.json()
         log_debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
+
+        # find index of sub string
+        index = completion.find('<|endoftext|>')
+        if index == -1:
+            index = completion.find('<EOT>')
+        if index != -1:
+            completion = completion[:index]
+
         return completion.rstrip()
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
