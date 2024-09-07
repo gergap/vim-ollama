@@ -74,7 +74,7 @@ def generate_code_completion(prompt, baseurl, model):
         json_response = response.json()
         log_debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
-        return completion.strip()
+        return completion.rstrip()
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
