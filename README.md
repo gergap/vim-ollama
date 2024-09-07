@@ -1,69 +1,74 @@
 # Ollama Support for Vim
 
-This plugin adds "Copilot" like code completion support to Vim.
-It uses [Ollama](https://ollama.com) as a backend which can run locally and does not require a cloud
-and thus has no privacy problems.
+This plugin adds Copilot-like code completion support to Vim. It uses [Ollama](https://ollama.com) as a backend, which
+can run locally and does not require cloud services, thus preserving your privacy.
 
 ## Motivation
 
-[Copilot.vim](https://github.com/github/copilot.vim) is an awesome plugin from Tim Pope which works in both Vim and
-NeoVim, but it is limited to MS Copilot, which is a commercial cloud based AI and requires to send all your data to MS.
+[Copilot.vim](https://github.com/github/copilot.vim) by Tim Pope is an excellent plugin for both Vim and NeoVim.
+However, it is limited to Microsoft's Copilot, a commercial cloud-based AI that requires sending all your data to
+Microsoft.
 
-With Ollama and freely available LLMs (e.g. Llama3, codellama, deepseek-coder-v2, etc.) you can achieve similar results
-without any cloud. There are other plugins available, but those require NeoVim, which is not an alternative for me. I
-prefer to use Vim in the terminal and don't want to switch to NeoVim for various reasons.
+With Ollama and freely available LLMs (e.g., Llama3, Codellama, Deepseek-coder-v2), you can achieve similar results
+without relying on the cloud. While other plugins are available, they typically require NeoVim, which isn't an
+alternative for me. I prefer using Vim in the terminal and do not want to switch to NeoVim for various reasons.
 
 ## Features
 
-* Intelligent AI based code completion
-* Integrated chat support to do code reviews or other stuff.
+- Intelligent AI-based code completion
+- Integrated chat support for code reviews and other interactions
 
-## How it works
+## How It Works
 
-There are two python scripts `ollama.py` and `chat.py` which do the communication with the Ollama via its REST API.
-The first one is intended for code completion tasks, the second script for interactive chat conversations.
-The vim plugin uses these scripts via IO redirection to get the AI results into Vim.
+The plugin uses two Python scripts, `ollama.py` and `chat.py`, to communicate with Ollama via its REST API. The first
+script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
+uses these scripts via I/O redirection to integrate AI results into Vim.
 
-This plugin only supports Vim, no NeoVim. If you are searching for a NeoVim plugin check out [LLM](https://github.com/huggingface/llm.nvim).
+This plugin supports Vim only, not NeoVim. If you're looking for a NeoVim plugin, check out
+[LLM](https://github.com/huggingface/llm.nvim).
 
 ## Installation
 
-Install `gergap/vim-ollama.vim` via vim-plug, or any other plugin manager.
+Install `gergap/vim-ollama` using vim-plug or any other plugin manager.
 
 vim-plug example:
-```
+```vim
 call plug#begin()
 ...
-Plug 'gergap/vim-ollama.vim'
+Plug 'gergap/vim-ollama'
 call plug#end()
 ```
 
 ## Configuration
 
-By default the plugin will use Ollama on localhost. You can change this by adding this variable to your `.vimrc`.
+By default, the plugin uses Ollama on localhost. You can change this by adding the following variable to your `.vimrc`:
 
 ```vim
 let g:ollama_host = 'http://tux:11434'
 ```
 
-The next thing to configure are the LLM models to use as well as the according fill-in-the-middle tokens.
-The variable `g:ollama_model` defines the LLM for code completion tasks. This must be a model with fill-in-the-middle
-support, otherwise code completion will not work as one would expect.
-The variable `g:ollama_chat_model` is used for interactive conversations similar to ChatGPT.
+Next, configure the LLM models and the corresponding fill-in-the-middle (FIM) tokens. The variable `g:ollama_model`
+defines the LLM for code completion tasks. This must be a model with fill-in-the-middle support; otherwise, code
+completion may not work as expected. The variable `g:ollama_chat_model` is used for interactive conversations, similar
+to ChatGPT.
 
+Example configuration:
 
 ```vim
-" default chat model
+" Default chat model
 let g:ollama_chat_model = 'llama3'
-" default code completion model (Codellama)
+
+" Codellama models
 let g:ollama_model = 'codellama:13b-code'
 let g:ollama_model = 'codellama:7b-code'
 let g:ollama_model = 'codellama:code'
+
 " Codegemma (small and fast)
 let g:ollama_model = 'codegemma:2b'
 let g:ollama_fim_prefix = '<|fim_prefix|>'
 let g:ollama_fim_middle = '<|fim_middle|>'
 let g:ollama_fim_suffix = '<|fim_suffix|>'
+
 " Deepseek-coder-v2
 let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
 let g:ollama_fim_prefix = '<｜fim▁begin｜>'
@@ -71,45 +76,41 @@ let g:ollama_fim_suffix = '<｜fim▁hole｜>'
 let g:ollama_fim_middle = '<｜fim▁end｜>'
 ```
 
-| Variable            | Default                | Description                            |
-|---------------------|------------------------|----------------------------------------|
-| g:ollama_host       | http://localhost:11434 | The URL of the Ollama server.          |
-| g:ollama_chat_model | llama3                 | The LLM for interactive conversations. |
-| g:ollama_model      | codellama:code         | The LLM for code completions.          |
-| g:ollama_fim_prefix | `<PRE> `               | FIM prefix for codellama.              |
-| g:ollama_fim_middle | ` <MID>`               | FIM middle for codellama.              |
-| g:ollama_fim_suffix | ` <SUF>`               | FIM suffix for codellama.              |
+| Variable              | Default                  | Description                            |
+|-----------------------|--------------------------|----------------------------------------|
+| `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
+| `g:ollama_chat_model` | `llama3`                 | The LLM for interactive conversations. |
+| `g:ollama_model`      | `codellama:code`         | The LLM for code completions.          |
+| `g:ollama_fim_prefix` | `<PRE> `                 | FIM prefix for Codellama.              |
+| `g:ollama_fim_middle` | ` <MID>`                 | FIM middle for Codellama.              |
+| `g:ollama_fim_suffix` | ` <SUF>`                 | FIM suffix for Codellama.              |
 
-When changing the code completion model, consult the models documentation to find out the correct FIM tokens.
+When changing the code completion model, consult the model’s documentation to find the correct FIM tokens.
 
 ## Usage
 
-Simply start coding. The completions are shown as "ghost text" and be accepted by pressing `<tab>`.
-To ignore them simply continue typing.
+Simply start coding. The completions will appear as "ghost text" and can be accepted by pressing `<tab>`. To ignore
+them, just continue typing.
 
 ## Commands
 
-### OllamaChat
+### `:OllamaChat`
 
-Opens up a seperate chat window for chating with the LLM inside Vim.
+Opens a separate chat window for interacting with the LLM within Vim.
 
-### OllamaReview
+### `:OllamaReview`
 
-You need to visually select some code and then run the command `:OllamaReview` to get a review of the selected code. The
-result will be shown in a new buffer, which can then be reviewed or edited as needed.
+Select some code visually and run the command `:OllamaReview` to get a review of the selected code. The result will be
+shown in a new buffer, which you can then review or edit as needed.
 
-### OllamaTask
+### `:OllamaTask`
 
-Essentially it works the same as OllamaReview, except that you can specify a custom prompt instead of "review this
-code".
+Works similarly to `:OllamaReview`, but allows you to specify a custom prompt instead of "review this code". For
+example, you can select some code and run `:OllamaTask 'convert this to python'`.
 
-E.g. you can select some code and then run `:OllamaTask 'convert this to python'`.
+## Known Issues
 
-
-## Known Issues`
-
-The integration with other tab-completions (e.g. Ultisnips) is nor perfect yet, but works for me.
-I change the UltiSnips expand trigger to a different key for that.
-I'm using CoC pluging with clang-based code completion for C/C++ and Ultisnips.
-When pressing `<tab>` it checks first if an AI suggestion is available, otherwise it will forward the `<tab>`
-to be handle by CoC. Any patches are welcome to improve this.
+The integration with other tab-completion tools (e.g., Ultisnips) is not perfect but works for me. I change the
+UltiSnips expand trigger to a different key to manage this. I'm using the CoC plugin with clang-based code completion
+for C/C++ and Ultisnips. When pressing `<tab>`, it first checks if an AI suggestion is available; otherwise, it forwards
+the `<tab>` to be handled by CoC. Contributions to improve this integration are welcome.
