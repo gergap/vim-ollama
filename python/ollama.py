@@ -88,7 +88,7 @@ def generate_code_completion(prompt, baseurl, model):
 
 if __name__ == "__main__":
     setup_logging()
-    parser = argparse.ArgumentParser(description="Chat with an Ollama LLM.")
+    parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     args = parser.parse_args()

@@ -61,10 +61,6 @@ def generate_code_completion(prompt, baseurl, model):
     data = {
         'model': model,
         'messages': [
-#            {
-#                'role': 'system',
-#                'content': 'Respond with just one sentence.'
-#            },
             {
                 'role': 'user',
                 'content': prompt
