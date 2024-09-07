@@ -140,7 +140,7 @@ function! s:StartChat(lines) abort
     endif
 
     " Create new chat buffer
-    execute 'new' l:bufname
+    execute 'vnew' l:bufname
     " Set the filetype to ollama-chat
 "    setlocal filetype=ollama-chat
     setlocal filetype=markdown
