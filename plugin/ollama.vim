@@ -36,7 +36,7 @@ endfunction
 
 function! s:HandleTabCompletion() abort
     let suggestion = ollama#InsertSuggestion()
-    if suggestion ==# '\t'
+    if suggestion == '\t'
         return "\<Tab>"
     endif
     return suggestion
