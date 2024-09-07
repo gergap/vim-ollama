@@ -58,11 +58,11 @@ endfunction
 " handle output on stderr
 function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: ".a:data)
-    "if !empty(a:data)
-    "    echohl ErrorMsg
-    "    echom "Error: " . join(a:data, "\n")
-    "    echohl None
-    "endif
+    if !empty(a:data)
+        echohl ErrorMsg
+        echom "Error: " . join(a:data, "\n")
+        echohl None
+    endif
 endfunction
 
 function! s:HandleExit(job, exit_code)
