@@ -10,13 +10,13 @@ and thus has no privacy problems.
 NeoVim, but it is limited to MS Copilot, which is a commercial cloud based AI and requires to send all your data to MS.
 
 With Ollama and freely available LLMs (e.g. Llama3, codellama, deepseek-coder-v2, etc.) you can achieve similar results
-without any cloud. There are other plugins available, but those requires NeoVim, which is not an alternative for me. I
+without any cloud. There are other plugins available, but those require NeoVim, which is not an alternative for me. I
 prefer to use Vim in the terminal and don't want to switch to NeoVim for various reasons.
 
 ## Features
 
 * Intelligent AI based code completion
-* Integrated chat support to do code reviews or other stuf.
+* Integrated chat support to do code reviews or other stuff.
 
 ## How it works
 
