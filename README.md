@@ -20,11 +20,11 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## Screencasts
 
-### Creating a C application with commandline parsing using AI
+### Creating a C application with command line option parsing using AI
 
 [![AI based code completion](screenshots/screenshot1.png)](https://www.youtube.com/watch?v=zhahVd8ibRM)
 
-### Creating Enum to String Conversio function using AI
+### Creating Enum to String Conversion function using AI
 
 [![Enum to String Conversion](screenshots/screenshot2.png)](https://www.youtube.com/watch?v=G-ivVUXCKQk)
 
@@ -128,7 +128,9 @@ example, you can select some code and run `:OllamaTask 'convert this to python'`
 
 ## Known Issues
 
-The integration with other tab-completion tools (e.g., Ultisnips) is not perfect but works for me. I change the
-UltiSnips expand trigger to a different key to manage this. I'm using the CoC plugin with clang-based code completion
-for C/C++ and Ultisnips. When pressing `<tab>`, it first checks if an AI suggestion is available; otherwise, it forwards
-the `<tab>` to be handled by CoC. Contributions to improve this integration are welcome.
+The integration with other tab-completion tools (e.g., Ultisnips) is not perfect, but works for me. I use the [CoC
+plugin](https://github.com/neoclide/coc.nvim) with clang-based code completion and also use coc-snippets instead of
+Ultisnips, that I used before. This gives me a better tab-completion experience.
+
+When pressing `<tab>`, it first checks if an AI suggestion is available; otherwise, it forwards the `<tab>` key to be
+handled by CoC. Contributions to improve this integration are welcome.
