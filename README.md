@@ -18,6 +18,24 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 - Intelligent AI-based code completion
 - Integrated chat support for code reviews and other interactions
 
+## Screencasts
+
+### Creating a C application with commandline parsing using AI
+
+[![AI based code completion](screenshots/screenshot1.png)](https://www.youtube.com/watch?v=zhahVd8ibRM)
+
+### Creating Enum to String Conversio function using AI
+
+[![Enum to String Conversion](screenshots/screenshot2.png)](https://www.youtube.com/watch?v=G-ivVUXCKQk)
+
+### Code Review
+
+[![Code Review](screenshots/screenshot3.png)](https://www.youtube.com/watch?v=kLkFr4rbPUo)
+
+### Custom Prompts - Spellcheck Example
+
+[![Custom Prompts](screenshots/screenshot4.png)](https://www.youtube.com/watch?v=aWEQTktv6fs)
+
 ## How It Works
 
 The plugin uses two Python scripts, `ollama.py` and `chat.py`, to communicate with Ollama via its REST API. The first
