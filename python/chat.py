@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+#
 # This script uses the chat API endpoint which allows to create conversations
 # and supports sending the history of messages as context.
 import requests

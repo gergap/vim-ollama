@@ -1,4 +1,6 @@
 " autoload/ollama.vim
+" SPDX-License-Identifier: GPL-3.0-or-later
+" SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 scriptencoding utf-8
 
 " numeric timer Id

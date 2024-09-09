@@ -1,4 +1,6 @@
 " plugin/ollama.vim
+" SPDX-License-Identifier: GPL-3.0-or-later
+" SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 if exists('g:loaded_ollama')
     finish
 endif

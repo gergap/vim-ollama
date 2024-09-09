@@ -1,3 +1,5 @@
+" SPDX-License-Identifier: GPL-3.0-or-later
+" SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 let s:job = v:null
 let s:buf = -1
 

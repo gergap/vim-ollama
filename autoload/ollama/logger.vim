@@ -1,3 +1,5 @@
+" SPDX-License-Identifier: GPL-3.0-or-later
+" SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 if !exists('s:log_file')
   let s:log_file = tempname() . '-ollama.log'
   let s:log_file = '/home/gergap/work/vim-ollama/ollama.log'
