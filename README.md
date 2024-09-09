@@ -18,6 +18,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 - Intelligent AI-based code completion
 - Integrated chat support for code reviews and other interactions
 
+![Demo](screenshots/game.gif)
+
 ## Screencasts
 
 ### Creating a C application with command line option parsing using AI
