@@ -302,8 +302,10 @@ function ollama#Command(command) abort
         call ollama#Enable()
     elseif a:command == 'disable'
         call ollama#Disable()
+    elseif a:command == 'toggle'
+        call ollama#Toggle()
     else
-        echo "Usage: Ollama <enable|disable>"
+        echo "Usage: Ollama <enable|disable|toggle>"
     endif
 endfunction
 
