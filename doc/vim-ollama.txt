@@ -55,12 +55,24 @@ accept the completion suggestion.
 
 The vim-ollama plugin provides the following commands:
 
-1. :OllamaChat
+1. :Ollama
+    - Description: Sends commands to the plugin to change its state.
+    Available commands are `enable`, `disable` and `toggle`.
+
+    - Usage:
+>
+        :Ollama [command]
+<
+    - Example:
+>
+        :Ollama disable
+<
+2. :OllamaChat
     - Description: Creates a split windows for interactive conversations with
     the configured chat model. Use `:bd` to delete the chat buffer when you
     don't need anymore.
 
-2. :OllamaReview
+3. :OllamaReview
     - Description: Reviews the selected text. It opens a chat window like
     OllamaChat, but with a predefined prompt that asks for a code review of
     the selected text. The selection may be a few lines, a function or the
@@ -70,7 +82,7 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaReview
 <
-3. :OllamaTask
+4. :OllamaTask
     - Description: Creates a chat window with a custom prompt. This command
     also works on a range like `:OllamaReview` but takes an additional
     argument for the prompt. The selected range will automatically pasted
