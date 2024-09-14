@@ -1,0 +1,131 @@
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2024-09-14
+
+*vim-ollama*
+
+                     VIM-OLLAMA
+                 by Gerhard Gappmeier
+                 gergap/vim-ollama
+
+==============================================================================
+CONTENTS:
+    1. Introduction                       |vim-ollama-intro|
+    2. Installation                       |vim-ollama-install|
+    3. Usage                              |vim-ollama-usage|
+    4. Commands                           |vim-ollama-commands|
+    5. Configuration                      |vim-ollama-config|
+    6. License                            |vim-ollama-license|
+
+==============================================================================
+1. Introduction                                       *vim-ollama-intro*
+
+vim-ollama is a Vim plugin that integrates with the Ollama engine. It allows
+you to interact with various LLM models directly from the Vim editor,
+enhancing your workflow with AI capabilities.
+
+Ollama can be run locally, no cloud is required, thus preserving your privacy.
+Ollama is Open Source (MIT license) so you get the source code and it is free
+to use.
+
+==============================================================================
+2. Installation                                       *vim-ollama-install*
+
+To install vim-ollama, you can use any Vim plugin manager like vim-plug or
+Vundle.
+
+With vim-plug:
+>
+    Plug 'gergap/vim-ollama'
+<
+
+After adding the line above to your .vimrc:
+>
+    :source %
+    :PlugInstall
+<
+==============================================================================
+3. Usage                                              *vim-ollama-usage*
+
+Once installed, you can start using vim-ollama commands within Vim. The plugin
+will display completions automatically as ghost text. Hit the <Tab> key to
+accept the completion suggestion.
+
+==============================================================================
+4. Commands                                           *vim-ollama-commands*
+
+The vim-ollama plugin provides the following commands:
+
+1. :OllamaChat
+    - Description: Creates a split windows for interactive conversations with
+    the configured chat model. Use `:bd` to delete the chat buffer when you
+    don't need anymore.
+
+2. :OllamaReview
+    - Description: Reviews the selected text. It opens a chat window like
+    OllamaChat, but with a predefined prompt that asks for a code review of
+    the selected text. The selection may be a few lines, a function or the
+    whole file (`:%OllamaRewiew`).
+
+    - Usage:
+>
+        :OllamaReview
+<
+3. :OllamaTask
+    - Description: Creates a chat window with a custom prompt. This command
+    also works on a range like `:OllamaReview` but takes an additional
+    argument for the prompt. The selected range will automatically pasted
+    into the chat buffer.
+    - Usage:
+>
+        :OllamaTask [prompt]
+<
+    - Example:
+>
+        :OllamaTask "check spelling of this text"
+<
+==============================================================================
+5. Configuration                                      *vim-ollama-config*
+
+You can configure vim-ollama using the following variables in your .vimrc:
+
+1. g:ollama_host
+    - Description: Sets the Ollama host address and port.
+    - Default: 'http://localhost:11434'
+    - Example:
+>
+        let g:ollama_host = 'http://your-server:port'
+<
+2. g:ollama_chat_model
+    - Description: Sets the default Ollama model to use for interactive chats.
+    - Default: 'llama3'
+    - Example:
+>
+        let g:ollama_chat_model = 'gpt4-turbo'
+<
+3. g:ollama_model
+    - Description: Sets the default Ollama model for code completions.
+    - Default: 'codellama:code'
+    - Example:
+>
+        let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
+<
+4. g:ollama_fim_prefix
+    - Description: FIM prefix for code completion models.
+    - Default: `<PRE> ` used in Codellama.
+
+5. g:ollama_fim_middle
+    - Description: FIM middle for code completion models.
+    - Default: ` <MID>` used in Codellama.
+
+6. g:ollama_fim_prefix
+    - Description: FIM suffix for code completion models.
+    - Default: ` <SUF>` used in Codellama.
+
+==============================================================================
+6. License                                            *vim-ollama-license*
+
+vim-ollama is open-source software licensed under the GPLv3 License. For more
+information, see the LICENSE file in the repository.
+
+==============================================================================
+vim:tw=78:et:ft=help:norl:
+
