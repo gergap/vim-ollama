@@ -116,7 +116,7 @@ function! s:StartChat(lines) abort
         \ }
 
     " Start the Python script as a job
-    let l:command = printf('python3 %s/chat.py -m %s -u %s', expand('<script>:h:h:h'), g:ollama_chat_model, g:ollama_host)
+    let l:command = printf('python3 %s/python/chat.py -m %s -u %s', expand('<script>:h:h:h'), g:ollama_chat_model, g:ollama_host)
 
     " Start a shell in the background.
     let s:job = job_start(l:command, job_options)
