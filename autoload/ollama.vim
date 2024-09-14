@@ -35,6 +35,9 @@ if s:has_vim_ghost_text && empty(prop_type_get(s:annot_hlgroup))
 endif
 
 function! ollama#Schedule()
+    if !ollama#IsEnabled()
+        return
+    endif
     call ollama#logger#Debug("Scheduling timer...")
     " get current buffer type
     if &buftype=='prompt'
@@ -260,5 +263,48 @@ function! ollama#InsertSuggestion()
     return '\t'
 endfunction
 
+function ollama#IsEnabled() abort
+    if exists('g:ollama_enabled') && g:ollama_enabled == 1
+        return 1
+    else
+        return 0
+    endif
+endfunction
+
+" Enables the plugin. If it is already enabled, does nothing.
+function ollama#Enable() abort
+    if !exists('g:ollama_enabled') || g:ollama_enabled != 1
+        let g:ollama_enabled = 1
+        echo "Vim-Ollama is enabled."
+    endif
+endfunction
+
+" Disables the plugin. If it is already disabled, does nothing.
+function ollama#Disable() abort
+    if exists('g:ollama_enabled') && g:ollama_enabled == 1
+        unlet g:ollama_enabled
+        echo "Vim-Ollama is disabled."
+    endif
+endfunction
+
+" Toggle the enabled state of the plugin.
+function ollama#Toggle() abort
+    if ollama#IsEnabled()
+        call ollama#Disable()
+    else
+        call ollama#Enable()
+    endif
+endfunction
+
+" Provide different commands: enable, disable, help
+function ollama#Command(command) abort
+    if a:command == 'enable'
+        call ollama#Enable()
+    elseif a:command == 'disable'
+        call ollama#Disable()
+    else
+        echo "Usage: Ollama <enable|disable>"
+    endif
+endfunction
 
 

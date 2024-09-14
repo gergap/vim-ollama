@@ -11,6 +11,9 @@ if v:version < 800 || !exists('##InsertLeavePre')
 endif
 
 " Default settings
+if !exists('g:ollama_enabled')
+    let g:ollama_enabled = 1
+endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://tux:11434'
 endif
@@ -69,3 +72,4 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
 command! OllamaChat call ollama#review#Chat()
+command! -nargs=1 Ollama call ollama#Command(<f-args>)
