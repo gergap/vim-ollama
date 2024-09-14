@@ -110,20 +110,6 @@ When changing the code completion model, consult the model’s documentation to 
 ## Usage
 
 Simply start coding. The completions will appear as "ghost text" and can be accepted by pressing `<tab>`. To ignore
-them, just continue typing.
+them, just continue typing or press `<C-]>` to dismiss the suggestion.
 
-## Commands
-
-### `:OllamaChat`
-
-Opens a separate chat window for interacting with the LLM within Vim.
-
-### `:OllamaReview`
-
-Select some code visually and run the command `:OllamaReview` to get a review of the selected code. The result will be
-shown in a new buffer, which you can then review or edit as needed.
-
-### `:OllamaTask`
-
-Works similarly to `:OllamaReview`, but allows you to specify a custom prompt instead of "review this code". For
-example, you can select some code and run `:OllamaTask 'convert this to python'`.
+See `:help vim-ollama` for more information.
