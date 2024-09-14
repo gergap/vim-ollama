@@ -222,7 +222,7 @@ function! ollama#Clear() abort
     call s:KillJob()
     call ollama#ClearPreview()
     unlet! b:_ollama
-    return ''
+    let s:suggestion = ''
 endfunction
 
 function! ollama#Dismiss() abort

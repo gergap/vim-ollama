@@ -127,12 +127,3 @@ shown in a new buffer, which you can then review or edit as needed.
 
 Works similarly to `:OllamaReview`, but allows you to specify a custom prompt instead of "review this code". For
 example, you can select some code and run `:OllamaTask 'convert this to python'`.
-
-## Known Issues
-
-The integration with other tab-completion tools (e.g., Ultisnips) is not perfect, but works for me. I use the [CoC
-plugin](https://github.com/neoclide/coc.nvim) with clang-based code completion and also use coc-snippets instead of
-Ultisnips, that I used before. This gives me a better tab-completion experience.
-
-When pressing `<tab>`, it first checks if an AI suggestion is available; otherwise, it forwards the `<tab>` key to be
-handled by CoC. Contributions to improve this integration are welcome.

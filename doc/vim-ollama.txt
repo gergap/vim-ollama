@@ -12,8 +12,9 @@ CONTENTS:
     2. Installation                       |vim-ollama-install|
     3. Usage                              |vim-ollama-usage|
     4. Commands                           |vim-ollama-commands|
-    5. Configuration                      |vim-ollama-config|
-    6. License                            |vim-ollama-license|
+    5. Maps                               |vim-ollama-maps|
+    6. Configuration                      |vim-ollama-config|
+    7. License                            |vim-ollama-license|
 
 ==============================================================================
 1. Introduction                                       *vim-ollama-intro*
@@ -83,7 +84,25 @@ The vim-ollama plugin provides the following commands:
         :OllamaTask "check spelling of this text"
 <
 ==============================================================================
-5. Configuration                                      *vim-ollama-config*
+5. Maps                                               *vim-ollama-maps*
+
+                                                      *vim-ollama-i_<Tab>*
+Vim-ollama uses <Tab> to accept the current suggestion.  If you have an
+existing <Tab> map, that will be used as the fallback when no suggestion is
+displayed.
+
+
+Other Maps ~
+
+                                                       *vim-ollama-leader_r*
+<leader>r               Calls ollama#Review() to review the current selection.
+<Plug>(ollama-review)
+
+<C-]>                   Dismiss the current suggestion.
+<Plug>(ollama-dismiss)
+
+==============================================================================
+6. Configuration                                      *vim-ollama-config*
 
 You can configure vim-ollama using the following variables in your .vimrc:
 
