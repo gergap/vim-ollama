@@ -15,7 +15,7 @@ if !exists('g:ollama_enabled')
     let g:ollama_enabled = 1
 endif
 if !exists('g:ollama_host')
-    let g:ollama_host = 'http://tux:11434'
+    let g:ollama_host = 'http://localhost:11434'
 endif
 if !exists('g:ollama_model')
     " default code completion model
