@@ -41,7 +41,7 @@ endfunction
 
 function! s:HandleTabCompletion() abort
     let suggestion = ollama#InsertSuggestion()
-    if suggestion != '\t'
+    if suggestion != ''
         " return AI suggestion
         return suggestion
     endif
@@ -59,6 +59,8 @@ function! s:MapTab() abort
     " Create plugs
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
+    inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>
+    inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
 
@@ -68,6 +70,8 @@ function! s:MapTab() abort
     " Setup default mappings
     imap <silent> <C-]>     <Plug>(ollama-dismiss)
     imap <silent> <Tab>     <Plug>(ollama-tab-completion)
+    imap <silent> <M-Right> <Plug>(ollama-insert-line)
+    imap <silent> <M-C-Right> <Plug>(ollama-insert-word)
     vmap <silent> <leader>r <Plug>(ollama-review)
 endfunction
 

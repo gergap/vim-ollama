@@ -103,6 +103,11 @@ Vim-ollama uses <Tab> to accept the current suggestion.  If you have an
 existing <Tab> map, that will be used as the fallback when no suggestion is
 displayed.
 
+<M-Right>               Inserts only the next line of the curent suggestion.
+<Plug>(ollama-insert-line)
+
+<M-C-Right>             Inserts only the next word of the curent suggestion.
+<Plug>(ollama-insert-word)
 
 Other Maps ~
 

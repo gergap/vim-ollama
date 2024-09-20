@@ -18,6 +18,9 @@ let s:prompt = ''
 let s:suggestion = ''
 " text property id for ghost text
 let s:prop_id = -1
+" suppress internally trigger reschedules due to inserts
+" only when the user types text we want a reschedule
+let s:ignore_schedule = 0
 
 let s:has_nvim_ghost_text = has('nvim-0.6') && exists('*nvim_buf_get_mark')
 let s:vim_minimum_version = '9.0.0185'
@@ -38,6 +41,11 @@ function! ollama#Schedule()
     if !ollama#IsEnabled()
         return
     endif
+    if s:ignore_schedule
+        call ollama#logger#Debug("Ignore schedule")
+        let s:ignore_schedule = 0
+        return
+    endif
     call ollama#logger#Debug("Scheduling timer...")
     " get current buffer type
     if &buftype=='prompt'
@@ -52,10 +60,10 @@ endfunction
 
 " handle output on stdout
 function! s:HandleCompletion(job, data)
-    call ollama#logger#Debug("Received completion: ".a:data)
+    call ollama#logger#Debug("Received completion: ". json_encode(a:data))
     if !empty(a:data)
         "let l:suggestion = join(a:data, "\n")
-        let s:suggestion = a:data
+        let s:suggestion = substitute(a:data, "\r\n", "\n", "g")
         call ollama#UpdatePreview(s:suggestion)
     endif
 endfunction
@@ -162,7 +170,7 @@ function! ollama#GetSuggestion(timer)
 endfunction
 
 function! ollama#UpdatePreview(suggestion)
-    call ollama#logger#Debug("UpdatePreview: suggestion='".a:suggestion."'")
+    call ollama#logger#Debug("UpdatePreview: suggestion='".json_encode(a:suggestion)."'")
     if !empty(a:suggestion)
         let s:suggestion = a:suggestion
         let text = split(s:suggestion, "\r\n\\=\\|\n", 1)
@@ -221,7 +229,6 @@ function! ollama#Clear() abort
     call s:KillTimer()
     call s:KillJob()
     call ollama#ClearPreview()
-    unlet! b:_ollama
     let s:suggestion = ''
 endfunction
 
@@ -230,37 +237,119 @@ function! ollama#Dismiss() abort
     call ollama#Clear()
 endfunction
 
+function! ollama#InsertStringWithNewlines(text, morelines)
+    " Split the string into lines
+    let l:lines = split(a:text, "\n")
+
+    " Insert first line at cursor position
+    " get current line
+    let l:line = getline('.')
+    " split line at current column
+    let l:current_col = col('.')
+    let l:before_cursor = strpart(l:line, 0, l:current_col - 1)
+    let l:after_cursor = strpart(l:line, l:current_col - 1)
+    " build new line
+    let l:new_line = l:before_cursor . l:lines[0] . l:after_cursor
+    call setline('.', l:new_line)
+    let l:new_cursor_col = strlen(l:before_cursor) + strlen(l:lines[0])
+
+    " Get the current line number and cursor position
+    let l:current_line = line('.')
+    let l:start_line = line('.')
+
+    " Get the current indentation level
+    let l:indent = indent(line('.'))
+    let l:indent = 0 " don't add indent, it's included in AI suggestion already
+"    echom "indent=" . indent('.')
+
+    " Append each line of the multi-line string
+    for l:line in l:lines[1:]
+        let l:indented_line = repeat(' ', l:indent) . l:line
+        call append(l:current_line, l:indented_line)
+        let l:new_cursor_col = strlen(l:indented_line)
+        let l:current_line += 1
+    endfor
+
+    if (a:morelines == 1)
+        call append(l:current_line, "")
+        " set cursor to next line
+        call cursor(l:current_line + 1, 0)
+    else
+        " set cursor to end of last inserted line
+        call cursor(l:current_line, l:new_cursor_col + 1)
+    endif
+endfunction
+
 function! ollama#InsertSuggestion()
     call ollama#logger#Debug("InsertSuggestion")
     if !empty(s:suggestion)
-        let l:current_col = col('.')
-        let l:line = getline('.')
-        let l:before_cursor = strpart(l:line, 0, l:current_col - 1)
-        let l:after_cursor = strpart(l:line, l:current_col - 1)
-        let l:text = split(s:suggestion, "\r\n\\=\\|\n", 1)
+        call ollama#InsertStringWithNewlines(s:suggestion, 0)
 
-        " Get the current indentation level
-        let l:indent = indent(line('.'))
-        let l:indent = 0
-
-        " Insert the first line with current cursor position
-        let l:new_line = l:before_cursor . l:text[0] . l:after_cursor
-        call setline('.', l:new_line)
-
-        " Insert remaining lines with proper indentation
-        let l:row = line('.')
-        for l:idx in range(1, len(l:text)-1)
-            let l:indented_line = repeat(' ', l:indent) . l:text[l:idx]
-            call append(l:row + l:idx - 1, l:indented_line)
-        endfor
-
-        " Move the cursor to the end of the inserted text
-        call cursor(l:row + len(l:text) - 1, col('.') + len(l:text[-1]))
-
+        " all was inserted so we can clear the current suggestion
         call ollama#ClearPreview()
         let s:suggestion = ''
+        call ollama#logger#Debug("cleat suggestion")
     endif
+    return ''
     return '\t'
+endfunction
+
+function! ollama#InsertNextLine()
+    call ollama#logger#Debug("> InsertNextLine")
+    if empty(s:suggestion)
+        call ollama#logger#Debug("< InsertNextLine: suggestion empty")
+        return
+    endif
+
+    call ollama#logger#Debug("current suggestion=".json_encode(s:suggestion))
+
+    " matchstr({expr}, {pat} [, {start} [, {count}]]): returns matched string
+    " substitute({string}, {pat}, {sub}, {flags}): return new string or '' on error
+    let l:text = matchstr(s:suggestion, "\n*\\%([^\n]\\+\\)") " get line until \n
+    let l:firstline = substitute(l:text, "\n*$", '', '') " remove trailing newline
+    let s:suggestion = strpart(s:suggestion, strlen(l:text) + 1) " remove line from suggestion
+    call ollama#logger#Debug("firstline=".json_encode(l:firstline))
+    call ollama#logger#Debug("new suggestion=".json_encode(s:suggestion))
+
+    " check if remaingin suggestion contains more non-white space charaters
+    if (matchstr(s:suggestion, '\S') == "")
+        let s:suggestion = ''
+        let morelines=0
+    else
+        let morelines=1
+    endif
+
+    let s:ignore_schedule = 1
+    call ollama#InsertStringWithNewlines(l:firstline, morelines)
+
+    " update preview with remain suggestion
+    call ollama#UpdatePreview(s:suggestion)
+    call ollama#logger#Debug("< InsertNextLine")
+endfunction
+
+function! ollama#InsertNextWord()
+    call ollama#logger#Debug("> InsertNextWord")
+    if empty(s:suggestion)
+        call ollama#logger#Debug("< InsertNextWord: suggestion empty")
+        return
+    endif
+
+    call ollama#logger#Debug("current suggestion=".json_encode(s:suggestion))
+
+    " matchstr({expr}, {pat} [, {start} [, {count}]]): returns matched string
+    " substitute({string}, {pat}, {sub}, {flags}): return new string or '' on error
+    let l:text = matchstr(s:suggestion, '\%(\S\+\s*\)') " get first word with trailing spaces
+    let l:firstword = substitute(l:text, "\n*$", '', '') " remove trailing newlines
+    let s:suggestion = strpart(s:suggestion, strlen(l:text)) " remove word from suggestion
+    call ollama#logger#Debug("firstword=".json_encode(l:firstword))
+    call ollama#logger#Debug("new suggestion=".json_encode(s:suggestion))
+
+    let s:ignore_schedule = 1
+    call ollama#InsertStringWithNewlines(l:firstword, 0)
+
+    " update preview with remain suggestion
+    call ollama#UpdatePreview(s:suggestion)
+    call ollama#logger#Debug("< InsertNextWord")
 endfunction
 
 function ollama#IsEnabled() abort
