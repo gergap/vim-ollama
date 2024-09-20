@@ -3,8 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-- Add function to insert only one line of suggestion
-- Add function to insert only one word of suggestion
+- List changes that are planned or being worked on here.
+
+## [Version 0.2] - 2024-09-20
+
+### Added
+- Add function to insert only next line of current suggestion.
+- Add function to insert only next word of current suggestion.
+- Changing mappings to use <Plug>
 
 ## [Version 0.1] - 2024-09-14
 
