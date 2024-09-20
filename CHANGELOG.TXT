@@ -1,0 +1,14 @@
+# CHANGELOG for vim-ollama
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+- Add function to insert only one line of suggestion
+- Add function to insert only one word of suggestion
+
+## [Version 0.1] - 2024-09-14
+
+### Added
+- Initial release of the vim-ollama plugin.
+- Basic functionality to interact with the Ollama API within Vim.
+- Added support for running code completions and generating text.
