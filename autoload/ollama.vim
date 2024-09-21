@@ -84,7 +84,8 @@ function! s:HandleExit(job, exit_code)
         " Don't log errors if we killed the job, this is expected
         if a:job isnot s:kill_job
             echohl ErrorMsg
-            echo "Process exited with code: " . a:exit_code
+            echom "Process exited with code: ".a:exit_code
+            echom "Check if g:ollama_host=".g:ollama_host." is correct."
             echohl None
         else
             call ollama#logger#Debug("Process terminated as expected")
@@ -139,6 +140,7 @@ function! ollama#GetSuggestion(timer)
         let l:prompt = l:fim_prefix . l:prefix . l:fim_suffix . l:suffix . l:fim_middle
     endif
 
+    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
     " Adjust the command to use the prompt as stdin input
     let l:command = printf('python3 %s/python/ollama.py -m %s -u %s', expand('<script>:h:h'), g:ollama_model, g:ollama_host)
     let l:job_options = {
@@ -288,7 +290,7 @@ function! ollama#InsertSuggestion()
         " all was inserted so we can clear the current suggestion
         call ollama#ClearPreview()
         let s:suggestion = ''
-        call ollama#logger#Debug("cleat suggestion")
+        call ollama#logger#Debug("clear suggestion")
     endif
     return ''
     return '\t'
