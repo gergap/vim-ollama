@@ -75,11 +75,16 @@ function! s:MapTab() abort
     vmap <silent> <leader>r <Plug>(ollama-review)
 endfunction
 
+function! s:UnMapTab() abort
+    call ollama#Dismiss()
+    execute "imap <silent> <Tab> ".b:ollama_original_tab_mapping
+endfunction
+
 " Create autocommand group
 augroup ollama
     autocmd!
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
-    autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
+    autocmd InsertLeave           * if &buftype != 'prompt' | call s:UnMapTab() | endif
     autocmd InsertEnter           * if &buftype != 'prompt' | call s:MapTab() | endif
     autocmd BufDelete             * if &buftype == 'prompt' | call ollama#review#KillChatBot() | endif
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
