@@ -66,6 +66,8 @@ async def stream_chat_message(messages, endpoint, model):
     }
     log_debug('request: ' + json.dumps(data, indent=4))
 
+    assistant_message = ""
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             async with client.stream('POST', endpoint, headers=headers, json=data) as response:
@@ -75,14 +77,16 @@ async def stream_chat_message(messages, endpoint, model):
                             message = json.loads(line)
                             if 'message' in message and 'content' in message['message']:
                                 content = message['message']['content']
-#                                messages.append({"role": "assistant", "content": content})
+                                assistant_message += content
                                 print(content, end='', flush=True)
+
+                                # If <EOT> is detected, stop processing
                                 if '<EOT>' in content:
-                                    return
+                                    break
                             # Stop if response contains an indication of completion
                             if message.get('done', False):
                                 print('<EOT>', flush=True)
-                                return
+                                break
                 else:
                     raise Exception(f"Error: {response.status_code} - {response.text}")
     except httpx.ReadTimeout:
@@ -94,6 +98,10 @@ async def stream_chat_message(messages, endpoint, model):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         log_debug(f"An error occurred: {str(e)}")
+
+    # Add the assistant's message to the conversation history
+    if assistant_message:
+        messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 async def main(baseurl, model):
     conversation_history = []
@@ -152,4 +160,3 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
-
