@@ -14,7 +14,8 @@ CONTENTS:
     4. Commands                           |vim-ollama-commands|
     5. Maps                               |vim-ollama-maps|
     6. Configuration                      |vim-ollama-config|
-    7. License                            |vim-ollama-license|
+    7. Troubleshooting                    |vim-ollama-troubleshooting|
+    8. License                            |vim-ollama-license|
 
 ==============================================================================
 1. Introduction                                       *vim-ollama-intro*
@@ -103,10 +104,10 @@ Vim-ollama uses <Tab> to accept the current suggestion.  If you have an
 existing <Tab> map, that will be used as the fallback when no suggestion is
 displayed.
 
-<M-Right>               Inserts only the next line of the curent suggestion.
+<M-Right>               Inserts only the next line of the current suggestion.
 <Plug>(ollama-insert-line)
 
-<M-C-Right>             Inserts only the next word of the curent suggestion.
+<M-C-Right>             Inserts only the next word of the current suggestion.
 <Plug>(ollama-insert-word)
 
 Other Maps ~
@@ -156,8 +157,27 @@ You can configure vim-ollama using the following variables in your .vimrc:
     - Description: FIM suffix for code completion models.
     - Default: ` <SUF>` used in Codellama.
 
+7. Troubleshooting                                    *vim-ollama-troubleshooting*
+
+You can enable logging by specifying the following variables.
+
+1. g:ollama_debug
+    - Description: Sets the debug level of the logging infrastructure.
+    - Default: 0 (Off)
+    - Example:
+>
+        let g:ollama_debug = 1
+
+2. g:ollama_logfile
+    - Description: Configure the path of the log file.
+    - Default: A random file in your temp directory will be created using
+      tempname(). This can result in a path like '/tmp/vBu3NCc/5-ollama.log'
+    - Example:
+>
+        let g:ollama_logfile = '/path/to/vim-ollama.log'
+
 ==============================================================================
-6. License                                            *vim-ollama-license*
+8. License                                            *vim-ollama-license*
 
 vim-ollama is open-source software licensed under the GPLv3 License. For more
 information, see the LICENSE file in the repository.
