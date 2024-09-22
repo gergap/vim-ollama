@@ -1,6 +1,10 @@
 " autoload/ollama.vim
 " SPDX-License-Identifier: GPL-3.0-or-later
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+" SPDX-CopyrightTdxt: Copyright (C) 2023 GitHub, Inc. - All Rights Reserved
+" This file started as a copy of copilot.vim but was rewritten entirely,
+" because of the different concept of talking with Ollama instead of MS
+" copilot. Still it can contain tiny fragments of the original code.
 scriptencoding utf-8
 
 " numeric timer Id

@@ -1,5 +1,8 @@
 " SPDX-License-Identifier: GPL-3.0-or-later
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+" SPDX-CopyrightTdxt: Copyright (C) 2023 GitHub, Inc. - All Rights Reserved
+" This file is based on the code of copilot.vim, but was modified to fit
+" vim-ollams's needs.
 if !exists('g:ollama_logfile')
   let g:ollama_logfile = tempname() . '-ollama.log'
   try
