@@ -20,7 +20,35 @@ endfunction
 
 func! ollama#review#KillChatBot()
     call ollama#logger#Debug("KillChatBot")
-    call job_stop(s:job)
+
+    " Stop the job if it exists
+    if exists("s:job") && type(s:job) == v:t_number
+        call job_stop(s:job)
+        while job_status(s:job) == 'run'
+            sleep 1
+        endwhile
+    endif
+endfunc
+
+func! s:BufReallyDelete(buf)
+    call ollama#logger#Debug("BufReallyDelete ".a:buf)
+    execute "bwipeout! ".a:buf
+endfunc
+
+func! ollama#review#BufDelete(buf)
+    call ollama#logger#Debug("BufDelete")
+    if a:buf == s:buf
+        call ollama#logger#Debug("Deleting buffer ".a:buf)
+        " The buffer was closed by :quit or :q!
+        call ollama#review#KillChatBot()
+        " Undo 'buftype=prompt' and make buffer deletable
+        if bufexists(s:buf)
+            setlocal buftype=
+            setlocal modifiable
+        endif
+        " We cannot wipe the buffer while being used in autocmd
+        call timer_start(10, {-> s:BufReallyDelete(a:buf)})
+    endif
 endfunc
 
 " Function to find the window containing the buffer
@@ -147,7 +175,8 @@ function! s:StartChat(lines) abort
 "    setlocal filetype=ollama-chat
     setlocal filetype=markdown
     setlocal buftype=prompt
-    "setlocal bufhidden=wipe
+    " enable BufDelete event when closing buffer usig :q!
+    setlocal bufhidden=delete
     setlocal noswapfile
     setlocal modifiable
     setlocal wrap

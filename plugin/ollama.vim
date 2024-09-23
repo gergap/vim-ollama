@@ -86,7 +86,7 @@ augroup ollama
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
     autocmd InsertLeave           * if &buftype != 'prompt' | call s:UnMapTab() | endif
     autocmd InsertEnter           * if &buftype != 'prompt' | call s:MapTab() | endif
-    autocmd BufDelete             * if &buftype == 'prompt' | call ollama#review#KillChatBot() | endif
+    autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 
