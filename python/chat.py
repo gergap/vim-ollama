@@ -130,7 +130,7 @@ async def main(baseurl, model):
                 if user_message == '"""':
                     multiline_input = True
                     multiline_message = []
-                elif user_message.lower() in ['exit', 'quit']:
+                elif user_message.lower() in ['exit', 'quit', '/bye']:
                     print("Exiting the chat.")
                     exit(0)
                 else:

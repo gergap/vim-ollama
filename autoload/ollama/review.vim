@@ -131,9 +131,14 @@ function! s:StartChat(lines) abort
         call ollama#logger#Debug("JobExit: ".a:status)
         " Switch to the chat buffer
         execute 'buffer' s:buf
-        " set to nofile to avoid saveing prompts
+        " Turn off prompt functionality and make the buffer modifiable
+        call prompt_setprompt(s:buf, '')
+        setlocal buftype=
+        setlocal modifiable
+        " output info message
         call append(line("$") - 1, "Chat process terminated with exit code ".a:status)
-        call append(line("$") - 1, "Run 'OllamaChat' again to restart it or 'bd!' to delete this buffer.")
+        call append(line("$") - 1, "Use ':q!' or ':bd!' to delete this buffer and run ':OllamaChat' again to create a new session.")
+        stopinsert
     endfunc
 
     " Redirect job's IO to buffer
