@@ -4,17 +4,20 @@
 " This file is based on the code of copilot.vim, but was modified to fit
 " vim-ollams's needs.
 if !exists('g:ollama_logfile')
-  let g:ollama_logfile = tempname() . '-ollama.log'
-  try
-    call writefile([], g:ollama_logfile)
-  catch
-  endtry
+    let g:ollama_logfile = tempname() . '-ollama.log'
 endif
 if !exists('g:ollama_debug')
     let g:ollama_debug = 0
 endif
-
 let s:logs = []
+
+function! ollama#logger#CreateFile() abort
+  try
+    echom 'created log file '.g:ollama_logfile
+    call writefile([], g:ollama_logfile)
+  catch
+  endtry
+endfunction
 
 function! ollama#logger#BufReadCmd() abort
   try
@@ -82,3 +85,8 @@ function! ollama#logger#Bare(...) abort
   call ollama#logger#Raw(0, a:000)
 endfunction
 
+if !exists('s:log_open')
+    " Create file if it does not exist yet
+    call ollama#logger#CreateFile()
+    let s:log_open = 1
+endif
