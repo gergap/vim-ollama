@@ -83,7 +83,17 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaReview
 <
-4. :OllamaTask
+4. :OllamaSpellCheck
+    - Description: Checks the selected text for spelling errors.
+    Like OllamaReview this command using the OllamaChat window but with a
+    predefined prompt for spell checking. The selection may be a few lines, a
+    paragraph or the whole file (`:%OllamaSpellCheck`).
+
+    - Usage:
+>
+        :OllamaSpellCheck
+<
+5. :OllamaTask
     - Description: Creates a chat window with a custom prompt. This command
     also works on a range like `:OllamaReview` but takes an additional
     argument for the prompt. The selected range will automatically pasted

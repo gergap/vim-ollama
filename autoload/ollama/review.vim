@@ -226,6 +226,22 @@ function ollama#review#Review() range
     call s:StartChat(lines)
 endfunction
 
+function ollama#review#SpellCheck() range
+    let num_lines = a:lastline - a:firstline
+    let lines = getline(a:firstline, a:lastline)
+
+    let prompt = "Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:"
+    call insert(lines, '"""', 0)
+    call insert(lines, prompt, 1)
+    call insert(lines, "```", 2)
+    call add(lines, "```")
+    call add(lines, '"""')
+
+    call ollama#logger#Debug("Prompt:".join(lines, "\n"))
+
+    call s:StartChat(lines)
+endfunction
+
 function ollama#review#Task(prompt) range
     let num_lines = a:lastline - a:firstline
     let lines = getline(a:firstline, a:lastline)
