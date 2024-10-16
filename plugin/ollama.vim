@@ -48,9 +48,16 @@ function! s:HandleTabCompletion() abort
     "echom "b:ollama_original_tab_mapping: " . string(b:ollama_original_tab_mapping)
 
     " fallback to default tab completion if no suggestion was inserted
-    if exists('b:ollama_original_tab_mapping') && type(b:ollama_original_tab_mapping) == type('') && !empty(b:ollama_original_tab_mapping)
+    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
         " If no completion and there is an original <Tab> mapping, execute it
-        return "\<C-R>=" . b:ollama_original_tab_mapping . "\<CR>"
+        if b:ollama_original_tab_mapping.expr
+            " rhs is an expression
+            return "\<C-R>=" . b:ollama_original_tab_mapping.rhs . "\<CR>"
+        else
+            " rhs is a string
+            let tab_fallback = substitute(json_encode(b:ollama_original_tab_mapping.rhs), '<', '\\<', 'g')
+            return eval(tab_fallback)
+        endif
     else
         " Default to a literal tab if there's no original mapping
         return "\<Tab>"
@@ -60,8 +67,8 @@ endfunction
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
     " Save the existing <Tab> mapping in insert mode
-    if !exists('b:ollama_original_tab_mapping')
-        let b:ollama_original_tab_mapping = maparg('<Tab>', 'i')
+    if !exists('b:ollama_original_tab_mapping') || empty(b:ollama_original_tab_mapping)
+        let b:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
     endif
 
     " Create plugs
@@ -81,7 +88,10 @@ function! s:MapTab() abort
 endfunction
 
 function! s:UnMapTab() abort
-    execute "imap <silent> <Tab> ".b:ollama_original_tab_mapping
+    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
+        call mapset('i', 0, b:ollama_original_tab_mapping)
+        let b:ollama_original_tab_mapping = {}
+    endif
     call ollama#Dismiss()
 endfunction
 
