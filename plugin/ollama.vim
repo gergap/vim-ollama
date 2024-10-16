@@ -41,12 +41,13 @@ endfunction
 
 function! s:HandleTabCompletion() abort
     let suggestion = ollama#InsertSuggestion()
-    if suggestion != ''
-        " return AI suggestion
-        return suggestion
+    if suggestion != '\t'
+        " AI suggestion was inserted
+        return ''
     endif
     "echom "b:ollama_original_tab_mapping: " . string(b:ollama_original_tab_mapping)
 
+    " fallback to default tab completion if no suggestion was inserted
     if exists('b:ollama_original_tab_mapping') && type(b:ollama_original_tab_mapping) == type('') && !empty(b:ollama_original_tab_mapping)
         " If no completion and there is an original <Tab> mapping, execute it
         return "\<C-R>=" . b:ollama_original_tab_mapping . "\<CR>"
