@@ -41,13 +41,23 @@ endfunction
 
 function! s:HandleTabCompletion() abort
     let suggestion = ollama#InsertSuggestion()
-    if suggestion != ''
-        " return AI suggestion
-        return suggestion
+    if suggestion != '\t'
+        " AI suggestion was inserted
+        return ''
     endif
-    if !empty(b:ollama_original_tab_mapping)
+    "echom "b:ollama_original_tab_mapping: " . string(b:ollama_original_tab_mapping)
+
+    " fallback to default tab completion if no suggestion was inserted
+    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
         " If no completion and there is an original <Tab> mapping, execute it
-        return "\<C-R>=" . b:ollama_original_tab_mapping . "\<CR>"
+        if b:ollama_original_tab_mapping.expr
+            " rhs is an expression
+            return "\<C-R>=" . b:ollama_original_tab_mapping.rhs . "\<CR>"
+        else
+            " rhs is a string
+            let tab_fallback = substitute(json_encode(b:ollama_original_tab_mapping.rhs), '<', '\\<', 'g')
+            return eval(tab_fallback)
+        endif
     else
         " Default to a literal tab if there's no original mapping
         return "\<Tab>"
@@ -56,6 +66,11 @@ endfunction
 
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
+    " Save the existing <Tab> mapping in insert mode
+    if !exists('b:ollama_original_tab_mapping') || empty(b:ollama_original_tab_mapping)
+        let b:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
+    endif
+
     " Create plugs
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
@@ -63,9 +78,6 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
-
-    " Save the existing <Tab> mapping in insert mode
-    let b:ollama_original_tab_mapping = maparg('<Tab>', 'i')
 
     " Setup default mappings
     imap <silent> <C-]>     <Plug>(ollama-dismiss)
@@ -76,8 +88,11 @@ function! s:MapTab() abort
 endfunction
 
 function! s:UnMapTab() abort
+    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
+        call mapset('i', 0, b:ollama_original_tab_mapping)
+        let b:ollama_original_tab_mapping = {}
+    endif
     call ollama#Dismiss()
-    execute "imap <silent> <Tab> ".b:ollama_original_tab_mapping
 endfunction
 
 " Create autocommand group

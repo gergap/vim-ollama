@@ -295,8 +295,10 @@ function! ollama#InsertSuggestion()
         call ollama#ClearPreview()
         let s:suggestion = ''
         call ollama#logger#Debug("clear suggestion")
+        " Empty string to indicate we inserted an AI suggestion
+        return ''
     endif
-    return ''
+    " Request original <tab> mapping or literal tab
     return '\t'
 endfunction
 
