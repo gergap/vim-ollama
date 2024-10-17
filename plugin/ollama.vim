@@ -25,6 +25,14 @@ if !exists('g:ollama_chat_model')
     " default chat model
     let g:ollama_chat_model = 'llama3'
 endif
+if !exists('g:ollama_options')
+    " default code completion model
+    let g:ollama_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 256
+                \ }
+endif
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
 endif

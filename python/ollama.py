@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
+DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 
 def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
     """
@@ -48,7 +49,7 @@ def log_debug(message):
     logger = logging.getLogger()
     logger.debug(message)
 
-def generate_code_completion(prompt, baseurl, model):
+def generate_code_completion(prompt, baseurl, model, options):
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -61,10 +62,7 @@ def generate_code_completion(prompt, baseurl, model):
         'model': model,
         'prompt': prompt,
         'stream': False,
-        'options': {
-            'temperature': 0,
-            'top_p': 0.95
-        }
+        'options': options
     }
     log_debug('request: ' + json.dumps(data, indent=4))
 
@@ -86,13 +84,24 @@ def generate_code_completion(prompt, baseurl, model):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
 if __name__ == "__main__":
     setup_logging()
     parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
+    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
     args = parser.parse_args()
 
+    # parse options JSON string
+    #eprint('options: ' + args.options)
+    try:
+        options = json.loads(args.options)
+    except:
+        options = DEFAULT_OPTIONS
+
     prompt = sys.stdin.read()
-    response = generate_code_completion(prompt, args.url, args.model)
+    response = generate_code_completion(prompt, args.url, args.model, options)
     print(response, end='')
