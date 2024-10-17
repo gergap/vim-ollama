@@ -77,7 +77,7 @@ function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: ".a:data)
     if !empty(a:data)
         echohl ErrorMsg
-        echom "Error: " . join(a:data, "\n")
+        echom "Error: " . a:data
         echohl None
     endif
 endfunction
@@ -150,9 +150,9 @@ function! ollama#GetSuggestion(timer)
     let l:job_options = {
         \ 'out_mode': 'raw',
         \ 'out_cb': function('s:HandleCompletion'),
+        \ 'err_cb': function('s:HandleError'),
         \ 'exit_cb': function('s:HandleExit')
         \ }
-        "\ 'err_cb': function('s:HandleError'),
 
     if (s:prompt == l:prompt)
         call ollama#logger#Debug("Ignoring search for '".l:prompt."'. Already running.")
