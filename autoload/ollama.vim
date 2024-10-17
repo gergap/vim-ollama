@@ -144,7 +144,7 @@ function! ollama#GetSuggestion(timer)
         let l:prompt = l:fim_prefix . l:prefix . l:fim_suffix . l:suffix . l:fim_middle
     endif
 
-    let l:model_options = substitute(json_encode(g:ollama_options), "\"", "\\\"", "g")
+    let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
     call ollama#logger#Debug("model_options=".l:model_options)
     " Adjust the command to use the prompt as stdin input

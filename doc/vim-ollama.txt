@@ -155,18 +155,30 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
 <
-4. g:ollama_fim_prefix
+4. g:ollama_model_options
+    - Description: Sets the default Ollama model options.
+    - Default: '{"temperature": 0, "top_p": 0.95}'
+    - Example:
+>
+        let g:ollama_model_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 256
+                \ }
+<
+5. g:ollama_fim_prefix
     - Description: FIM prefix for code completion models.
     - Default: `<PRE> ` used in Codellama.
 
-5. g:ollama_fim_middle
+6. g:ollama_fim_middle
     - Description: FIM middle for code completion models.
     - Default: ` <MID>` used in Codellama.
 
-6. g:ollama_fim_prefix
+7. g:ollama_fim_prefix
     - Description: FIM suffix for code completion models.
     - Default: ` <SUF>` used in Codellama.
 
+==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
 You can enable logging by specifying the following variables.
