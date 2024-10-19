@@ -77,7 +77,7 @@ function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: ".a:data)
     if !empty(a:data)
         echohl ErrorMsg
-        echom "Error: " . join(a:data, "\n")
+        echom "Error: " . a:data
         echohl None
     endif
 endfunction
@@ -144,15 +144,22 @@ function! ollama#GetSuggestion(timer)
         let l:prompt = l:fim_prefix . l:prefix . l:fim_suffix . l:suffix . l:fim_middle
     endif
 
+    let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
+    call ollama#logger#Debug("model_options=".l:model_options)
     " Adjust the command to use the prompt as stdin input
-    let l:command = printf('python3 %s/python/ollama.py -m %s -u %s', expand('<script>:h:h'), g:ollama_model, g:ollama_host)
+    let l:command = [ "python3", expand('<script>:h:h') . "/python/ollama.py",
+        \ "-m", g:ollama_model,
+        \ "-u", g:ollama_host,
+        \ "-o", l:model_options
+        \ ]
+    call ollama#logger#Debug("command=". join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',
         \ 'out_cb': function('s:HandleCompletion'),
+        \ 'err_cb': function('s:HandleError'),
         \ 'exit_cb': function('s:HandleExit')
         \ }
-        "\ 'err_cb': function('s:HandleError'),
 
     if (s:prompt == l:prompt)
         call ollama#logger#Debug("Ignoring search for '".l:prompt."'. Already running.")
