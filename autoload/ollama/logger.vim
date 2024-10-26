@@ -13,7 +13,7 @@ let s:logs = []
 
 function! ollama#logger#CreateFile() abort
   try
-    echom 'created log file '.g:ollama_logfile
+    "echom 'created log file '.g:ollama_logfile
     call writefile([], g:ollama_logfile)
   catch
   endtry
