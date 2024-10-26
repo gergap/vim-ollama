@@ -47,26 +47,33 @@ function! s:ColorScheme() abort
 endfunction
 
 function! s:HandleTabCompletion() abort
+    if &buftype == 'prompt'
+        " ignore tab in chat buffer
+        return "\<Tab>"
+    endif
     let suggestion = ollama#InsertSuggestion()
     if suggestion != '\t'
         " AI suggestion was inserted
         return ''
     endif
-    "echom "b:ollama_original_tab_mapping: " . string(b:ollama_original_tab_mapping)
+    call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
 
     " fallback to default tab completion if no suggestion was inserted
-    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
+    if exists('g:ollama_original_tab_mapping') && !empty(g:ollama_original_tab_mapping)
         " If no completion and there is an original <Tab> mapping, execute it
-        if b:ollama_original_tab_mapping.expr
+        if g:ollama_original_tab_mapping.expr
             " rhs is an expression
-            return "\<C-R>=" . b:ollama_original_tab_mapping.rhs . "\<CR>"
+            call ollama#logger#Info("<tab> expression")
+            return "\<C-R>=" . g:ollama_original_tab_mapping.rhs . "\<CR>"
         else
             " rhs is a string
-            let tab_fallback = substitute(json_encode(b:ollama_original_tab_mapping.rhs), '<', '\\<', 'g')
+            call ollama#logger#Info("<tab> string")
+            let tab_fallback = substitute(json_encode(g:ollama_original_tab_mapping.rhs), '<', '\\<', 'g')
             return eval(tab_fallback)
         endif
     else
         " Default to a literal tab if there's no original mapping
+        call ollama#logger#Info("<tab> literal")
         return "\<Tab>"
     endif
 endfunction
@@ -74,8 +81,12 @@ endfunction
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
     " Save the existing <Tab> mapping in insert mode
-    if !exists('b:ollama_original_tab_mapping') || empty(b:ollama_original_tab_mapping)
-        let b:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
+    if !exists('g:ollama_original_tab_mapping') || empty(g:ollama_original_tab_mapping)
+        call ollama#logger#Info("Mapping <tab> to vim-ollama")
+        let g:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
+        call ollama#logger#Info("Original Mapping: " . string(g:ollama_original_tab_mapping))
+    else
+        call ollama#logger#Info("Not mapping <tab> to vim-ollama, because mapping already exists")
     endif
 
     " Create plugs
@@ -94,25 +105,18 @@ function! s:MapTab() abort
     vmap <silent> <leader>r <Plug>(ollama-review)
 endfunction
 
-function! s:UnMapTab() abort
-    if exists('b:ollama_original_tab_mapping') && !empty(b:ollama_original_tab_mapping)
-        call mapset('i', 0, b:ollama_original_tab_mapping)
-        let b:ollama_original_tab_mapping = {}
-    endif
-    call ollama#Dismiss()
-endfunction
-
 " Create autocommand group
 augroup ollama
     autocmd!
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
-    autocmd InsertLeave           * if &buftype != 'prompt' | call s:UnMapTab() | endif
-    autocmd InsertEnter           * if &buftype != 'prompt' | call s:MapTab() | endif
+    autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
+    autocmd VimEnter              * call s:MapTab()
     autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 
 call s:ColorScheme()
+call s:MapTab()
 
 " Load autoload functions
 runtime autoload/ollama.vim
