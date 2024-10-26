@@ -34,6 +34,9 @@ endfunction
 let s:level_prefixes = ['', '[ERROR] ', '[WARN] ', '[INFO] ', '[DEBUG] ', '[DEBUG] ']
 
 function! ollama#logger#Raw(level, message) abort
+  if a:level > g:ollama_debug
+     return
+  endif
   let lines = type(a:message) == v:t_list ? copy(a:message) : split(a:message, "\n", 1)
   let lines[0] = strftime('[%Y-%m-%d %H:%M:%S] ') . get(s:level_prefixes, a:level, '[UNKNOWN] ') . get(lines, 0, '')
   try
