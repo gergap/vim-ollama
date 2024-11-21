@@ -88,6 +88,7 @@ async def stream_chat_message(messages, endpoint, model):
                                 print('<EOT>', flush=True)
                                 break
                 else:
+                    await response.aread()
                     raise Exception(f"Error: {response.status_code} - {response.text}")
     except httpx.ReadTimeout:
         print("Read timeout occurred. Please try again.")
