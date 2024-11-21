@@ -47,6 +47,31 @@ uses these scripts via I/O redirection to integrate AI results into Vim.
 This plugin supports Vim only, not NeoVim. If you're looking for a NeoVim plugin, check out
 [LLM](https://github.com/huggingface/llm.nvim).
 
+## Requirements
+
+* Python 3.x
+* Python packages: httpx
+
+### Debian based Systems
+
+```sh
+sudo apt install python3-httpx
+```
+
+### Other systems
+
+System wide installation using `pip install` is not recommended,
+use a virtual environment instead.
+
+You need to run Vim from a shell with this Python environment to make this working.
+
+Example:
+```sh
+python -m venv $HOME/vim-ollama
+source $HOME/vim-ollama/bin/activate
+pip install httpx
+```
+
 ## Installation
 
 Install `gergap/vim-ollama` using vim-plug or any other plugin manager.
