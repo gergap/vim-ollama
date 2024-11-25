@@ -62,6 +62,7 @@ def generate_code_completion(prompt, baseurl, model, options):
         'model': model,
         'prompt': prompt,
         'stream': False,
+        'raw' : True,
         'options': options
     }
     log_debug('request: ' + json.dumps(data, indent=4))
