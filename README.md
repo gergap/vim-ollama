@@ -114,6 +114,14 @@ let g:ollama_fim_prefix = '<|fim_prefix|>'
 let g:ollama_fim_middle = '<|fim_middle|>'
 let g:ollama_fim_suffix = '<|fim_suffix|>'
 
+" qwen2.5-coder (0.5b, 1.5b, 3b, 7b, 14b, 32b)
+" smaller is faster, bigger is better"
+" https://ollama.com/library/qwen2.5-coder
+let g:ollama_model = 'qwen2.5-coder:3b'
+let g:ollama_fim_prefix = '<|fim_prefix|>'
+let g:ollama_fim_middle = '<|fim_middle|>'
+let g:ollama_fim_suffix = '<|fim_suffix|>'
+
 " Deepseek-coder-v2
 let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
 let g:ollama_fim_prefix = '<｜fim▁begin｜>'
