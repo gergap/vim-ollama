@@ -210,51 +210,58 @@ function! s:StartChat(lines) abort
     startinsert
 endfunction
 
-function ollama#review#Review() range
-    let num_lines = a:lastline - a:firstline
-    let lines = getline(a:firstline, a:lastline)
+" Creates a chat window with the given prompt and copies the current selection
+" into a multiline prompt. The code is formatted using backticks and the
+" current filetype.
+function! s:StartChatWithContext(prompt, start_line, end_line) abort
+    " Validate range
+    if a:start_line > a:end_line || a:start_line < 1 || a:end_line > line('$')
+        echoerr "Invalid range"
+        return
+    endif
 
-    let prompt = "Please review the following code:"
-    call insert(lines, '"""', 0)
-    call insert(lines, prompt, 1)
-    call insert(lines, "```", 2)
-    call add(lines, "```")
-    call add(lines, '"""')
+    let num_lines = a:end_line - a:start_line + 1
+    let lines = getline(a:start_line, a:end_line)
+    let ft = &filetype !=# '' ? &filetype : 'plaintext'
 
-    call ollama#logger#Debug("Prompt:".join(lines, "\n"))
+    " Create prompt with context of code
+    let prompt_lines = ['"""', a:prompt, "```" . ft] + lines + ["```", '"""']
 
-    call s:StartChat(lines)
+    " Debug output for prompt
+    call ollama#logger#Debug("Prompt:\n" . join(prompt_lines, "\n"))
+
+    " Start chat (ensure this function is defined elsewhere)
+    call s:StartChat(prompt_lines)
 endfunction
 
-function ollama#review#SpellCheck() range
-    let num_lines = a:lastline - a:firstline
-    let lines = getline(a:firstline, a:lastline)
-
-    let prompt = "Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:"
-    call insert(lines, '"""', 0)
-    call insert(lines, prompt, 1)
-    call insert(lines, "```", 2)
-    call add(lines, "```")
-    call add(lines, '"""')
-
-    call ollama#logger#Debug("Prompt:".join(lines, "\n"))
-
-    call s:StartChat(lines)
+" Create chat with code review prompt
+function! ollama#review#Review() range
+    call s:StartChatWithContext("Please review the following code:", a:firstline, a:lastline)
 endfunction
 
-function ollama#review#Task(prompt) range
-    let num_lines = a:lastline - a:firstline
-    let lines = getline(a:firstline, a:lastline)
+" Create chat with spell checking prompt
+function! ollama#review#SpellCheck() range
+    call s:StartChatWithContext("Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:", a:firstline, a:lastline)
+endfunction
 
-    call insert(lines, '"""', 0)
-    call insert(lines, a:prompt, 1)
-    call insert(lines, "```", 2)
-    call add(lines, "```")
-    call add(lines, '"""')
+" Create chat window with custom prompt
+function! ollama#review#Task(prompt) range
+    call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
+endfunction
 
-    call ollama#logger#Debug("Prompt:".join(lines, "\n"))
+" Create chat with code review prompt
+function! ollama#review#Review() range
+    call s:StartChatWithContext("Please review the following code:", a:firstline, a:lastline)
+endfunction
 
-    call s:StartChat(lines)
+" Create chat with spell checking prompt
+function! ollama#review#SpellCheck() range
+    call s:StartChatWithContext("Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:", a:firstline, a:lastline)
+endfunction
+
+" Create chat window with custom prompt
+function! ollama#review#Task(prompt) range
+    call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
 endfunction
 
 function ollama#review#Chat()
