@@ -146,5 +146,21 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
+command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#review#EditCode(<f-args>)
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
+
+" Add the plugin's python directory to Python's sys.path
+python3 << EOF
+import sys
+import os
+
+# Adjust the path to point to the plugin's python directory
+plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
+#print("Plugin Python Path:", plugin_python_path)
+if plugin_python_path not in sys.path:
+    sys.path.append(plugin_python_path)
+
+# Import your CodeEditor module
+import CodeEditor
+EOF
