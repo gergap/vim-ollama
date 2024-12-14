@@ -16,6 +16,7 @@ from logging.handlers import RotatingFileHandler
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
+DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 
 def setup_logging(log_file='ollama.log', log_level=logging.DEBUG):
     """
@@ -53,7 +54,7 @@ def log_debug(message):
     logger = logging.getLogger()
     logger.debug(message)
 
-async def stream_chat_message(messages, endpoint, model):
+async def stream_chat_message(messages, endpoint, model, options):
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -62,7 +63,9 @@ async def stream_chat_message(messages, endpoint, model):
 
     data = {
         'model': model,
-        'messages': messages
+        'messages': messages,
+        "raw": True,
+        'options': options
     }
     log_debug('request: ' + json.dumps(data, indent=4))
 
@@ -104,7 +107,7 @@ async def stream_chat_message(messages, endpoint, model):
     if assistant_message:
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
-async def main(baseurl, model):
+async def main(baseurl, model, options):
     conversation_history = []
     endpoint = baseurl + "/api/chat"
     log_debug('endpoint: ' + endpoint)
@@ -123,7 +126,7 @@ async def main(baseurl, model):
                     conversation_history.append({"role": "user", "content": complete_message})
                     multiline_message = []
 
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, options))
                     await task
                 else:
                     multiline_message.append(user_message)
@@ -136,7 +139,7 @@ async def main(baseurl, model):
                     exit(0)
                 else:
                     conversation_history.append({"role": "user", "content": user_message})
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, options))
                     await task
 
         except KeyboardInterrupt:
@@ -154,10 +157,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Chat with an Ollama LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
+    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
     args = parser.parse_args()
+
+    # parse options JSON string
+    try:
+        options = json.loads(args.options)
+    except:
+        options = DEFAULT_OPTIONS
+
     while True:
         try:
-            asyncio.run(main(args.url, args.model))
+            asyncio.run(main(args.url, args.model, options))
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
