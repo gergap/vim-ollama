@@ -85,8 +85,7 @@ Please rewrite the entire code block above, editing the portion below "<START ED
 <|im_start|>assistant
 Sure! Here's the entire code block, including the rewritten portion:
 ```c
-#include <stdio.h>
-
+{preamble}
 <START EDITING HERE>
 """
 
