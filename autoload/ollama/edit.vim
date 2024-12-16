@@ -36,10 +36,13 @@ function! ollama#edit#UpdateProgress(popup) abort
     " segfaults
     python3 << EOF
 import vim
-result = CodeEditor.get_job_status()
-vim.command(f'echom "{result}"')
-if result != 'InProgress':
-    vim.command(f'call ollama#edit#EditCodeDone("{result}")')
+try:
+    result = CodeEditor.get_job_status()
+    vim.command(f'echom "{result}"')
+    if result != 'InProgress':
+        vim.command(f'call ollama#edit#EditCodeDone("{result}")')
+except Exception as e:
+    print(e)
 EOF
 endfunction
 
@@ -87,5 +90,12 @@ EOF
     let g:edit_in_progress = 1
 
     " Set up a timer to check progress periodically
-    let b:timer = timer_start(1000, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
+    let b:timer = timer_start(100, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
+endfunction
+
+function! ollama#edit#Test()
+    python3 << EOF
+import vim
+CodeEditor.simulate()
+EOF
 endfunction
