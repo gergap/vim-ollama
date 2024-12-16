@@ -150,6 +150,11 @@ command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 
+" Define new signs for diffs
+sign define NewLine text=+ texthl=DiffAdd
+sign define ChangedLine text=~ texthl=DiffChange
+sign define DeletedLine text=- texthl=DiffDelete
+
 " Add the plugin's python directory to Python's sys.path
 python3 << EOF
 import sys

@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 from logging.handlers import RotatingFileHandler
+from difflib import ndiff
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
@@ -13,6 +14,16 @@ DEFAULT_HOST = 'http://tux:11434'
 DEFAULT_MODEL = 'qwen2.5-coder:14b'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 CONTEXT_LINES = 10
+
+# Shared variable to indicate whether the editing thread is active
+g_thread_lock = threading.Lock()
+g_editing_thread = None
+# We bring the worker thread results into the main thread using these variables
+g_result = None
+g_start_line = 0
+g_end_line = 0
+g_new_code_lines = []
+g_diff = []
 
 def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
     """
@@ -58,6 +69,70 @@ def log_debug(message):
     """
     logger = logging.getLogger()
     logger.debug(message)
+
+def log_error(message):
+    """
+    Log a error message.
+    """
+    logger = logging.getLogger()
+    logger.error(message)
+
+def compute_diff(old_lines, new_lines):
+    """
+    Compute differences between old and new lines.
+
+    Args:
+        old_lines (list): The original code as a list of strings.
+        new_lines (list): The modified code as a list of strings.
+
+    Returns:
+        list: A list of dictionaries describing the changes.
+    """
+    diff = list(ndiff(old_lines, new_lines))
+    parsed_diff = []
+    line_number = 0
+    last_deleted = -1
+
+    for line in diff:
+        line = line.rstrip()
+        print(line)
+        if line.startswith('+ '):
+            if line_number == last_deleted:
+                parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'changed'})
+            else:
+                parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'added'})
+            line_number += 1
+        elif line.startswith('- '):
+#            parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'deleted'})
+            last_deleted = line_number
+        elif line.startswith('  '):
+            line_number += 1
+            parsed_diff.append({'line_number': line_number, 'line': line[2:], 'type': 'unchanged'})
+
+    return parsed_diff
+
+def apply_changes(buffer, diff, start):
+    """
+    Apply accepted changes to the Vim buffer.
+
+    Args:
+        buffer (list): The original Vim buffer as a list.
+        diff (list): The computed diff.
+        start (int): The starting line number.
+    """
+    new_lines = [change['line'] for change in diff if change['type'] != 'deleted']
+    buffer[start:start + len(new_lines)] = new_lines
+
+def reject_changes(buffer, original_lines, start):
+    """
+    Revert to the original lines.
+
+    Args:
+        buffer (list): The Vim buffer as a list.
+        original_lines (list): The original lines to restore.
+        start (int): The starting line number.
+    """
+    buffer[start:start + len(original_lines)] = original_lines
 
 def create_prompt(request, preamble, code, postamble, ft) -> str:
     """
@@ -186,7 +261,60 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         lines.append(last_line)
     return lines
 
-def vim_edit_code(request, firstline, lastline, settings, callback):
+def highlight_changes(start, diff):
+    """
+    Highlight added, modified, and deleted lines in Vim using the generated diff.
+
+    Args:
+        start: Starting line number of the range in the buffer.
+        diff: List of tuples representing the diff.
+              Each tuple is in the form (status, line_number, line_content)
+              - status: 'added', 'changed', 'deleted'
+    """
+    # Clear existing signs and matches
+    vim.command(f'sign unplace * buffer={vim.current.buffer.number}')
+    vim.command('call clearmatches()')
+
+    # Highlight groups
+    highlight_groups = {
+        'added': 'DiffAdd',
+        'changed': 'DiffChange',
+        'deleted': 'DiffDelete'
+    }
+
+    # Line number lists for matchaddpos
+    added_lines = []
+    changed_lines = []
+    deleted_lines = []
+
+    sign_counter = 1  # Counter for unique sign IDs
+
+    # Parse the diff and classify lines
+    for change in diff:
+        line_number = start + change['line_number'] + 1  # Convert diff-relative line to Vim buffer line
+        status = change['type']
+        log_debug(f'{status} {line_number}')
+
+        if status == 'added':
+            added_lines.append(line_number)
+            vim.command(f'sign place {sign_counter} line={line_number} name=NewLine buffer={vim.current.buffer.number}')
+        elif status == 'changed':
+            changed_lines.append(line_number)
+            vim.command(f'sign place {sign_counter} line={line_number} name=ChangedLine buffer={vim.current.buffer.number}')
+        elif status == 'deleted':
+            deleted_lines.append(line_number)
+            vim.command(f'sign place {sign_counter} line={line_number} name=DeletedLine buffer={vim.current.buffer.number}')
+        sign_counter += 1
+
+    # Add full-line highlights using matchaddpos
+    if added_lines:
+        vim.command(f'call matchaddpos("{highlight_groups["added"]}", {added_lines})')
+    if changed_lines:
+        vim.command(f'call matchaddpos("{highlight_groups["changed"]}", {changed_lines})')
+    if deleted_lines:
+        vim.command(f'call matchaddpos("{highlight_groups["deleted"]}", {deleted_lines})')
+
+def vim_edit_code(request, firstline, lastline, settings):
     """
     Vim function to edit a selected range of code.
 
@@ -198,40 +326,112 @@ def vim_edit_code(request, firstline, lastline, settings, callback):
 
     This function extracts the selected range, adds context lines, calls edit_code, and replaces the selection with the result.
     """
+    global g_result
+    global g_new_code_lines
+    global g_diff
+    try:
+        buffer = vim.current.buffer
+        filetype = vim.eval('&filetype')
+        (start, end) = int(firstline) - 1, int(lastline) - 1
+
+        # Add context lines
+        preamble_start = max(0, start - CONTEXT_LINES)
+        postamble_end = min(len(buffer), end + CONTEXT_LINES + 1)
+
+        # Note in python vim lines are zero based
+        preamble_lines  = buffer[preamble_start:start]
+        code_lines      = buffer[start:end + 1]
+        postamble_lines = buffer[end + 1:postamble_end]
+
+        # Join arryas to strings
+        preamble  = "\n".join(preamble_lines)
+        code      = "\n".join(code_lines)
+        postamble = "\n".join(postamble_lines)
+
+        log_debug('preample: ' + preamble)
+        log_debug('code: ' + code)
+        log_debug('postamble: ' + postamble)
+
+        # Edit the code
+        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
+
+        # Produce diff
+        diff = compute_diff(code_lines, new_code_lines)
+
+        # Finish operartion
+        result = 'Done'
+    except Exception as e:
+        log_error(f"Error in vim_edit_code: {e}")
+        # Finish operation with error
+        result = 'Error'
+
+    # write results to global vars
+    with g_thread_lock:
+        g_new_code_lines = new_code_lines
+        g_diff = diff
+        g_result = result
+
+def start_vim_edit_code(request, firstline, lastline, settings):
+    global g_editing_thread
+    global g_result
+    global g_start_line
+    global g_end_line
+
     setup_logging(log_level=logging.DEBUG)
     log_debug(f'*** vim_edit_code: request={request}')
 
-    buffer = vim.current.buffer
-    filetype = vim.eval('&filetype')
-    (start, end) = int(firstline) - 1, int(lastline) - 1
-
-    # Add context lines
-    preamble_start = max(0, start - CONTEXT_LINES)
-    postamble_end = min(len(buffer), end + CONTEXT_LINES + 1)
-
-    # Note in python vim lines are zero based
-    preamble = "\n".join(buffer[preamble_start:start])
-    code = "\n".join(buffer[start:end + 1])
-    postamble = "\n".join(buffer[end + 1:postamble_end])
-
-    log_debug('preample: ' + preamble)
-    log_debug('code: ' + code)
-    log_debug('postamble: ' + postamble)
-
-    # Edit the code
-    new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
-    #new_code_lines = code.split("\n")
-    log_debug('new_code: ' + "\n".join(new_code_lines))
-
-    # Replace the selected range with the new code
-    vim.current.buffer[start:end + 1] = new_code_lines
-    close_logging()
-    vim.command(f'call {callback}("done")')
-
-def start_vim_edit_code(request, firstline, lastline, settings, callback):
+    g_result = 'InProgress'
+    g_start_line = int(firstline)
+    g_end_line = int(lastline)
     # Start the thread
-    thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings, callback))
-    thread.start()
+    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings))
+    g_editing_thread.start()
+
+def get_job_status():
+    """
+    Check if the editing thread is still running.
+
+    Returns:
+        str: Job status: 'InProgress', 'Done', 'Error'
+    """
+    global g_editing_thread
+    global g_result
+    global g_start_line
+    global g_end_line
+    global g_new_code_lines
+    global g_diff
+
+    log_debug(f"result={g_result}")
+    try:
+        is_running = False
+        if g_editing_thread:
+            with g_thread_lock:
+                is_runining = g_editing_thread.is_alive()
+
+        if (is_running):
+            return "InProgress"
+
+        # Job Complete
+        if g_result != 'Done':
+            return g_result
+
+        # Success:
+        # create a list of deleted/added/unchanged lines
+        lines = []
+        for change in diff:
+            status = change['type']
+            lines.append(change['line'])
+        # Replace the selected range with the new code
+        vim.current.buffer[g_start_line:g_end_line + 1] = lines
+#        vim.current.buffer[g_start_line:g_end_line + 1] = g_new_code_lines
+        highlight_changes(g_start_line, g_diff)
+        result = 'Done'
+    except Exception as e:
+        log_error(f"Error in get_job_status: {e}")
+        result = 'Error'
+
+    close_logging()
+    return result
 
 def test(settings):
     # some test parameters
