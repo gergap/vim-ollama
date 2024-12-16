@@ -30,10 +30,23 @@ if !exists('g:ollama_chat_systemprompt')
     let g:ollama_chat_systemprompt = ''
 endif
 if !exists('g:ollama_model_options')
-    " default model options
+    " default model options for code completion
+    " Predict less -> faster response time
     let g:ollama_model_options = {
                 \ 'temperature': 0,
                 \ 'top_p': 0.95
+                \ 'num_predict': 128
+                \ }
+endif
+if !exists('g:ollama_chat_options')
+    " default model options for chat and code editing tasks
+    " we need more prediction for larger tasks
+    let g:ollama_chat_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 4096,
+                \ 'num_ctx': 8192,
+                \ 'keep_alive': 1800,
                 \ }
 endif
 if !exists('g:ollama_debounce_time')
