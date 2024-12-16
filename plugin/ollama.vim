@@ -167,6 +167,9 @@ command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama
 sign define NewLine text=+ texthl=DiffAdd
 sign define ChangedLine text=~ texthl=DiffChange
 sign define DeletedLine text=- texthl=DiffDelete
+" Define inline diff property types
+call prop_type_add("inline_diff_del", {"highlight": "DiffDelete"})
+call prop_type_add("inline_diff_add", {"highlight": "DiffAdd"})
 
 " Add the plugin's python directory to Python's sys.path
 python3 << EOF
