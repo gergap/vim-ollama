@@ -49,10 +49,12 @@ This plugin supports Vim only, not NeoVim. If you're looking for a NeoVim plugin
 
 ## Requirements
 
-* Python 3.x
-* Python packages: httpx
+- Python 3.x
+- Python package: `httpx>=0.23.3`, `requests`
 
-### Debian based Systems
+### Debian-based Systems
+
+If you're using a Debian-based distribution, you can install the required library directly:
 
 ```sh
 sudo apt install python3-httpx
@@ -69,7 +71,23 @@ Example:
 ```sh
 python -m venv $HOME/vim-ollama
 source $HOME/vim-ollama/bin/activate
-pip install httpx
+pip install httpx>=0.23.3
+pip install requests
+```
+
+Testing: You can test the python script on the shell to verify that it is working and all requirements are found.
+The script should output a completion as shown below:
+
+```sh
+$> cd path/to/vim-ollama/python
+$> echo -e '<PRE> def compute_gcd(x, y): <SUF>return result <MID>' | ./ollama.py -u http://localhost:11434 -m codellama:7b-code
+  if x == 0:
+    return y
+  else:
+    return compute_gcd(y % x, x)
+
+def compute_lcm(x, y):
+  result = (x * y) / compute_gcd(x, y)
 ```
 
 ## Installation
