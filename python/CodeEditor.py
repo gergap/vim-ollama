@@ -95,15 +95,17 @@ def compute_diff(old_lines, new_lines):
 
     for line in diff:
         line = line.rstrip()
-        print(line)
+#        print(line)
         if line.startswith('+ '):
             if line_number == last_deleted:
+                # remove last entry
+                parsed_diff = parsed_diff[0:-1]
                 parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'changed'})
             else:
                 parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'added'})
             line_number += 1
         elif line.startswith('- '):
-#            parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'deleted'})
+            parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'deleted'})
             last_deleted = line_number
         elif line.startswith('  '):
             line_number += 1
@@ -264,55 +266,71 @@ def edit_code(request, preamble, code, postamble, ft, settings):
 def highlight_changes(start, diff):
     """
     Highlight added, modified, and deleted lines in Vim using the generated diff.
+    Replace lines with modified content, show deleted lines as virtual text above,
+    add new lines, and keep unchanged lines as-is, while placing signs in the sign column.
 
     Args:
         start: Starting line number of the range in the buffer.
         diff: List of tuples representing the diff.
               Each tuple is in the form (status, line_number, line_content)
-              - status: 'added', 'changed', 'deleted'
+              - status: 'added', 'modified', 'deleted', 'unchanged'
     """
     # Clear existing signs and matches
     vim.command(f'sign unplace * buffer={vim.current.buffer.number}')
-    vim.command('call clearmatches()')
 
-    # Highlight groups
-    highlight_groups = {
-        'added': 'DiffAdd',
-        'changed': 'DiffChange',
-        'deleted': 'DiffDelete'
-    }
+    # Define text property types
+    try:
+        vim.command('call prop_type_add("inline_diff_del", {"highlight": "DiffDelete"})')
+        vim.command('call prop_type_add("inline_diff_add", {"highlight": "DiffAdd"})')
+    except Exception:
+        # ignore errors when the properties already exist
+        print('ignore error')
 
-    # Line number lists for matchaddpos
-    added_lines = []
-    changed_lines = []
-    deleted_lines = []
+    # Get the current buffer
+    buffer = vim.current.buffer
+    bufnum = buffer.number
+    sign_counter = 1  # Unique ID for each sign
 
-    sign_counter = 1  # Counter for unique sign IDs
+    # Vim line numbers are one-based
+    # Python Vim-buffers are zero-based
 
-    # Parse the diff and classify lines
+    # Parse the diff and apply changes
     for change in diff:
-        line_number = start + change['line_number'] + 1  # Convert diff-relative line to Vim buffer line
+        # line_number is one-based
+        line_number = start + change['line_number']  # Convert diff-relative line to Vim buffer line
         status = change['type']
-        log_debug(f'{status} {line_number}')
+        content = change['line']
+        content_len = len(content)
+
+        print(f'line={line_number}, status={status}, content={content}')
 
         if status == 'added':
-            added_lines.append(line_number)
-            vim.command(f'sign place {sign_counter} line={line_number} name=NewLine buffer={vim.current.buffer.number}')
-        elif status == 'changed':
-            changed_lines.append(line_number)
-            vim.command(f'sign place {sign_counter} line={line_number} name=ChangedLine buffer={vim.current.buffer.number}')
-        elif status == 'deleted':
-            deleted_lines.append(line_number)
-            vim.command(f'sign place {sign_counter} line={line_number} name=DeletedLine buffer={vim.current.buffer.number}')
-        sign_counter += 1
+            # Add the new line and highlight it as added
+            buffer[line_number - 1:line_number - 1] = [content]  # Insert new line
+            vim.command(f'call prop_add({line_number}, 1, {{"type": "inline_diff_add", "length": {content_len} }})')
+            vim.command(f'sign place {sign_counter} line={line_number} name=NewLine buffer={bufnum}')
+            sign_counter += 1
 
-    # Add full-line highlights using matchaddpos
-    if added_lines:
-        vim.command(f'call matchaddpos("{highlight_groups["added"]}", {added_lines})')
-    if changed_lines:
-        vim.command(f'call matchaddpos("{highlight_groups["changed"]}", {changed_lines})')
-    if deleted_lines:
-        vim.command(f'call matchaddpos("{highlight_groups["deleted"]}", {deleted_lines})')
+        elif status == 'changed':
+            # Replace line
+            oldcontent = buffer[line_number - 1] # get deleter content
+            buffer[line_number - 1] = content  # Replace line
+            oldcontent = json.dumps(oldcontent) # escape string before using as property
+            vim.command(f'call prop_add({line_number}, 0, {{"type": "inline_diff_del", "text": {oldcontent}, "text_align": "above"}})')
+            vim.command(f'call prop_add({line_number}, 1, {{"type": "inline_diff_add", "length": {content_len} }})')
+            vim.command(f'sign place {sign_counter} line={line_number} name=ChangedLine buffer={bufnum}')
+            sign_counter += 1
+
+        elif status == 'deleted':
+            # Delete line from buffer
+            if 1 <= line_number <= len(buffer):
+                oldcontent = buffer[line_number - 1] # get deleted content
+                del buffer[line_number - 1]  # Remove the specified line
+                oldcontent = json.dumps(oldcontent) # escape string before using as property
+                vim.command(f'call prop_add({line_number}, 0, {{"type": "inline_diff_del", "text": {oldcontent}, "text_align": "above"}})')
+                # Optionally, add a sign to indicate the deletion
+                vim.command(f'sign place {sign_counter} line={line_number} name=DeletedLine buffer={bufnum}')
+                sign_counter += 1
 
 def vim_edit_code(request, firstline, lastline, settings):
     """
@@ -417,12 +435,12 @@ def get_job_status():
 
         # Success:
         # create a list of deleted/added/unchanged lines
-        lines = []
-        for change in diff:
-            status = change['type']
-            lines.append(change['line'])
+#        lines = []
+#        for change in g_diff:
+#            status = change['type']
+#            lines.append(change['line'])
         # Replace the selected range with the new code
-        vim.current.buffer[g_start_line:g_end_line + 1] = lines
+        #vim.current.buffer[g_start_line-1:g_end_line] = lines
 #        vim.current.buffer[g_start_line:g_end_line + 1] = g_new_code_lines
         highlight_changes(g_start_line, g_diff)
         result = 'Done'
@@ -432,6 +450,22 @@ def get_job_status():
 
     close_logging()
     return result
+
+def read_file(filename):
+    with open(filename, 'r') as file:
+        return file.readlines()
+
+def simulate():
+    # read test2.c into lines array
+    lines_a = read_file("test.c")
+    print("read a")
+    lines_b = read_file("test2.c")
+    print("read b")
+    diff = compute_diff(lines_a, lines_b)
+    print("computed diff")
+    highlight_changes(1, diff)
+    print("done")
+
 
 def test(settings):
     # some test parameters
