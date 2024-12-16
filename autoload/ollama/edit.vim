@@ -31,6 +31,16 @@ function! ollama#edit#UpdateProgress(popup) abort
     let g:progress_indicator = (g:progress_indicator + 1) % 4
     let l:states = ['|', '/', '-', '\']
     call popup_settext(a:popup, 'Processing ' . l:states[g:progress_indicator])
+
+    " Poll the job status, because Vim calls from worker threads produce
+    " segfaults
+    python3 << EOF
+import vim
+result = CodeEditor.get_job_status()
+vim.command(f'echom "{result}"')
+if result != 'InProgress':
+    vim.command(f'call ollama#edit#EditCodeDone("{result}")')
+EOF
 endfunction
 
 " Start the Python function and return immediately
@@ -58,7 +68,7 @@ settings = {
     'options': vim.eval('l:model_options')
 }
 # Now pass these settings to the CodeEditor function
-CodeEditor.start_vim_edit_code(request, firstline, lastline, settings, 'ollama#edit#EditCodeDone')
+CodeEditor.start_vim_edit_code(request, firstline, lastline, settings)
 EOF
 
     " Create a floating window for progress
@@ -77,6 +87,5 @@ EOF
     let g:edit_in_progress = 1
 
     " Set up a timer to check progress periodically
-    let b:timer = timer_start(100, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
+    let b:timer = timer_start(1000, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
 endfunction
-
