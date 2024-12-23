@@ -92,15 +92,18 @@ def compute_diff(old_lines, new_lines):
     diff = list(ndiff(old_lines, new_lines))
     return diff
 
-def apply_diff(diff, buf, line_offset = 0):
+def apply_diff(diff, buf, line_offset=0):
     """
     Apply differences directly to a Vim buffer.
 
     Args:
         diff (iterable): The result of ndiff comparing old and new lines.
         buf: The Vim buffer to apply changes to.
+        line_offset (int): Line offset for the current buffer.
     """
-    print('\n'.join(diff))
+    print("\n".join(diff))
+    deleted_lines = []  # Collect deleted lines for multi-line display
+
     for line in diff:
         line = line.rstrip()
 
@@ -111,15 +114,22 @@ def apply_diff(diff, buf, line_offset = 0):
             VimHelper.InsertLine(lineno, content, buf)
             VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
             VimHelper.PlaceSign(lineno, 'NewLine', buf)
+            if deleted_lines:
+                # Show the collected deleted lines above the current added line
+                for i, deleted_line in enumerate(deleted_lines):
+                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', json.dumps(deleted_line), buf)
+                deleted_lines = []  # Reset deleted lines
+
             line_offset += 1
 
         elif line.startswith('- '):
             # Deleted line
             lineno = line_offset
             old_content = VimHelper.DeleteLine(lineno, buf)
-            old_content_json = json.dumps(old_content)
-            VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', old_content_json, buf)
-            VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
+            if old_content != line[2:]:
+                print(f"error: diff does not apply at line {lineno}: {line}")
+                return
+            deleted_lines.append(old_content)  # Collect the deleted line content
 
         elif line.startswith('? '):
             # This line is a marker for the previous change (not handled)
@@ -127,12 +137,24 @@ def apply_diff(diff, buf, line_offset = 0):
 
         elif line.startswith('  '):
             # Unchanged line
+            if deleted_lines:
+                # Show the collected deleted lines above the current unchanged line
+                for i, deleted_line in enumerate(deleted_lines):
+                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', json.dumps(deleted_line), buf)
+                deleted_lines = []  # Reset deleted lines
+                VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
+
             lineno = line_offset
             content = VimHelper.GetLine(lineno, buf)
-            if (content != line[2:]):
+            if content != line[2:]:
                 print(f"error: diff does not apply at line {lineno}: {line}")
                 return
             line_offset += 1
+
+    # Handle any remaining deleted lines at the end
+    if deleted_lines:
+        for i, deleted_line in enumerate(deleted_lines):
+            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', json.dumps(deleted_line), buf)
 
 def apply_changes(buffer, diff, start):
     """
@@ -489,54 +511,6 @@ def simulate():
     highlight_changes(1, diff)
     print("done")
 
-def testEdit():
-    response = {
-        "created_at": "2024-12-22T14:32:18.226804731Z",
-        "done": True,
-        "done_reason": "stop",
-        "eval_count": 225,
-        "eval_duration": 7018586000,
-        "load_duration": 15556430,
-        "model": "qwen2.5-coder:14b",
-        "prompt_eval_count": 229,
-        "prompt_eval_duration": 48029000,
-        "response": "int quicksort(int *arr, int left, int right)\n{\n    if (left >= right) {\n        return 0;\n    }\n\n    int pivot = arr[(left + right) / 2];\n    int i = left - 1;\n    int j = right + 1;\n\n    while (1) {\n        do {\n            i++;\n        } while (arr[i] < pivot);\n\n        do {\n            j--;\n        } while (arr[j] > pivot);\n\n        if (i >= j) {\n            break;\n        }\n\n        int temp = arr[i];\n        arr[i] = arr[j];\n        arr[j] = temp;\n    }\n\n    quicksort(arr, left, j);\n    quicksort(arr, j + 1, right);\n\n    return 0;\n}\n<STOP EDITING HERE>\n\n/*\n * Hello World program in C.\n * Line 2\n * Line 3\n */\nint main()\n{\n    for (int i = 0; i < 10; ++i) {\n        printf(\"Hello World: %d\\n\", i);\n```",
-        "total_duration": 7125136393
-    }
-
-    request=''
-    preamble=''
-    code=''
-    postamble=''
-    filetype='c'
-    settings = {
-        'simulate': 1,
-        'response': response['response']
-    }
-
-    code_lines = """int quicksort(int *arr, int left, int right)
-{
-    return 0;
-}"""
-
-    # Edit the code
-    new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
-
-    # Produce diff
-    diff = compute_diff(code_lines, new_code_lines)
-
-    #groups = highlight_changes(4, diff)
-
-    for change in diff:
-        lineno = change['line_number']
-        content = change['line']
-        #if change['type'] in ['added', 'changed', 'deleted']:
-        if change['type'] == 'added':
-            VimHelper.InsertLine(lineno, content)
-        elif change['type'] == 'changed':
-            VimHelper.ReplaceLine(lineno, content)
-        elif change['type'] == 'deleted':
-            VimHelper.DeleteLine(lineno)
 
 # Main entry point
 if __name__ == "__main__":
