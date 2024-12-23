@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import threading
+import VimHelper
 from logging.handlers import RotatingFileHandler
 from difflib import ndiff
 
@@ -89,29 +90,49 @@ def compute_diff(old_lines, new_lines):
         list: A list of dictionaries describing the changes.
     """
     diff = list(ndiff(old_lines, new_lines))
-    parsed_diff = []
-    line_number = 0
-    last_deleted = -1
+    return diff
 
+def apply_diff(diff, buf, line_offset = 0):
+    """
+    Apply differences directly to a Vim buffer.
+
+    Args:
+        diff (iterable): The result of ndiff comparing old and new lines.
+        buf: The Vim buffer to apply changes to.
+    """
+    print('\n'.join(diff))
     for line in diff:
         line = line.rstrip()
-#        print(line)
-        if line.startswith('+ '):
-            if line_number == last_deleted:
-                # remove last entry
-                parsed_diff = parsed_diff[0:-1]
-                parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'changed'})
-            else:
-                parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'added'})
-            line_number += 1
-        elif line.startswith('- '):
-            parsed_diff.append({'line_number': line_number + 1, 'line': line[2:], 'type': 'deleted'})
-            last_deleted = line_number
-        elif line.startswith('  '):
-            line_number += 1
-            parsed_diff.append({'line_number': line_number, 'line': line[2:], 'type': 'unchanged'})
 
-    return parsed_diff
+        if line.startswith('+ '):
+            # Added line
+            lineno = line_offset
+            content = line[2:]
+            VimHelper.InsertLine(lineno, content, buf)
+            VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
+            VimHelper.PlaceSign(lineno, 'NewLine', buf)
+            line_offset += 1
+
+        elif line.startswith('- '):
+            # Deleted line
+            lineno = line_offset
+            old_content = VimHelper.DeleteLine(lineno, buf)
+            old_content_json = json.dumps(old_content)
+            VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', old_content_json, buf)
+            VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
+
+        elif line.startswith('? '):
+            # This line is a marker for the previous change (not handled)
+            continue
+
+        elif line.startswith('  '):
+            # Unchanged line
+            lineno = line_offset
+            content = VimHelper.GetLine(lineno, buf)
+            if (content != line[2:]):
+                print(f"error: diff does not apply at line {lineno}: {line}")
+                return
+            line_offset += 1
 
 def apply_changes(buffer, diff, start):
     """
@@ -231,14 +252,17 @@ def edit_code(request, preamble, code, postamble, ft, settings):
     Returns:
         Array of lines containing the changed code.
     """
-    prompt = create_prompt(request, preamble, code, postamble, ft)
 
-    url = settings.get('url', DEFAULT_HOST)
-    model = settings.get('model', DEFAULT_MODEL)
-    options = settings.get('options', DEFAULT_OPTIONS)
-    options = json.loads(options)
+    if settings.get('simulate', 0):
+        response = settings['response']
+    else:
+        prompt = create_prompt(request, preamble, code, postamble, ft)
+        url = settings.get('url', DEFAULT_HOST)
+        model = settings.get('model', DEFAULT_MODEL)
+        options = settings.get('options', DEFAULT_OPTIONS)
+        options = json.loads(options)
+        response = generate_code_completion(prompt, url, model, options)
 
-    response = generate_code_completion(prompt, url, model, options)
     # check if we got a valid response
     if response is None or len(response) == 0:
         return []
@@ -263,74 +287,72 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         lines.append(last_line)
     return lines
 
-def highlight_changes(start, diff):
+def group_changes(diff, threshold=3):
     """
-    Highlight added, modified, and deleted lines in Vim using the generated diff.
-    Replace lines with modified content, show deleted lines as virtual text above,
-    add new lines, and keep unchanged lines as-is, while placing signs in the sign column.
+    Group consecutive changes into blocks.
 
     Args:
-        start: Starting line number of the range in the buffer.
-        diff: List of tuples representing the diff.
-              Each tuple is in the form (status, line_number, line_content)
-              - status: 'added', 'modified', 'deleted', 'unchanged'
-    """
-    # Clear existing signs and matches
-    vim.command(f'sign unplace * buffer={vim.current.buffer.number}')
+        diff: Parsed diff output (list of dictionaries).
+        threshold: Number of unchanged lines allowed between grouped changes.
 
-    # Define text property types
-    try:
-        vim.command('call prop_type_add("inline_diff_del", {"highlight": "DiffDelete"})')
-        vim.command('call prop_type_add("inline_diff_add", {"highlight": "DiffAdd"})')
-    except Exception:
-        # ignore errors when the properties already exist
-        print('ignore error')
+    Returns:
+        List of grouped change blocks.
+    """
+    blocks = []
+    current_block = []
+    unchanged_count = 0
+
+    for change in diff:
+        if change['type'] in ['added', 'changed', 'deleted']:
+            # Reset unchanged count, add to current block
+            unchanged_count = 0
+            current_block.append(change)
+        elif change['type'] == 'unchanged':
+            # Increment unchanged line count
+            unchanged_count += 1
+            if unchanged_count > threshold:
+                # Commit current block, start a new one
+                if current_block:
+                    blocks.append(current_block)
+                    current_block = []
+                unchanged_count = 0
+
+    # Add final block if not empty
+    if current_block:
+        blocks.append(current_block)
+
+    return blocks
+
+def highlight_changes(start, diff):
+    """
+    Highlight and group changes, allowing for accept/reject actions.
+
+    Args:
+        start: Starting line number in the buffer.
+        diff: List of parsed diff changes.
+    """
+    # Group the diff into blocks
+    blocks = group_changes(diff)
+    print(blocks)
 
     # Get the current buffer
     buffer = vim.current.buffer
     bufnum = buffer.number
     sign_counter = 1  # Unique ID for each sign
 
-    # Vim line numbers are one-based
-    # Python Vim-buffers are zero-based
+    # Clear existing signs and matches
+    VimHelper.SignClear(buffer)
 
-    # Parse the diff and apply changes
-    for change in diff:
-        # line_number is one-based
-        line_number = start + change['line_number']  # Convert diff-relative line to Vim buffer line
-        status = change['type']
-        content = change['line']
-        content_len = len(content)
+    for block in blocks:
+        first_line = block[0]['line_number']
+        last_line = block[-1]['line_number']
 
-        print(f'line={line_number}, status={status}, content={content}')
+        # Mark block with a sign or virtual text
+        for change in block:
+            VimHelper.ApplyInlineDiff(change, start, buffer)
 
-        if status == 'added':
-            # Add the new line and highlight it as added
-            buffer[line_number - 1:line_number - 1] = [content]  # Insert new line
-            vim.command(f'call prop_add({line_number}, 1, {{"type": "inline_diff_add", "length": {content_len} }})')
-            vim.command(f'sign place {sign_counter} line={line_number} name=NewLine buffer={bufnum}')
-            sign_counter += 1
+    return blocks
 
-        elif status == 'changed':
-            # Replace line
-            oldcontent = buffer[line_number - 1] # get deleter content
-            buffer[line_number - 1] = content  # Replace line
-            oldcontent = json.dumps(oldcontent) # escape string before using as property
-            vim.command(f'call prop_add({line_number}, 0, {{"type": "inline_diff_del", "text": {oldcontent}, "text_align": "above"}})')
-            vim.command(f'call prop_add({line_number}, 1, {{"type": "inline_diff_add", "length": {content_len} }})')
-            vim.command(f'sign place {sign_counter} line={line_number} name=ChangedLine buffer={bufnum}')
-            sign_counter += 1
-
-        elif status == 'deleted':
-            # Delete line from buffer
-            if 1 <= line_number <= len(buffer):
-                oldcontent = buffer[line_number - 1] # get deleted content
-                del buffer[line_number - 1]  # Remove the specified line
-                oldcontent = json.dumps(oldcontent) # escape string before using as property
-                vim.command(f'call prop_add({line_number}, 0, {{"type": "inline_diff_del", "text": {oldcontent}, "text_align": "above"}})')
-                # Optionally, add a sign to indicate the deletion
-                vim.command(f'sign place {sign_counter} line={line_number} name=DeletedLine buffer={bufnum}')
-                sign_counter += 1
 
 def vim_edit_code(request, firstline, lastline, settings):
     """
@@ -347,6 +369,9 @@ def vim_edit_code(request, firstline, lastline, settings):
     global g_result
     global g_new_code_lines
     global g_diff
+    new_code_lines = ''
+    diff = ''
+    result = ''
     try:
         buffer = vim.current.buffer
         filetype = vim.eval('&filetype')
@@ -420,6 +445,7 @@ def get_job_status():
     global g_diff
 
     log_debug(f"result={g_result}")
+    groups = None
     try:
         is_running = False
         if g_editing_thread:
@@ -434,22 +460,19 @@ def get_job_status():
             return g_result
 
         # Success:
-        # create a list of deleted/added/unchanged lines
-#        lines = []
-#        for change in g_diff:
-#            status = change['type']
-#            lines.append(change['line'])
-        # Replace the selected range with the new code
-        #vim.current.buffer[g_start_line-1:g_end_line] = lines
-#        vim.current.buffer[g_start_line:g_end_line + 1] = g_new_code_lines
-        highlight_changes(g_start_line, g_diff)
+        apply = 1
+        if apply:
+            apply_diff(g_diff, vim.current.buffer, g_start_line)
+        else:
+            groups = highlight_changes(g_start_line - 1, g_diff)
+
         result = 'Done'
     except Exception as e:
         log_error(f"Error in get_job_status: {e}")
         result = 'Error'
 
     close_logging()
-    return result
+    return result, groups
 
 def read_file(filename):
     with open(filename, 'r') as file:
@@ -466,25 +489,54 @@ def simulate():
     highlight_changes(1, diff)
     print("done")
 
+def testEdit():
+    response = {
+        "created_at": "2024-12-22T14:32:18.226804731Z",
+        "done": True,
+        "done_reason": "stop",
+        "eval_count": 225,
+        "eval_duration": 7018586000,
+        "load_duration": 15556430,
+        "model": "qwen2.5-coder:14b",
+        "prompt_eval_count": 229,
+        "prompt_eval_duration": 48029000,
+        "response": "int quicksort(int *arr, int left, int right)\n{\n    if (left >= right) {\n        return 0;\n    }\n\n    int pivot = arr[(left + right) / 2];\n    int i = left - 1;\n    int j = right + 1;\n\n    while (1) {\n        do {\n            i++;\n        } while (arr[i] < pivot);\n\n        do {\n            j--;\n        } while (arr[j] > pivot);\n\n        if (i >= j) {\n            break;\n        }\n\n        int temp = arr[i];\n        arr[i] = arr[j];\n        arr[j] = temp;\n    }\n\n    quicksort(arr, left, j);\n    quicksort(arr, j + 1, right);\n\n    return 0;\n}\n<STOP EDITING HERE>\n\n/*\n * Hello World program in C.\n * Line 2\n * Line 3\n */\nint main()\n{\n    for (int i = 0; i < 10; ++i) {\n        printf(\"Hello World: %d\\n\", i);\n```",
+        "total_duration": 7125136393
+    }
 
-def test(settings):
-    # some test parameters
-    ft='cpp'
-    preamble="""#include <stdio.h>
+    request=''
+    preamble=''
+    code=''
+    postamble=''
+    filetype='c'
+    settings = {
+        'simulate': 1,
+        'response': response['response']
+    }
 
-"""
-    code="""// Das ist die Hauptfunktion
-int main()
-"""
-    postamble="""{
-    printf("Hello World\n");
+    code_lines = """int quicksort(int *arr, int left, int right)
+{
     return 0;
-}
-"""
-    #request="translate all comments to english"
-    request="add missing arguments"
-    lines = edit_code(request, preamble, code, postamble, ft, settings)
-    print("\n".join(lines))
+}"""
+
+    # Edit the code
+    new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
+
+    # Produce diff
+    diff = compute_diff(code_lines, new_code_lines)
+
+    #groups = highlight_changes(4, diff)
+
+    for change in diff:
+        lineno = change['line_number']
+        content = change['line']
+        #if change['type'] in ['added', 'changed', 'deleted']:
+        if change['type'] == 'added':
+            VimHelper.InsertLine(lineno, content)
+        elif change['type'] == 'changed':
+            VimHelper.ReplaceLine(lineno, content)
+        elif change['type'] == 'deleted':
+            VimHelper.DeleteLine(lineno)
 
 # Main entry point
 if __name__ == "__main__":
