@@ -38,7 +38,6 @@ function! ollama#edit#UpdateProgress(popup) abort
 import vim
 try:
     result = CodeEditor.get_job_status()
-    vim.command(f'echom "{result}"')
     if result != 'InProgress':
         vim.command(f'call ollama#edit#EditCodeDone("{result}")')
 except Exception as e:
