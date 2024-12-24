@@ -10,7 +10,10 @@ def GetLine(lineno, buffer = vim.current.buffer):
     return buffer[lineno - 1]
 
 def InsertLine(lineno, content, buffer = vim.current.buffer):
-    buffer[lineno - 1:lineno - 1] = [content]
+    if lineno == len(buffer) + 1:
+        buffer.append(content)
+    else:
+        buffer[lineno - 1:lineno - 1] = [content]
 
 def ReplaceLine(lineno, content, buffer = vim.current.buffer):
     oldcontent = buffer[lineno - 1]
