@@ -35,17 +35,29 @@ function! ollama#edit#UpdateProgress(popup) abort
     " Poll the job status, because Vim calls from worker threads produce
     " segfaults
     python3 << EOF
+import sys
 import vim
 try:
     result = CodeEditor.get_job_status()
     if result != 'InProgress':
-        vim.command(f'call ollama#edit#EditCodeDone("{result}")')
+        # Report changes in code done to user interface
+        vim.command('call ollama#edit#EditCodeDone("' + str(result) + '")')
 except Exception as e:
-    print(e)
+    exc_type, exc_value, tb = sys.exc_info()
+    print(f"Error updating progress: {str(e)} at line {tb.tb_lineno} of {sys._getframe(0).f_code.co_filename}")
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command(f'echon "Error updating progress: {str(e)}"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
+
 EOF
 endfunction
 
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Start the Python function and return immediately
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#EditCode(request)
     if exists('g:edit_in_progress') && g:edit_in_progress
         return
@@ -92,9 +104,52 @@ EOF
     let b:timer = timer_start(100, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
 endfunction
 
-function! ollama#edit#Test()
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Accept All Changes
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#AcceptAll()
     python3 << EOF
 import vim
-CodeEditor.simulate()
+try:
+    CodeEditor.AcceptChanges()
+except Exception as e:
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command('echo "Error accepting changes: ' + str(e) + '"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
 EOF
+endfunction
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Reject All Changes
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#RejectAll()
+    python3 << EOF
+import vim
+try:
+    CodeEditor.RejectChanges()
+except Exception as e:
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command('echo "Error rejecting changes: ' + str(e) + '"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
+EOF
+endfunction
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Accept Current Change
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#AcceptCurrent()
+    echo "TODO"
+endfunction
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Reject Current Change
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#RejectCurrent()
+    echo "TODO"
 endfunction

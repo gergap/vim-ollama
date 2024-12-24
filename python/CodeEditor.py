@@ -25,6 +25,13 @@ g_start_line = 0
 g_end_line = 0
 g_new_code_lines = []
 g_diff = []
+g_original_content = []
+g_debug_mode = False  # You can turn this on/off as needed
+
+def debug_print(*args):
+    global g_debug_mode
+    if g_debug_mode:
+        print(' '.join(map(str, args)))
 
 def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
     """
@@ -101,41 +108,45 @@ def apply_diff(diff, buf, line_offset=0):
         buf: The Vim buffer to apply changes to.
         line_offset (int): Line offset for the current buffer.
     """
-    print("\n".join(diff))
+    debug_print("\n".join(diff))
     deleted_lines = []  # Collect deleted lines for multi-line display
 
     for line in diff:
-        line = line.rstrip()
 
         if line.startswith('+ '):
+            debug_print(f"add line: '{line}'")
             # Added line
             lineno = line_offset
-            content = line[2:]
+            content = line[2:].rstrip()
             VimHelper.InsertLine(lineno, content, buf)
             VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
-            VimHelper.PlaceSign(lineno, 'NewLine', buf)
             if deleted_lines:
                 # Show the collected deleted lines above the current added line
                 for i, deleted_line in enumerate(deleted_lines):
                     VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', json.dumps(deleted_line), buf)
                 deleted_lines = []  # Reset deleted lines
+                VimHelper.PlaceSign(lineno, 'ChangedLine', buf)
+            else:
+                VimHelper.PlaceSign(lineno, 'NewLine', buf)
 
             line_offset += 1
 
         elif line.startswith('- '):
+            debug_print("delete line")
             # Deleted line
             lineno = line_offset
             old_content = VimHelper.DeleteLine(lineno, buf)
             if old_content != line[2:]:
-                print(f"error: diff does not apply at line {lineno}: {line}")
-                return
+                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line}")
             deleted_lines.append(old_content)  # Collect the deleted line content
 
         elif line.startswith('? '):
+            debug_print("info line")
             # This line is a marker for the previous change (not handled)
             continue
 
         elif line.startswith('  '):
+            debug_print("unchanged line")
             # Unchanged line
             if deleted_lines:
                 # Show the collected deleted lines above the current unchanged line
@@ -145,28 +156,41 @@ def apply_diff(diff, buf, line_offset=0):
                 VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
 
             lineno = line_offset
-            content = VimHelper.GetLine(lineno, buf)
-            if content != line[2:]:
-                print(f"error: diff does not apply at line {lineno}: {line}")
-                return
+            old_content = VimHelper.GetLine(lineno, buf)
+            debug_print(f"line {lineno}: '{old_content}'")
+            debug_print(f"diffline {lineno}: '{line}'")
+            content = line[2:]
+            if content != old_content:
+                debug_print(f"existing line: '{old_content}'")
+                debug_print(f"expected line: '{content}'")
+                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
             line_offset += 1
+        else:
+            debug_print(f"other: '{line}'")
+            line_offset += 1
+
 
     # Handle any remaining deleted lines at the end
     if deleted_lines:
         for i, deleted_line in enumerate(deleted_lines):
             VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', json.dumps(deleted_line), buf)
 
-def apply_changes(buffer, diff, start):
+def accept_changes(buffer):
     """
     Apply accepted changes to the Vim buffer.
 
     Args:
         buffer (list): The original Vim buffer as a list.
-        diff (list): The computed diff.
+        diff (list): The computed diff (ndiff output).
         start (int): The starting line number.
     """
-    new_lines = [change['line'] for change in diff if change['type'] != 'deleted']
-    buffer[start:start + len(new_lines)] = new_lines
+    # Clear all signs in the buffer
+    VimHelper.SignClear(buffer)
+
+    bufno = buffer.number
+    # remove properties from all lines
+    vim.command(f"call prop_clear(1, line('$'))")
+    debug_print("Changes accepted: All annotations and signs removed.")
 
 def reject_changes(buffer, original_lines, start):
     """
@@ -177,7 +201,19 @@ def reject_changes(buffer, original_lines, start):
         original_lines (list): The original lines to restore.
         start (int): The starting line number.
     """
-    buffer[start:start + len(original_lines)] = original_lines
+#    line_offset = start - 1  # Adjust to 0-based index
+#    debug_print(f"Reverting changes starting from line {start}")
+#
+#    # Compute the range to replace in the buffer
+#    num_lines_to_replace = len(original_lines)
+#    buffer[line_offset:line_offset + num_lines_to_replace] = original_lines
+
+    # Clear all signs in the buffer
+    VimHelper.SignClear(buffer)
+
+    # simply undo last change
+    vim.command(f"undo")
+    debug_print("Changes rejected. Original content restored.")
 
 def create_prompt(request, preamble, code, postamble, ft) -> str:
     """
@@ -209,7 +245,7 @@ Sure! Here's the entire code block, including the rewritten portion:
 <START EDITING HERE>
 """
 
-#    print(prompt)
+#    debug_print(prompt)
     return prompt
 
 def generate_code_completion(prompt, baseurl, model, options):
@@ -345,37 +381,6 @@ def group_changes(diff, threshold=3):
 
     return blocks
 
-def highlight_changes(start, diff):
-    """
-    Highlight and group changes, allowing for accept/reject actions.
-
-    Args:
-        start: Starting line number in the buffer.
-        diff: List of parsed diff changes.
-    """
-    # Group the diff into blocks
-    blocks = group_changes(diff)
-    print(blocks)
-
-    # Get the current buffer
-    buffer = vim.current.buffer
-    bufnum = buffer.number
-    sign_counter = 1  # Unique ID for each sign
-
-    # Clear existing signs and matches
-    VimHelper.SignClear(buffer)
-
-    for block in blocks:
-        first_line = block[0]['line_number']
-        last_line = block[-1]['line_number']
-
-        # Mark block with a sign or virtual text
-        for change in block:
-            VimHelper.ApplyInlineDiff(change, start, buffer)
-
-    return blocks
-
-
 def vim_edit_code(request, firstline, lastline, settings):
     """
     Vim function to edit a selected range of code.
@@ -389,6 +394,7 @@ def vim_edit_code(request, firstline, lastline, settings):
     This function extracts the selected range, adds context lines, calls edit_code, and replaces the selection with the result.
     """
     global g_result
+    global g_original_content
     global g_new_code_lines
     global g_diff
     new_code_lines = ''
@@ -432,7 +438,11 @@ def vim_edit_code(request, firstline, lastline, settings):
 
     # write results to global vars
     with g_thread_lock:
+        # backup existing code
+        g_original_content = code_lines
+        # save new code in global variables
         g_new_code_lines = new_code_lines
+        # save diff and result
         g_diff = diff
         g_result = result
 
@@ -496,21 +506,11 @@ def get_job_status():
     close_logging()
     return result, groups
 
-def read_file(filename):
-    with open(filename, 'r') as file:
-        return file.readlines()
+def AcceptChanges():
+    accept_changes(vim.current.buffer)
 
-def simulate():
-    # read test2.c into lines array
-    lines_a = read_file("test.c")
-    print("read a")
-    lines_b = read_file("test2.c")
-    print("read b")
-    diff = compute_diff(lines_a, lines_b)
-    print("computed diff")
-    highlight_changes(1, diff)
-    print("done")
-
+def RejectChanges():
+    reject_changes(vim.current.buffer, g_original_content, g_start_line)
 
 # Main entry point
 if __name__ == "__main__":
