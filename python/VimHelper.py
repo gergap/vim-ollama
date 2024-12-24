@@ -26,19 +26,16 @@ def DeleteLine(lineno, buffer = vim.current.buffer):
 # Sign edit functions
 ###############################
 def PlaceSign(lineno, signname, buf):
-    print('PlaceSign')
     sign_id=lineno
     bufno = buf.number
     vim.command(f'sign place {sign_id} line={lineno} name={signname} buffer={bufno}')
 
 def UnplaceSign(lineno, buf):
-    print('UnPlaceSign')
     sign_id=lineno
     bufno = buf.number
     vim.command(f'sign unplace {sign_id} buffer={bufno}')
 
 def SignClear(buf):
-    print('SignClear')
     bufno = buf.number
     vim.command(f'sign unplace * buffer={bufno}')
 
@@ -47,12 +44,10 @@ def SignClear(buf):
 ###############################
 
 def PropertyTypeAdd(name, options):
-    print('ProprertyTypeAdd')
     json_options = json.dumps(options)
     vim.command(f'call prop_type_add("{name}", {json_options})')
 
 def HighlightLine(lineno, propname, length, buf):
-    print('HighlightLine')
     bufno = buf.number
     vim.command(f'call prop_add({lineno}, 1, {{"type": "{propname}", "length": {length}, "bufnr": {bufno} }})')
 
@@ -60,7 +55,6 @@ def ShowTextAbove(lineno, propname, text, buf):
     """
     Show text above the given line with specified property type.
     """
-    print('ShowTextAbove')
     bufno = buf.number
     # column must be 0 for this feature.
     vim.command(f'call prop_add({lineno}, 0, {{"type": "{propname}", "text": {text}, "text_align": "above", "bufnr": {bufno} }})')
@@ -71,8 +65,6 @@ def ApplyInlineDiff(change, offset, buf):
     content = change['line']
     content_len = len(content)
 
-    print(status)
-    print(lineno)
     if status == 'added':
         InsertLine(lineno, content, buf)
         HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
