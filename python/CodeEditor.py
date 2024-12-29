@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import threading
-import VimHelper
 from logging.handlers import RotatingFileHandler
 from difflib import ndiff
 
@@ -514,24 +513,8 @@ def RejectChanges():
 
 # Main entry point
 if __name__ == "__main__":
-    # create dummy Vim object if not running inside Vim
-    global vim
-    vim = {}
-    setup_logging(log_level=logging.DEBUG)
-    log_debug('main')
-    parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
-    parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
-    parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
-    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
-    args = parser.parse_args()
-
-    settings = {
-        'url': args.url,
-        'model': args.model,
-        'options': args.options
-    }
-    # testing code in standalone mode
-    test(settings)
+    print("The script works only inside Vim.")
 else:
     # importing to Vim
     import vim
+    import VimHelper
