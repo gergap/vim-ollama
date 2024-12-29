@@ -27,11 +27,13 @@ g_diff = []
 g_original_content = []
 g_debug_mode = False  # You can turn this on/off as needed
 
+# Debug prints for development. This output is shown as Vim message.
 def debug_print(*args):
     global g_debug_mode
     if g_debug_mode:
         print(' '.join(map(str, args)))
 
+# Logging infrastructure for troubleshooting.
 def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
     """
     Set up logging configuration.
@@ -136,7 +138,7 @@ def apply_diff(diff, buf, line_offset=0):
             lineno = line_offset
             old_content = VimHelper.DeleteLine(lineno, buf)
             if old_content != line[2:]:
-                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line}")
+                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
             deleted_lines.append(old_content)  # Collect the deleted line content
 
         elif line.startswith('? '):
@@ -167,7 +169,6 @@ def apply_diff(diff, buf, line_offset=0):
         else:
             debug_print(f"other: '{line}'")
             line_offset += 1
-
 
     # Handle any remaining deleted lines at the end
     if deleted_lines:
