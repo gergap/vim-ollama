@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-// diese funktion sortiert ein array mit der schnellen sortiermethode
+// sorts an array
 int quicksort(int *arr, int left, int right)
 {
     return 0;
