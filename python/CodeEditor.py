@@ -100,6 +100,58 @@ def compute_diff(old_lines, new_lines):
     diff = list(ndiff(old_lines, new_lines))
     return diff
 
+def group_diff(diff, starting_line=1):
+    """
+    Group consecutive changes into chunks, excluding unchanged lines.
+
+    Args:
+        diff (iterable): The result of ndiff comparing old and new lines.
+        starting_line (int): Line number offset for the original code.
+
+    Returns:
+        list: A list of dictionaries, where each dictionary contains:
+              - 'start_line': The starting line number of the group.
+              - 'end_line': The ending line number of the group.
+              - 'changes': A list of strings representing the changes in the group.
+    """
+    grouped_diff = []
+    current_group = []
+    current_start_line = None
+    line_number = starting_line
+
+    for line in diff:
+        if line.startswith('- ') or line.startswith('+ '):
+            # Start a new group if this is the first change in a group
+            if not current_group:
+                current_start_line = line_number
+            current_group.append(line)
+        elif line.startswith('  '):
+            # Unchanged line stops the current group
+            if current_group:
+                grouped_diff.append({
+                    'start_line': current_start_line,
+                    'end_line': line_number - 1,
+                    'changes': current_group
+                })
+                current_group = []
+        elif line.startswith('? '):
+            # Context-only marker, skip it
+            continue
+
+        # Increment line number for each line processed
+        if not line.startswith('? ') and not line.startswith('- '):
+            line_number += 1
+
+    # Add the remaining group if it has any lines
+    if current_group:
+        grouped_diff.append({
+            'start_line': current_start_line,
+            'end_line': line_number - 1,
+            'changes': current_group
+        })
+
+    return grouped_diff
+
 def apply_diff(diff, buf, line_offset=0):
     """
     Apply differences directly to a Vim buffer.
@@ -345,42 +397,6 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         lines.append(last_line)
     return lines
 
-def group_changes(diff, threshold=3):
-    """
-    Group consecutive changes into blocks.
-
-    Args:
-        diff: Parsed diff output (list of dictionaries).
-        threshold: Number of unchanged lines allowed between grouped changes.
-
-    Returns:
-        List of grouped change blocks.
-    """
-    blocks = []
-    current_block = []
-    unchanged_count = 0
-
-    for change in diff:
-        if change['type'] in ['added', 'changed', 'deleted']:
-            # Reset unchanged count, add to current block
-            unchanged_count = 0
-            current_block.append(change)
-        elif change['type'] == 'unchanged':
-            # Increment unchanged line count
-            unchanged_count += 1
-            if unchanged_count > threshold:
-                # Commit current block, start a new one
-                if current_block:
-                    blocks.append(current_block)
-                    current_block = []
-                unchanged_count = 0
-
-    # Add final block if not empty
-    if current_block:
-        blocks.append(current_block)
-
-    return blocks
-
 def vim_edit_code(request, firstline, lastline, settings):
     """
     Vim function to edit a selected range of code.
@@ -492,12 +508,9 @@ def get_job_status():
             return g_result
 
         # Success:
-        apply = 1
-        if apply:
-            apply_diff(g_diff, vim.current.buffer, g_start_line)
-        else:
-            groups = highlight_changes(g_start_line - 1, g_diff)
+        apply_diff(g_diff, vim.current.buffer, g_start_line)
 
+        #groups = group_diff(g_diff)
         result = 'Done'
     except Exception as e:
         log_error(f"Error in get_job_status: {e}")
