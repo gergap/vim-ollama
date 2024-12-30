@@ -176,8 +176,10 @@ sign define NewLine text=+ texthl=DiffAdd
 sign define ChangedLine text=~ texthl=DiffChange
 sign define DeletedLine text=- texthl=DiffDelete
 " Define inline diff property types
+highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
 call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
+call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
 " Add the plugin's python directory to Python's sys.path
 python3 << EOF
@@ -192,4 +194,5 @@ if plugin_python_path not in sys.path:
 
 # Import your CodeEditor module
 import CodeEditor
+import VimHelper
 EOF
