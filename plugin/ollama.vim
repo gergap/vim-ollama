@@ -116,7 +116,6 @@ augroup ollama
 augroup END
 
 call s:ColorScheme()
-call s:MapTab()
 
 " Load autoload functions
 runtime autoload/ollama.vim
