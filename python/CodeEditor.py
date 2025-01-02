@@ -24,8 +24,11 @@ g_start_line = 0
 g_end_line = 0
 g_new_code_lines = []
 g_diff = []
+g_groups = []
 g_original_content = []
 g_debug_mode = False  # You can turn this on/off as needed
+g_change_index = -1
+g_dialog_callback = None
 
 # Debug prints for development. This output is shown as Vim message.
 def debug_print(*args):
@@ -176,7 +179,7 @@ def apply_diff(diff, buf, line_offset=0):
             if deleted_lines:
                 # Show the collected deleted lines above the current added line
                 for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', json.dumps(deleted_line), buf)
+                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
                 VimHelper.PlaceSign(lineno, 'ChangedLine', buf)
             else:
@@ -204,7 +207,7 @@ def apply_diff(diff, buf, line_offset=0):
             if deleted_lines:
                 # Show the collected deleted lines above the current unchanged line
                 for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', json.dumps(deleted_line), buf)
+                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
                 VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
 
@@ -225,7 +228,7 @@ def apply_diff(diff, buf, line_offset=0):
     # Handle any remaining deleted lines at the end
     if deleted_lines:
         for i, deleted_line in enumerate(deleted_lines):
-            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', json.dumps(deleted_line), buf)
+            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
 
 def accept_changes(buffer):
     """
@@ -491,6 +494,8 @@ def get_job_status():
     global g_end_line
     global g_new_code_lines
     global g_diff
+    global g_groups
+    global g_change_index
 
     log_debug(f"result={g_result}")
     groups = None
@@ -501,29 +506,130 @@ def get_job_status():
                 is_runining = g_editing_thread.is_alive()
 
         if (is_running):
-            return "InProgress"
+            return "InProgress", None
 
         # Job Complete
         if g_result != 'Done':
-            return g_result
+            return g_result, None
 
         # Success:
         apply_diff(g_diff, vim.current.buffer, g_start_line)
 
-        #groups = group_diff(g_diff)
+        g_groups = group_diff(g_diff)
+        g_change_index = 0
         result = 'Done'
     except Exception as e:
         log_error(f"Error in get_job_status: {e}")
         result = 'Error'
 
     close_logging()
-    return result, groups
+    return result, g_groups
 
 def AcceptChanges():
     accept_changes(vim.current.buffer)
 
 def RejectChanges():
     reject_changes(vim.current.buffer, g_original_content, g_start_line)
+
+def ShowAcceptDialog(dialog_callback, index):
+    global g_groups, g_dialog_callback
+    if not g_groups:
+        print("No groups, ignoring ShowAcceptDialog.")
+        return
+
+    # get current group
+    group = g_groups[index]
+    start_line = group.get('start_line', 1)
+
+    # move cursor to line lineno
+    vim.command(f'execute "normal! {start_line}G"')
+    # move cursor to col 0
+    vim.command(f'execute "normal! 0"')
+    vim.command(f'redraw')
+
+    # save callback for later calls
+    g_dialog_callback = dialog_callback
+    msg = f"Accept change {index+1}? y/n"
+    # show popup
+    vim.command(f'call popup_dialog("{msg}", {{ "line": {start_line}, "filter": "popup_filter_yesno", "callback": "{dialog_callback}", "padding": [2, 4, 2, 4] }})')
+
+def DialogCallback(id, result):
+    global g_change_index, g_groups
+    if not g_groups or g_change_index is None:
+        print("No groups or invalid index, ignoring callback.")
+        return
+
+    # Handle based on result
+    if result == 1:  # 'y' pressed, meaning accept
+        AcceptChange(g_change_index)
+    elif result == 0:  # 'n' pressed, meaning reject
+        RejectChange(g_change_index)
+    else:
+        print(f"Unexpected result: {result}")
+    NextChange()
+
+def NextChange():
+    global g_change_index, g_groups, g_dialog_callback
+    count = len(g_groups)
+    if (count == 0):
+        # no more changes left
+        return
+
+    # update index
+    g_change_index += 1
+    if (g_change_index >= len(g_groups)):
+        # not more changes
+        g_groups = None
+        g_change_index = -1
+        print("No more changes.")
+        return
+
+    ShowAcceptDialog(g_dialog_callback, g_change_index)
+
+def AcceptChange(index):
+    global g_change_index, g_groups
+    if not g_groups or g_change_index is None:
+        print("No groups or invalid index, ignoring AcceptChange.")
+        return
+    group = g_groups[g_change_index]
+    start_line = group.get('start_line', 1)
+    end_line = group.get('end_line', 1)
+    buf = vim.current.buffer
+
+    # remove signs
+    for line in range(start_line, end_line + 1):
+        VimHelper.UnplaceSign(line, buf)
+
+    # remove abovetext
+    vim.command(f'call prop_clear({start_line}, {end_line})')
+
+
+def RejectChange(index):
+    global g_change_index, g_groups
+    if not g_groups or g_change_index is None:
+        print("No groups or invalid index, ignoring RejectChange.")
+        return
+    group = g_groups[g_change_index]
+    start_line = group.get('start_line', 1)
+    end_line = group.get('end_line', 1)
+    buf = vim.current.buffer
+
+    # undo all changes of current group
+    lineno = start_line
+    for line in group.get('changes'):
+        VimHelper.UnplaceSign(lineno, buf)
+        # undo change
+        if (line.startswith('- ')):
+            content = line[2:]
+            # restore deleted line
+            VimHelper.InsertLine(lineno, content)
+            lineno += 1
+        elif (line.startswith('+ ')):
+            # remove added line
+            VimHelper.DeleteLine(lineno)
+
+    # remove any abovetext
+    vim.command(f'call prop_clear({start_line}, {end_line})')
 
 # Main entry point
 if __name__ == "__main__":
