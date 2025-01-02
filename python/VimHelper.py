@@ -59,8 +59,11 @@ def ShowTextAbove(lineno, propname, text, buf):
     Show text above the given line with specified property type.
     """
     bufno = buf.number
-    # column must be 0 for this feature.
-    vim.command(f'call prop_add({lineno}, 0, {{"type": "{propname}", "text": {text}, "text_align": "above", "bufnr": {bufno} }})')
+    # Properly escape the text argument
+    escaped_text = text.replace('"', '\\"')
+    vim.command(
+        f'call prop_add({lineno}, 0, {{"type": "{propname}", "text": "{escaped_text}", "text_align": "above", "bufnr": {bufno}}})'
+    )
 
 def ApplyInlineDiff(change, offset, buf):
     lineno = offset + change['line_number']
