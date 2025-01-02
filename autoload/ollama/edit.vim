@@ -25,8 +25,28 @@ function! ollama#edit#EditCodeDone(status)
     redraw!
 endfunction
 
+" Callback wrapper which delegates the call to Python
+function! ollama#edit#DialogCallback(id, result)
+    python3 << EOF
+import vim
+try:
+    id = int(vim.eval('a:id'))
+    result = int(vim.eval('a:result'))
+    CodeEditor.DialogCallback(id, result)
+except Exception as e:
+    exc_type, exc_value, tb = sys.exc_info()
+    print(f"Error in DialogCallback: {str(e)} at line {tb.tb_lineno} of {sys._getframe(0).f_code.co_filename}")
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command(f'echon "Error in delegating callback: {str(e)}"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
+EOF
+endfunction
+
 " Give user visual feedback about job that is in progress
-function! ollama#edit#UpdateProgress(popup) abort
+function! ollama#edit#UpdateProgress(popup)
     " Cycle through progress states
     let g:progress_indicator = (g:progress_indicator + 1) % 4
     let l:states = ['|', '/', '-', '\']
@@ -36,12 +56,18 @@ function! ollama#edit#UpdateProgress(popup) abort
     " segfaults
     python3 << EOF
 import sys
+import json
 import vim
 try:
-    result = CodeEditor.get_job_status()
+    buf = vim.current.buffer
+    result, groups = CodeEditor.get_job_status()
     if result != 'InProgress':
         # Report changes in code done to user interface
         vim.command('call ollama#edit#EditCodeDone("' + str(result) + '")')
+
+        if groups:
+            CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
     print(f"Error updating progress: {str(e)} at line {tb.tb_lineno} of {sys._getframe(0).f_code.co_filename}")
