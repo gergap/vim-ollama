@@ -120,6 +120,8 @@ function! s:MapTab() abort
     nnoremap <Plug>(ollama-reject-changes) <Cmd>call ollama#edit#RejectCurrent()<CR>
     nnoremap <Plug>(ollama-accept-all-changes) <Cmd>call ollama#edit#AcceptAll()<CR>
     nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
+    nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
+    vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
 
     " Setup default mappings
     imap <silent> <C-]>     <Plug>(ollama-dismiss)
@@ -131,6 +133,8 @@ function! s:MapTab() abort
     nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
     nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
     nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
+    nmap <silent> <C-I> <Plug>(ollama-edit)
+    vmap <silent> <C-I> <Plug>(ollama-edit)
 endfunction
 
 function! s:Init() abort

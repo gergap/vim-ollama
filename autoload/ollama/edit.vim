@@ -12,7 +12,7 @@ function! ollama#edit#EditCodeDone(status)
     if a:status == "done"
         echom "Code editing completed!"
     elseif a:status == "error"
-        echom "Error occurred during code editing."
+        echoe "Error occurred during code editing."
     endif
     " stop progress timer
     call timer_stop(b:timer)
@@ -82,13 +82,12 @@ EOF
 endfunction
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Start the Python function and return immediately
+" Internal Helper function for offloading logic to Python
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-function! ollama#edit#EditCode(request)
+function! s:EditCodeInternal(request, first_line, last_line) abort
     if exists('g:edit_in_progress') && g:edit_in_progress
         return
     endif
-    echomsg "Calling ollama#edit#EditCode with request: " . a:request
     let l:model_options = substitute(json_encode(g:ollama_chat_options), "\"", "\\\"", "g")
 
     " Call the python code to edit the code via Ollama.
@@ -99,8 +98,8 @@ import vim
 
 # Process arguments
 request = vim.eval('a:request')
-firstline = vim.eval('a:firstline')
-lastline = vim.eval('a:lastline')
+firstline = vim.eval('a:first_line')
+lastline = vim.eval('a:last_line')
 # Access global Vim variables
 settings = {
     'url': vim.eval('g:ollama_host'),
@@ -131,13 +130,52 @@ EOF
 endfunction
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Start the Python function and return immediately (Range command)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#EditCode(request)
+    call s:EditCodeInternal(a:request, a:firstline, a:lastline)
+endfunction
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Popup edit prompt, instead of Edit command
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! ollama#edit#EditPrompt()
+    " Initialize line numbers
+    let l:firstline = 0
+    let l:lastline = 0
+
+    if mode() ==# 'v' || mode() ==# 'V' || mode() ==# "\<C-V>"
+        " Get the first and last line of the selection
+        let l:firstline = line("'<")
+        let l:lastline = line("'>")
+    else
+        let l:firstline = 1
+        let l:lastline = line('$')
+    endif
+
+    " Extract the selected text or the whole file content
+    let l:selected_text = join(getline(l:firstline, l:lastline), "\n")
+
+    " Show a prompt to enter the user request
+    let l:prompt = input('Enter prompt: ', '', 'file')
+
+    " If the prompt is empty, exit
+    if empty(l:prompt)
+        return
+    endif
+
+    " Call the ollama#edit#EditCodeInternal function with the request and selected context
+    call s:EditCodeInternal(l:prompt, l:firstline, l:lastline)
+endfunction
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Accept All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#AcceptAll()
     python3 << EOF
 import vim
 try:
-    CodeEditor.AcceptChanges()
+    CodeEditor.AcceptAllChanges()
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')
@@ -155,7 +193,7 @@ function! ollama#edit#RejectAll()
     python3 << EOF
 import vim
 try:
-    CodeEditor.RejectChanges()
+    CodeEditor.RejectAllChanges()
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')
@@ -166,16 +204,3 @@ finally:
 EOF
 endfunction
 
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Accept Current Change
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-function! ollama#edit#AcceptCurrent()
-    echo "TODO"
-endfunction
-
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Reject Current Change
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-function! ollama#edit#RejectCurrent()
-    echo "TODO"
-endfunction

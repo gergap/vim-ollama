@@ -340,6 +340,7 @@ def generate_code_completion(prompt, baseurl, model, options):
 #        log_debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
 
+        log_debug(completion)
         # find index of sub string
         index = completion.find('<|endoftext|>')
         if index == -1:
@@ -525,10 +526,10 @@ def get_job_status():
     close_logging()
     return result, g_groups
 
-def AcceptChanges():
+def AcceptAllChanges():
     accept_changes(vim.current.buffer)
 
-def RejectChanges():
+def RejectAllChanges():
     reject_changes(vim.current.buffer, g_original_content, g_start_line)
 
 def ShowAcceptDialog(dialog_callback, index):

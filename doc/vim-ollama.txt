@@ -51,6 +51,10 @@ Once installed, you can start using vim-ollama commands within Vim. The plugin
 will display completions automatically as ghost text. Hit the <Tab> key to
 accept the completion suggestion.
 
+You can also visually select parts of your code and use :OllamaEdit or the key
+<C-I> to start editing this code by using a LLM prompt. Is can be useful e.g.
+for adding comments, translating text, refactoring code and much more.
+
 ==============================================================================
 4. Commands                                           *vim-ollama-commands*
 
@@ -133,6 +137,10 @@ Other Maps ~
 
 <C-]>                   Dismiss the current suggestion.
 <Plug>(ollama-dismiss)
+
+<C-I>                   Starts editing the current selection or the whole file
+                        if there is not visual selection.
+<Plug>(ollama-edit)
 
 ==============================================================================
 6. Configuration                                      *vim-ollama-config*
