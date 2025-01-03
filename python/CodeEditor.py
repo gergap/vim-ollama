@@ -550,7 +550,8 @@ def ShowAcceptDialog(dialog_callback, index):
 
     # save callback for later calls
     g_dialog_callback = dialog_callback
-    msg = f"Accept change {index+1}? y/n"
+    count = len(g_groups)
+    msg = f"Accept change {index+1} of {count}? y/n"
     # show popup
     vim.command(f'call popup_dialog("{msg}", {{ "line": {start_line}, "filter": "popup_filter_yesno", "callback": "{dialog_callback}", "padding": [2, 4, 2, 4] }})')
 
