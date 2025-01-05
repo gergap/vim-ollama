@@ -7,6 +7,7 @@ import os
 import threading
 from logging.handlers import RotatingFileHandler
 from difflib import ndiff
+from ChatTemplate import ChatTemplate
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
@@ -270,7 +271,7 @@ def reject_changes(buffer, original_lines, start):
     vim.command(f"undo")
     debug_print("Changes rejected. Original content restored.")
 
-def create_prompt(request, preamble, code, postamble, ft) -> str:
+def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
     """
     Creates a prompt for the OpenAI API based on the given parameters.
 
@@ -285,22 +286,26 @@ def create_prompt(request, preamble, code, postamble, ft) -> str:
         str: The prompt for the OpenAI API.
     """
 
-    prompt = f"""<|im_start|>user
-```{ft}
+    chat_template = ChatTemplate(f"chat_templates/{template_name}")
+    chat = [
+            { "role": "system", "content": "You are a Vim code assistant plugin." },
+            { "role": "user", "content":
+f"""```{ft}
 {preamble}
 <START EDITING HERE>{code}<STOP EDITING HERE>
 {postamble}
 ```
 Please rewrite the entire code block above, editing the portion below "<START EDITING HERE>" in order to satisfy the following request: '{request}'. You should rewrite the entire code block without leaving placeholders, even if the code is the same as before. When you get to "<STOP EDITING HERE>", end your response.
-<|im_end|>
-<|im_start|>assistant
-Sure! Here's the entire code block, including the rewritten portion:
+"""}
+    ]
+
+    prompt = chat_template.render(messages=chat, add_generation_prompt=True)
+    # Start the answer of the assistant to set it on the right path...
+    prompt += f"""Sure! Here's the entire code block, including the rewritten portion:
 ```c
 {preamble}
-<START EDITING HERE>
-"""
-
-#    debug_print(prompt)
+<START EDITING HERE>"""
+    debug_print(prompt)
     return prompt
 
 def generate_code_completion(prompt, baseurl, model, options):
@@ -370,7 +375,7 @@ def edit_code(request, preamble, code, postamble, ft, settings):
     if settings.get('simulate', 0):
         response = settings['response']
     else:
-        prompt = create_prompt(request, preamble, code, postamble, ft)
+        prompt = create_prompt('chat_templates/chatml.jinja', request, preamble, code, postamble, ft)
         url = settings.get('url', DEFAULT_HOST)
         model = settings.get('model', DEFAULT_MODEL)
         options = settings.get('options', DEFAULT_OPTIONS)
