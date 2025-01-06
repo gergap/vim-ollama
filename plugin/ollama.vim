@@ -34,7 +34,7 @@ if !exists('g:ollama_model_options')
     " Predict less -> faster response time
     let g:ollama_model_options = {
                 \ 'temperature': 0,
-                \ 'top_p': 0.95
+                \ 'top_p': 0.95,
                 \ 'num_predict': 128
                 \ }
 endif
