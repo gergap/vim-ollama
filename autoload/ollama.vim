@@ -423,24 +423,99 @@ function! ollama#GetModels(url)
     return split(l:output, "\n")
 endfunction
 
-function! ollama#PullModel(url, model)
-    " Construct the shell command to call list_models.py with the provided
-    let l:command = 'python3 python/pull_model.py -u ' . shellescape(a:url) . " -m ".shellescape(a:model)
+function! s:PullOutputCallback(job_id, data)
+    call ollama#logger#Debug("PullOutputCallback: ". json_encode(a:data))
+    if !empty(a:data)
+        " Log the output
+        call ollama#logger#Debug("Pull Output: " . a:data)
 
-    " Execute the shell command and capture the output
-    let l:output = system(l:command)
+        " Update the popup with progress
+        if exists('s:popup_id') && s:popup_id isnot v:null
+            call popup_settext(s:popup_id, a:data)
+            redraw!
+        endif
+    endif
+endfunction
+function! s:PullErrorCallback(job_id, data)
+    call ollama#logger#Debug("PullErrorCallback: ". json_encode(a:data))
+    if !empty(a:data)
+        " Log the error
+        call ollama#logger#Error("Pull Error: " . a:data)
 
-    " Check for errors during the execution
-    if v:shell_error != 0
-        echom "Error: Failed to pull models from " . a:url
-        echoerr "Output: " . l:output
-        return -1
+        " Display the error in the popup
+        if exists('s:popup_id') && s:popup_id isnot v:null
+            call popup_settext(s:popup_id, 'Error: ' . a:data)
+            redraw!
+        endif
+    endif
+endfunction
+function! s:ClosePopup(timer_id)
+    call popup_close(s:popup_id)
+    let s:popup_id = v:null
+endfunction
+function! s:PullExitCallback(job_id, exit_code)
+    call ollama#logger#Debug("PullExitCallback: ". a:exit_code)
+    if a:exit_code == 0
+        " Log success
+        call ollama#logger#Debug("Pull job completed successfully.")
+
+        " Update the popup with success message
+        if exists('s:popup_id') && s:popup_id isnot v:null
+            call popup_settext(s:popup_id, 'Model pull completed successfully!')
+        endif
+    else
+        " Log failure
+        call ollama#logger#Error("Pull job failed with exit code: " . a:exit_code)
+
+        " Update the popup with failure message
+        if exists('s:popup_id') && s:popup_id isnot v:null
+            call popup_settext(s:popup_id, 'Model pull failed. See logs for details.')
+        endif
     endif
 
-    echon l:output
+    " Close the popup after a delay
+    if exists('s:popup_id') && s:popup_id isnot v:null
+        call timer_start(2000, function('s:ClosePopup'))
+    endif
 
-    " Split the output into lines and return as a list
-    return 0
+    " Clear the pull job reference
+    let s:pull_job = v:null
+endfunction
+function! ollama#PullModel(url, model)
+    " Construct the shell command to call the Python script
+    let l:command = ['python3', 'python/pull_model.py', '-u', a:url, '-m', a:model]
+
+    " Log the command being run
+    call ollama#logger#Debug("command=". join(l:command, " "))
+
+    " Define job options
+    let l:job_options = {
+                \ 'in_mode': 'nl',
+                \ 'out_mode': 'nl',
+                \ 'err_mode': 'nl',
+                \ 'out_cb': function('s:PullOutputCallback'),
+                \ 'err_cb': function('s:PullErrorCallback'),
+                \ 'exit_cb': function('s:PullExitCallback')
+                \ }
+
+    " Kill any running pull job and replace with new one
+    if exists('s:pull_job') && s:pull_job isnot v:null
+        call ollama#logger#Debug("Terminating existing pull job.")
+        call job_stop(s:pull_job)
+    endif
+
+    " Create a popup window for progress
+    let s:popup_id = popup_dialog('Pulling model: ' . a:model . '\n', {
+                \ 'padding': [0, 1, 0, 1],
+                \ 'zindex': 1000
+                \ })
+
+    " Save the popup ID for updates in callbacks
+    let s:popup_model = a:model
+
+    " Start the new job and keep a reference to it
+    call ollama#logger#Debug("Starting pull job for model: " . a:model)
+    let s:pull_job = job_start(l:command, l:job_options)
 endfunction
 
 function! ollama#Setup()

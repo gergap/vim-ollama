@@ -17,7 +17,7 @@ def pull_model(base_url, model_name):
         with requests.post(url, json=data, stream=True) as response:
             # Check if the response status code is 200 (OK)
             if response.status_code == 200:
-                print(f"Pulling model: {model_name}")
+                print(f"Pulling model: {model_name}", flush=True)
 
                 # Process the streaming response line by line
                 for line in response.iter_lines():
@@ -28,7 +28,7 @@ def pull_model(base_url, model_name):
 
                             if json_response.get('error', None):
                                 error = json_response["error"]
-                                print(f"Error: {error}")
+                                print(f"Error: {error}", flush=True)
                                 exit(1)
 
                             status = json_response.get("status", "Unknown status")
@@ -38,9 +38,9 @@ def pull_model(base_url, model_name):
                                 digest = json_response["digest"]
                                 completed = json_response.get("completed", 0)
                                 total = json_response.get("total", 0)
-                                print(f"{status}: Digest={digest}, Completed={completed}/{total} bytes")
+                                print(f"{status}: Digest={digest}, Completed={completed}/{total} bytes", flush=True)
                             else:
-                                print(status)
+                                print(status, flush=True)
                         except json.JSONDecodeError:
                             print(f"Failed to decode JSON: {line}")
                             exit(1)
