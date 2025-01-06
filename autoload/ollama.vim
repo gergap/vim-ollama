@@ -247,7 +247,7 @@ function! ollama#InsertStringWithNewlines(text, morelines)
     let l:before_cursor = strpart(l:line, 0, l:current_col - 1)
     let l:after_cursor = strpart(l:line, l:current_col - 1)
     " build new line
-    let l:new_line = l:before_cursor . l:lines[0] . l:after_cursor
+    let l:new_line = l:before_cursor . l:lines[0]
     call setline('.', l:new_line)
     let l:new_cursor_col = strlen(l:before_cursor) + strlen(l:lines[0])
 
@@ -267,6 +267,11 @@ function! ollama#InsertStringWithNewlines(text, morelines)
         let l:new_cursor_col = strlen(l:indented_line)
         let l:current_line += 1
     endfor
+    " append after_cursor text at the end of last inserted line
+    if (l:after_cursor != "")
+        let l:line = getline(l:current_line) . l:after_cursor
+        call setline(l:current_line, l:line)
+    endif
 
     if (a:morelines == 1)
         call append(l:current_line, "")
