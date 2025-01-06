@@ -252,7 +252,7 @@ endfunction
 
 function! ollama#InsertStringWithNewlines(text, morelines)
     " Split the string into lines
-    let l:lines = split(a:text, "\n")
+    let l:lines = split(a:text, "\n", 1)
 
     " Insert first line at cursor position
     " get current line
