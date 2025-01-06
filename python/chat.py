@@ -9,49 +9,14 @@ import argparse
 import httpx
 import json
 import asyncio
-import logging
-import os
-from logging.handlers import RotatingFileHandler
+from OllamaLogger import OllamaLogger
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
 
-def setup_logging(log_file='ollama.log', log_level=logging.DEBUG):
-    """
-    Set up logging configuration.
-    """
-    # Create a logger
-    logger = logging.getLogger()
-    logger.setLevel(log_level)
-
-    # Create a file handler which logs even debug messages
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-
-    log_path = os.path.join('logs', log_file)
-    fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=2)
-    fh.setLevel(log_level)
-
-    # Create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
-
-    # Create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-
-    # Add the handlers to the logger
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-
-def log_debug(message):
-    """
-    Log a debug message.
-    """
-    logger = logging.getLogger()
-    logger.debug(message)
+# create logger
+log = OllamaLogger('ollama.log')
 
 async def stream_chat_message(messages, endpoint, model):
     headers = {
@@ -64,7 +29,7 @@ async def stream_chat_message(messages, endpoint, model):
         'model': model,
         'messages': messages
     }
-    log_debug('request: ' + json.dumps(data, indent=4))
+    log.debug('request: ' + json.dumps(data, indent=4))
 
     assistant_message = ""
 
@@ -92,13 +57,13 @@ async def stream_chat_message(messages, endpoint, model):
                     raise Exception(f"Error: {response.status_code} - {response.text}")
     except httpx.ReadTimeout:
         print("Read timeout occurred. Please try again.")
-        log_debug("Read timeout occurred.")
+        log.error("Read timeout occurred.")
     except asyncio.CancelledError:
-        log_debug("Task was cancelled.")
+        log.info("Task was cancelled.")
         raise
     except Exception as e:
         print(f"An error occurred: {str(e)}")
-        log_debug(f"An error occurred: {str(e)}")
+        log.error(f"An error occurred: {str(e)}")
 
     # Add the assistant's message to the conversation history
     if assistant_message:
@@ -107,7 +72,7 @@ async def stream_chat_message(messages, endpoint, model):
 async def main(baseurl, model):
     conversation_history = []
     endpoint = baseurl + "/api/chat"
-    log_debug('endpoint: ' + endpoint)
+    log.debug('endpoint: ' + endpoint)
 
     multiline_input = False
     multiline_message = []
@@ -150,11 +115,14 @@ async def main(baseurl, model):
                     pass
 
 if __name__ == "__main__":
-    setup_logging()
     parser = argparse.ArgumentParser(description="Chat with an Ollama LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
+    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
     args = parser.parse_args()
+
+    log.setLevel(args.log_level)
+
     while True:
         try:
             asyncio.run(main(args.url, args.model))

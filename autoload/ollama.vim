@@ -147,11 +147,14 @@ function! ollama#GetSuggestion(timer)
     let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
     call ollama#logger#Debug("model_options=".l:model_options)
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     " Adjust the command to use the prompt as stdin input
     let l:command = [ "python3", expand('<script>:h:h') . "/python/ollama.py",
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
-        \ "-o", l:model_options
+        \ "-o", l:model_options,
+        \ "-l", l:log_level
         \ ]
     call ollama#logger#Debug("command=". join(l:command, " "))
     let l:job_options = {

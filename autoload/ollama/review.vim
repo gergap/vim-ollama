@@ -148,8 +148,15 @@ function! s:StartChat(lines) abort
         \ 'exit_cb': function('JobExit'),
         \ }
 
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+
     " Start the Python script as a job
-    let l:command = printf('python3 %s/python/chat.py -m %s -u %s', expand('<script>:h:h:h'), g:ollama_chat_model, g:ollama_host)
+    let l:command = printf('python3 %s/python/chat.py -m %s -u %s -l %u',
+                \ expand('<script>:h:h:h'),
+                \ g:ollama_chat_model, 
+                \ g:ollama_host,
+                \ l:log_level)
 
     " Start a shell in the background.
     let s:job = job_start(l:command, job_options)

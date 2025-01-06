@@ -11,6 +11,23 @@ if !exists('g:ollama_debug')
 endif
 let s:logs = []
 
+function! ollama#logger#PythonLogLevel(level) abort
+  " Map plugin's log levels to Python numeric logging levels
+  let l:mapping = {
+        \ 0: 0,
+        \ 1: 40,
+        \ 2: 30,
+        \ 3: 20,
+        \ 4: 10
+        \ }
+
+  if has_key(l:mapping, a:level)
+    return l:mapping[a:level]
+  else
+    return 10 " default to debug level
+  endif
+endfunction
+
 function! ollama#logger#CreateFile() abort
   try
     "echom 'created log file '.g:ollama_logfile

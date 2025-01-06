@@ -185,13 +185,17 @@ You can enable logging by specifying the following variables.
 
 1. g:ollama_debug
     - Description: Sets the debug level of the logging infrastructure.
+    - Levels: 0 (Off), 1 (Errors), 2 (Warnings), 3 (Info), 4 (Debug)
+      Higher levels also include all lower levels.
     - Default: 0 (Off)
     - Example:
 >
-        let g:ollama_debug = 1
+        let g:ollama_debug = 4
 
 2. g:ollama_logfile
     - Description: Configure the path of the log file.
+      Note that the log file path of the python code is currently hardcoded to
+      '/tmp/logs'.
     - Default: A random file in your temp directory will be created using
       tempname(). This can result in a path like '/tmp/vBu3NCc/5-ollama.log'
     - Example:
