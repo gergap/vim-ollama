@@ -3,7 +3,17 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+- Add Edit functionality similar to Continue plugin.
 - List changes that are planned or being worked on here.
+
+## [Version 0.3] - 2025-01-06
+
+### Changes
+- Simplify FIM token configuration for tab completion models
+  The configuration is now done outside vim in model specific configuration files.
+- Fix issue with completion within a line. The remainder is no moved
+  correctly to the end of the insertion
+- Refactored python logging infrastructure
 
 ## [Version 0.2] - 2024-09-20
 
