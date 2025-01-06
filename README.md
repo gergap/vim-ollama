@@ -40,7 +40,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## How It Works
 
-The plugin uses two Python scripts, `ollama.py` and `chat.py`, to communicate with Ollama via its REST API. The first
+The plugin uses two Python scripts, `complete.py` and `chat.py`, to communicate with Ollama via its REST API. The first
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
@@ -80,7 +80,7 @@ The script should output a completion as shown below:
 
 ```sh
 $> cd path/to/vim-ollama/python
-$> echo -e '<PRE> def compute_gcd(x, y): <SUF>return result <MID>' | ./ollama.py -u http://localhost:11434 -m codellama:7b-code
+$> echo -e '<PRE> def compute_gcd(x, y): <SUF>return result <MID>' | ./complete.py -u http://localhost:11434 -m codellama:7b-code
   if x == 0:
     return y
   else:

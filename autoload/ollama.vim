@@ -150,7 +150,7 @@ function! ollama#GetSuggestion(timer)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     " Adjust the command to use the prompt as stdin input
-    let l:command = [ "python3", expand('<script>:h:h') . "/python/ollama.py",
+    let l:command = [ "python3", expand('<script>:h:h') . "/python/complete.py",
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
