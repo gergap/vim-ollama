@@ -392,7 +392,9 @@ endfunction
 
 " Provide different commands: enable, disable, help
 function ollama#Command(command) abort
-    if a:command == 'enable'
+    if a:command == 'setup'
+        call ollama#Setup()
+    elseif a:command == 'enable'
         call ollama#Enable()
     elseif a:command == 'disable'
         call ollama#Disable()
@@ -403,4 +405,113 @@ function ollama#Command(command) abort
     endif
 endfunction
 
+function! ollama#GetModels(url)
+    " Construct the shell command to call list_models.py with the provided URL
+    let l:command = 'python3 python/list_models.py -u ' . shellescape(a:url)
 
+    " Execute the shell command and capture the output
+    let l:output = system(l:command)
+
+    " Check for errors during the execution
+    if v:shell_error != 0
+        echom "Error: Failed to fetch models from " . a:url
+        echoerr "Output: " . l:output
+        return [ 'error' ]
+    endif
+
+    " Split the output into lines and return as a list
+    return split(l:output, "\n")
+endfunction
+
+function! ollama#PullModel(url, model)
+    " Construct the shell command to call list_models.py with the provided
+    let l:command = 'python3 python/pull_model.py -u ' . shellescape(a:url) . " -m ".shellescape(a:model)
+
+    " Execute the shell command and capture the output
+    let l:output = system(l:command)
+
+    " Check for errors during the execution
+    if v:shell_error != 0
+        echom "Error: Failed to pull models from " . a:url
+        echoerr "Output: " . l:output
+        return -1
+    endif
+
+    echon l:output
+
+    " Split the output into lines and return as a list
+    return 0
+endfunction
+
+function! ollama#Setup()
+    " Prevent duplicate execution
+    if exists("g:ollama_setup_completed")
+        return
+    endif
+"    let g:ollama_setup_completed = 1
+
+    echon "Welcome to Vim-Ollama!\n"
+    echon "----------------------\n"
+    let l:ans = input("This is the first time you are using this plugin. Should I help you setting up everything? (Y/n): ")
+    if tolower(l:ans) == 'n'
+        return
+    endif
+    echon "\n"
+
+    let l:url = "http://localhost:11434"
+    let l:url = "http://tux:11434"
+    let l:ans = input("The default Ollama base URL is '" . l:url . "'. Do you want to change it? (y/N): ")
+    if tolower(l:ans) == 'y'
+        let l:url = input("Enter Ollama base URL: ")
+    endif
+    echon "\n"
+
+    " Save the URL to a configuration file
+    let l:config_dir = expand('~/.vim/config')
+    if !isdirectory(l:config_dir)
+        call mkdir(l:config_dir, 'p') " Create the directory if it doesn't exist
+    endif
+    let l:config_file = l:config_dir . '/ollama.vim'
+
+    " get all available models (and test if connection works)
+    let l:models = ollama#GetModels(l:url)
+
+    let l:models = []
+
+    if !empty(l:models)
+        if l:models[0] == 'error'
+            return
+        endif
+        " Display available models to the user
+        echon "Available Models:\n"
+        for l:model in l:models
+            echon "  - " . l:model . "\n"
+        endfor
+        echon "\n"
+    else
+        let l:ans = input("No models found. Should I load a sane default configuration? (Y/n): ")
+        if tolower(l:ans) != 'n'
+            echon "Pulling..."
+            call ollama#PullModel(l:url, "codegemma:2b")
+            call ollama#PullModel(l:url, "codellama:7b-code")
+        endif
+    endif
+
+
+    " Write the configuration to the file
+"    call writefile(["let g:ollama_base_url = '" . l:url . "'"], l:config_file)
+
+    echon "Configuration saved to " . l:config_file . "\n"
+endfunction
+
+function ollama#Init()
+    " check if config file exists
+    if !filereadable(expand('~/.vim/config/ollama.vim'))
+        call ollama#Setup()
+    endif
+
+    " load the config file
+    source ~/.vim/config/ollama.vim
+endfunction
+
+"call ollama#Init()
