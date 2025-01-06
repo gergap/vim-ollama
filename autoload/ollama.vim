@@ -12,10 +12,6 @@ let s:timer_id = -1
 " a running REST API job
 let s:job = v:null
 let s:kill_job = v:null
-" fill-in-the-middle (default settings for codellama)
-let s:fim_prefix = '<PRE> '
-let s:fim_middle = ' <MID>'
-let s:fim_suffix = ' <SUF>'
 " current prompt
 let s:prompt = ''
 " current suggestions
@@ -110,10 +106,6 @@ function! ollama#GetSuggestion(timer)
     let l:current_line = line('.')
     let l:current_col = col('.')
     let l:context_lines = 30
-    " get active FIM settings
-    let l:fim_prefix = get(g:, 'ollama_fim_prefix', s:fim_prefix)
-    let l:fim_middle = get(g:, 'ollama_fim_middle', s:fim_middle)
-    let l:fim_suffix = get(g:, 'ollama_fim_suffix', s:fim_suffix)
 
     " Get the lines before and after the current line
     let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
@@ -132,17 +124,7 @@ function! ollama#GetSuggestion(timer)
     endif
     let l:suffix .= join(l:suffix_lines, "\n")
 
-    " Create the prompt using the specified syntax
-    if (g:ollama_model == 'llama3')
-        " TODO: make this working!!!
-        " llama3 does not support fill-in-the-middle, so we use a carefully
-        " engineered prompt instead and hope for the best.
-        let l:prompt = "You are a code completion model. When provided with some code, complete the code marked with _____. Output only the completion. Output no other code. Output no other text.\n"
-        let l:prompt .= "```\n".l:prefix."_____\n".l:suffix."\n```"
-    else
-        " Regular fill-in-the-middle for codellama using configured tokens
-        let l:prompt = l:fim_prefix . l:prefix . l:fim_suffix . l:suffix . l:fim_middle
-    endif
+    let l:prompt = l:prefix . '<FILL_IN_HERE>' . l:suffix
 
     let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
