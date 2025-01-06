@@ -449,6 +449,7 @@ endfunction
 function! s:ClosePopup(timer_id)
     call popup_close(s:popup_id)
     let s:popup_id = v:null
+    call s:ExecuteNextSetupTask()
 endfunction
 function! s:PullExitCallback(job_id, exit_code)
     call ollama#logger#Debug("PullExitCallback: ". a:exit_code)
@@ -530,25 +531,22 @@ function! ollama#Setup()
     endif
     echon "\n"
 
-    let l:url = "http://localhost:11434"
-    let l:url = "http://tux:11434"
-    let l:ans = input("The default Ollama base URL is '" . l:url . "'. Do you want to change it? (y/N): ")
+    let g:ollama_host = "http://localhost:11434"
+"    let g:ollama_host = "http://tux:11434"
+    let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
     if tolower(l:ans) == 'y'
-        let l:url = input("Enter Ollama base URL: ")
+        let g:ollama_host = input("Enter Ollama base URL: ")
     endif
     echon "\n"
 
-    " Save the URL to a configuration file
-    let l:config_dir = expand('~/.vim/config')
-    if !isdirectory(l:config_dir)
-        call mkdir(l:config_dir, 'p') " Create the directory if it doesn't exist
-    endif
-    let l:config_file = l:config_dir . '/ollama.vim'
-
     " get all available models (and test if connection works)
-    let l:models = ollama#GetModels(l:url)
+    let l:models = ollama#GetModels(g:ollama_host)
 
     let l:models = []
+
+    " create async tasks
+    let s:setup_tasks = [function('s:PullCompletionModelTask'), function('s:PullChatModelTask'), function('s:FinalizeSetupTask')]
+    let s:current_task = 0
 
     if !empty(l:models)
         if l:models[0] == 'error'
@@ -560,30 +558,72 @@ function! ollama#Setup()
             echon "  - " . l:model . "\n"
         endfor
         echon "\n"
+
+        let s:current_task = 2
     else
         let l:ans = input("No models found. Should I load a sane default configuration? (Y/n): ")
         if tolower(l:ans) != 'n'
-            echon "Pulling..."
-            call ollama#PullModel(l:url, "codegemma:2b")
-            call ollama#PullModel(l:url, "codellama:7b-code")
+            let s:current_task = 0
+        else
+            let s:current_task = 2
         endif
     endif
 
+    call s:ExecuteNextSetupTask()
+endfunction
+
+function! s:PullCompletionModelTask()
+    call ollama#PullModel(g:ollama_host, "starcoder2:3b")
+endfunction
+
+function! s:PullChatModelTask()
+    call ollama#PullModel(g:ollama_host, "qwen2.5-coder:7b")
+endfunction
+
+function! s:FinalizeSetupTask()
+    " Save the URL to a configuration file
+    let l:config_dir = expand('~/.vim/config')
+    if !isdirectory(l:config_dir)
+        call mkdir(l:config_dir, 'p') " Create the directory if it doesn't exist
+    endif
+    let l:config_file = l:config_dir . '/ollama.vim'
 
     " Write the configuration to the file
-"    call writefile(["let g:ollama_base_url = '" . l:url . "'"], l:config_file)
-
+    let l:config = [
+                \ "\" Ollama base URL",
+                \ "let g:ollama_host = '" . g:ollama_host . "'",
+                \ "\" tab completion model",
+                \ "let g:ollama_model = '" . g:ollama_model . "'",
+                \ "\" chat model",
+                \ "let g:ollama_chat_model = '" . g:ollama_chat_model . "'" ]
+    call writefile(l:config, l:config_file)
     echon "Configuration saved to " . l:config_file . "\n"
+endfunction
+
+" Function to execute the next task
+function! s:ExecuteNextSetupTask()
+    if s:setup_tasks == v:null
+        return
+    endif
+    if s:current_task < len(s:setup_tasks)
+        " Get the current task function and execute it
+        let l:Task = s:setup_tasks[s:current_task]
+        let s:current_task = s:current_task + 1
+        call call(l:Task, [])
+    else
+        " All tasks are completed
+        let s:setup_taks = v:null
+    endif
 endfunction
 
 function ollama#Init()
     " check if config file exists
     if !filereadable(expand('~/.vim/config/ollama.vim'))
         call ollama#Setup()
+    else
+        " load the config file
+        source ~/.vim/config/ollama.vim
     endif
-
-    " load the config file
-    source ~/.vim/config/ollama.vim
 endfunction
 
-"call ollama#Init()
+call ollama#Init()
