@@ -79,13 +79,15 @@ def generate_code_completion(config, prompt, baseurl, model, options):
         json_response = response.json()
         log.debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
+        log.info('completion:' + completion)
 
         # find index of sub string
-        index = completion.find('<|endoftext|>')
-        if index == -1:
-            index = completion.find('<EOT>')
-        if index != -1:
-            completion = completion[:index]
+        try:
+            index = completion.find(config.get('eot', '<EOT>'))
+            if index != -1:
+                completion = completion[:index] # remove EOT marker
+        except:
+            pass
 
         return completion.rstrip()
     else:
