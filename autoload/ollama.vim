@@ -424,28 +424,25 @@ function! ollama#GetModels(url)
 endfunction
 
 function! s:PullOutputCallback(job_id, data)
-    call ollama#logger#Debug("PullOutputCallback: ". json_encode(a:data))
     if !empty(a:data)
-        " Log the output
         call ollama#logger#Debug("Pull Output: " . a:data)
+        let l:output = split(a:data, '\\n')
 
         " Update the popup with progress
         if exists('s:popup_id') && s:popup_id isnot v:null
-            call popup_settext(s:popup_id, a:data)
-            redraw!
+            call popup_settext(s:popup_id, l:output)
         endif
     endif
 endfunction
 function! s:PullErrorCallback(job_id, data)
-    call ollama#logger#Debug("PullErrorCallback: ". json_encode(a:data))
     if !empty(a:data)
         " Log the error
         call ollama#logger#Error("Pull Error: " . a:data)
+        let l:output = split(a:data, '\\n')
 
         " Display the error in the popup
         if exists('s:popup_id') && s:popup_id isnot v:null
-            call popup_settext(s:popup_id, 'Error: ' . a:data)
-            redraw!
+            call popup_settext(s:popup_id, 'Error: ' . l:output)
         endif
     endif
 endfunction
