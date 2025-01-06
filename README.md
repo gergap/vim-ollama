@@ -128,23 +128,14 @@ let g:ollama_model = 'codellama:code'
 
 " Codegemma (small and fast)
 let g:ollama_model = 'codegemma:2b'
-let g:ollama_fim_prefix = '<|fim_prefix|>'
-let g:ollama_fim_middle = '<|fim_middle|>'
-let g:ollama_fim_suffix = '<|fim_suffix|>'
 
 " qwen2.5-coder (0.5b, 1.5b, 3b, 7b, 14b, 32b)
 " smaller is faster, bigger is better"
 " https://ollama.com/library/qwen2.5-coder
 let g:ollama_model = 'qwen2.5-coder:3b'
-let g:ollama_fim_prefix = '<|fim_prefix|>'
-let g:ollama_fim_middle = '<|fim_middle|>'
-let g:ollama_fim_suffix = '<|fim_suffix|>'
 
 " Deepseek-coder-v2
 let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
-let g:ollama_fim_prefix = '<｜fim▁begin｜>'
-let g:ollama_fim_suffix = '<｜fim▁hole｜>'
-let g:ollama_fim_middle = '<｜fim▁end｜>'
 ```
 
 | Variable              | Default                  | Description                            |
@@ -152,11 +143,13 @@ let g:ollama_fim_middle = '<｜fim▁end｜>'
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
 | `g:ollama_chat_model` | `llama3`                 | The LLM for interactive conversations. |
 | `g:ollama_model`      | `codellama:code`         | The LLM for code completions.          |
-| `g:ollama_fim_prefix` | `<PRE> `                 | FIM prefix for Codellama.              |
-| `g:ollama_fim_middle` | ` <MID>`                 | FIM middle for Codellama.              |
-| `g:ollama_fim_suffix` | ` <SUF>`                 | FIM suffix for Codellama.              |
 
 When changing the code completion model, consult the model’s documentation to find the correct FIM tokens.
+
+In the folder `python/configs` you find the configuration of FIM tokens for various models.
+When adding new unsupported models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
+Simply add this missing file and create a merge request to get it included upstream.
+Consult the model's documentation to find out the correct tokens.
 
 ## Usage
 

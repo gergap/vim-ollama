@@ -166,18 +166,6 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'num_predict': 256
                 \ }
 <
-5. g:ollama_fim_prefix
-    - Description: FIM prefix for code completion models.
-    - Default: `<PRE> ` used in Codellama.
-
-6. g:ollama_fim_middle
-    - Description: FIM middle for code completion models.
-    - Default: ` <MID>` used in Codellama.
-
-7. g:ollama_fim_prefix
-    - Description: FIM suffix for code completion models.
-    - Default: ` <SUF>` used in Codellama.
-
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
