@@ -43,12 +43,15 @@ def pull_model(base_url, model_name):
                                 print(status)
                         except json.JSONDecodeError:
                             print(f"Failed to decode JSON: {line}")
+                            exit(1)
             else:
                 print(f"Failed to pull model. Status code: {response.status_code}")
                 print("Error:", response.text)
+                exit(1)
 
     except requests.exceptions.RequestException as e:
         print(f"Error occurred while making the request: {e}")
+        exit(1)
 
 def main():
     # Set up argument parsing

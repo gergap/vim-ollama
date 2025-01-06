@@ -25,11 +25,14 @@ def list_ollama_models(base_url):
                     print("No models found.")
             else:
                 print("'models' key not found in the response.")
+                exit(1)
         else:
             print(f"Failed to retrieve models. Status code: {response.status_code}")
+            exit(1)
 
     except requests.exceptions.RequestException as e:
         print(f"Error occurred while making the request: {e}")
+        exit(1)
 
 def main():
     # Set up argument parsing
