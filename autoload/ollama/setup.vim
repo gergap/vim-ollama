@@ -245,7 +245,7 @@ endfunction
 
 " Function to execute the next task
 function! s:ExecuteNextSetupTask()
-    if s:setup_tasks == v:null
+    if !exists('s:setup_tasks') || s:setup_tasks == v:null
         return
     endif
     if s:current_task < len(s:setup_tasks)
