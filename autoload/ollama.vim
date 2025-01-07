@@ -394,6 +394,8 @@ endfunction
 function ollama#Command(command) abort
     if a:command == 'setup'
         call ollama#setup#Setup()
+    elseif a:command == 'config'
+        execute ":e ~/.vim/config/ollama.vim"
     elseif a:command == 'enable'
         call ollama#Enable()
     elseif a:command == 'disable'
