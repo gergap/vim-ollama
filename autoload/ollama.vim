@@ -406,3 +406,5 @@ function ollama#Command(command) abort
         echo "Usage: Ollama <enable|disable|toggle>"
     endif
 endfunction
+
+call ollama#setup#Init()

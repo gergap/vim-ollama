@@ -254,9 +254,10 @@ function! s:ExecuteNextSetupTask()
     endif
 endfunction
 
-function ollama#setup#Init()
+function ollama#setup#Init() abort
+    let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
     " check if config file exists
-    if !filereadable(expand('~/.vim/config/ollama.vim'))
+    if !filereadable(l:ollama_config)
         echon "Welcome to Vim-Ollama!\n"
         echon "----------------------\n"
         let l:ans = input("This is the first time you are using this plugin. Should I help you setting up everything? (Y/n): ")
@@ -268,8 +269,7 @@ function ollama#setup#Init()
         call ollama#setup#Setup()
     else
         " load the config file
-        source ~/.vim/config/ollama.vim
+        execute 'source' l:ollama_config
     endif
 endfunction
 
-call ollama#setup#Init()
