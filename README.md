@@ -113,6 +113,8 @@ The plugin will run the wizard automatically if the configuration file
 again, you can use the command `:Ollama setup` at any time, but be aware that
 it will overwrite the configuration file at the end.
 
+![First Use](screenshots/firstuse.gif)
+
 ## Configuration
 
 It is recommended to use the file `~/.vim/config/ollama.vim` for configuring Vim-Ollama,
