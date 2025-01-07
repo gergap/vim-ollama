@@ -96,7 +96,7 @@ endfunction
 function! ollama#setup#PullModel(url, model)
     " Construct the shell command to call the Python script
     let l:script_path = printf('%s/python/pull_model.py', expand('<script>:h:h:h'))
-    let l:command = ['python3', l:script_path, '-u', shellescape(a:url), '-m', shellescape(a:model)]
+    let l:command = ['python3', l:script_path, '-u', a:url, '-m', a:model]
 
     " Log the command being run
     call ollama#logger#Debug("command=". join(l:command, " "))
