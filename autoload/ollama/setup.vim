@@ -135,7 +135,6 @@ endfunction
 function! ollama#setup#Setup()
     " setup default local URL
     let g:ollama_host = "http://localhost:11434"
-    let g:ollama_host = "http://tux:11434"
     let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
     if tolower(l:ans) == 'y'
         let g:ollama_host = input("Enter Ollama base URL: ")
@@ -150,7 +149,10 @@ function! ollama#setup#Setup()
     let s:current_task = 2 " start with Finalize if no pulling is required
 
     if !empty(l:models)
+        " There are already Ollama modles available, so we use them
         if l:models[0] == 'error'
+            " loading models failed, abort
+            echo "setup aborted due to a Ollama connection error"
             return
         endif
         " Display available models to the user
@@ -197,6 +199,9 @@ function! ollama#setup#Setup()
         let l:ans = input("No models found. Should I load a sane default configuration? (Y/n): ")
         if tolower(l:ans) != 'n'
             let s:current_task = 0
+        else
+            echo "setup aborted"
+            return
         endif
     endif
 
