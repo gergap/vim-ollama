@@ -115,6 +115,27 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaTask "check spelling of this text"
 <
+6. :OllamaEdit
+    - Description: Allows editing a selected text using the AI. This command
+    works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
+    a visual selection. Alternatively, you can use the mapping `<C-I>` to
+    achieve the same, but the command has the advantage of a command history,
+    which may be handy when you want to apply the same change to multiple
+    locations.
+    - Usage:
+>
+        :OllamaEdit [prompt]
+<
+    - Example:
+>
+        :OllamaEdit "add comments to this code"
+<
+    - Accepting and Rejecting changes: The changes made by the AI are applied
+    as an inline diff. You can accept/reject each individual change or all.
+    The dialog uses Vim's `popup_filter_yesno`, which means you can accept
+    using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
+    works like pressing 'n'. `
+
 ==============================================================================
 5. Maps                                               *vim-ollama-maps*
 
@@ -142,6 +163,12 @@ Other Maps ~
                         if there is not visual selection.
 <Plug>(ollama-edit)
 
+<C-Y>                   Accept all changes.
+<Plug>(ollama-accept-all-changes)
+
+<C-N>                   Reject all changes.
+<Plug>(ollama-reject-all-changes)
+
 ==============================================================================
 6. Configuration                                      *vim-ollama-config*
 
@@ -156,6 +183,7 @@ You can configure vim-ollama using the following variables in your .vimrc:
 <
 2. g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
+      This model is also used for code editing tasks.
     - Default: 'llama3'
     - Example:
 >
