@@ -3,6 +3,7 @@ import requests
 import argparse
 import json
 import os
+import time
 import threading
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
@@ -25,6 +26,7 @@ g_editing_thread = None
 g_result = None
 g_start_line = 0 # start line of edit
 g_end_line = 0 # end line of edit
+g_restored_lines = 0 # number of restored lines (undone deletes)
 g_new_code_lines = []
 g_diff = []
 g_groups = []
@@ -83,7 +85,7 @@ def group_diff(diff, starting_line=1):
             if current_group:
                 grouped_diff.append({
                     'start_line': current_start_line,
-                    'end_line': line_number - 1,
+                    'end_line': line_number,
                     'changes': current_group
                 })
                 current_group = []
@@ -446,6 +448,7 @@ def get_job_status():
     global g_result
     global g_start_line
     global g_end_line
+    global g_restored_lines
     global g_new_code_lines
     global g_diff
     global g_groups
@@ -470,7 +473,9 @@ def get_job_status():
         apply_diff(g_diff, vim.current.buffer, g_start_line)
 
         g_groups = group_diff(g_diff, g_start_line)
+        log.debug(g_groups)
         g_change_index = 0
+        g_restored_lines = 0
         result = 'Done'
     except Exception as e:
         log.error(f"Error in get_job_status: {e}")
@@ -535,6 +540,7 @@ def NextChange():
         # not more changes
         g_groups = None
         g_change_index = -1
+        VimHelper.SignClear(vim.current.buffer)
         print("No more changes.")
         return
 
@@ -542,13 +548,15 @@ def NextChange():
 
 def AcceptChange(index):
     global g_change_index, g_groups
+    global g_restored_lines
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring AcceptChange.")
         return
     log.debug("AcceptChange")
     group = g_groups[g_change_index]
-    start_line = group.get('start_line', 1)
-    end_line = group.get('end_line', 1)
+    log.debug(group)
+    start_line = group.get('start_line', 1) + g_restored_lines
+    end_line = group.get('end_line', 1) + g_restored_lines
     buf = vim.current.buffer
 
     log.debug(f"remove signs from {start_line} to {end_line}")
@@ -562,33 +570,40 @@ def AcceptChange(index):
 
 def RejectChange(index):
     global g_change_index, g_groups
+    global g_restored_lines
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring RejectChange.")
         return
     log.debug("RejectChange")
     group = g_groups[g_change_index]
-    start_line = group.get('start_line', 1)
-    end_line = group.get('end_line', 1)
+    log.debug(group)
+    start_line = group.get('start_line', 1) + g_restored_lines
+    end_line = group.get('end_line', 1) + g_restored_lines
     buf = vim.current.buffer
+
+    # remove any abovetext
+    log.debug(f"remove abovetext from {start_line} to {end_line}")
+    vim.command(f'call prop_clear({start_line}, {end_line})')
 
     # undo all changes of current group
     lineno = start_line
     for line in group.get('changes'):
-        log.debug(f"remove signs from line {line}")
+        log.debug(f"remove signs from line {lineno}")
         VimHelper.UnplaceSign(lineno, buf)
         # undo change
         if (line.startswith('- ')):
             content = line[2:]
             # restore deleted line
+            log.debug(f"restore line {lineno}")
             VimHelper.InsertLine(lineno, content)
             lineno += 1
+            g_restored_lines += 1
         elif (line.startswith('+ ')):
             # remove added line
+            log.debug(f"delete line {lineno}")
             VimHelper.DeleteLine(lineno)
+    log.debug(f"restored_lines={g_restored_lines}")
 
-    # remove any abovetext
-    log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
 
 # Main entry point
 if __name__ == "__main__":
