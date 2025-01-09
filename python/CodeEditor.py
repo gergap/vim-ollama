@@ -10,7 +10,7 @@ from ChatTemplate import ChatTemplate
 from OllamaLogger import OllamaLogger
 
 # create logger
-log = OllamaLogger('edit.log', log_level=10)
+log = OllamaLogger('edit.log')
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
@@ -34,6 +34,9 @@ g_original_content = []
 g_debug_mode = False  # You can turn this on/off as needed
 g_change_index = -1
 g_dialog_callback = None
+
+def SetLogLevel(level):
+    log.setLevel(level)
 
 # Debug prints for development. This output is shown as Vim message.
 def debug_print(*args):

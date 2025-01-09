@@ -185,14 +185,14 @@ call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
-" Add the plugin's python directory to Python's sys.path
-python3 << EOF
+function! PluginInit() abort
+    " Add the plugin's python directory to Python's sys.path
+    python3 << EOF
 import sys
 import os
 
 # Adjust the path to point to the plugin's python directory
 plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
-#print("Plugin Python Path:", plugin_python_path)
 if plugin_python_path not in sys.path:
     sys.path.append(plugin_python_path)
 
@@ -200,3 +200,6 @@ if plugin_python_path not in sys.path:
 import CodeEditor
 import VimHelper
 EOF
+endfunction
+
+call PluginInit()
