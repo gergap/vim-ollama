@@ -469,7 +469,7 @@ def get_job_status():
         # Success:
         apply_diff(g_diff, vim.current.buffer, g_start_line)
 
-        g_groups = group_diff(g_diff)
+        g_groups = group_diff(g_diff, g_start_line)
         g_change_index = 0
         result = 'Done'
     except Exception as e:
