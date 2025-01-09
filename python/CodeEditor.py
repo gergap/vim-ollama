@@ -2,12 +2,14 @@
 import requests
 import argparse
 import json
-import logging
 import os
 import threading
-from logging.handlers import RotatingFileHandler
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
+from OllamaLogger import OllamaLogger
+
+# create logger
+log = OllamaLogger('edit.log', log_level=10)
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
@@ -21,8 +23,8 @@ g_thread_lock = threading.Lock()
 g_editing_thread = None
 # We bring the worker thread results into the main thread using these variables
 g_result = None
-g_start_line = 0
-g_end_line = 0
+g_start_line = 0 # start line of edit
+g_end_line = 0 # end line of edit
 g_new_code_lines = []
 g_diff = []
 g_groups = []
@@ -36,59 +38,6 @@ def debug_print(*args):
     global g_debug_mode
     if g_debug_mode:
         print(' '.join(map(str, args)))
-
-# Logging infrastructure for troubleshooting.
-def setup_logging(log_file='ollama.log', log_level=logging.ERROR):
-    """
-    Set up logging configuration.
-    """
-    # Create a logger
-    logger = logging.getLogger()
-    logger.setLevel(log_level)
-
-    # Create a file handler which logs even debug messages
-    if not os.path.exists('/tmp/logs'):
-        os.makedirs('/tmp/logs')
-
-    log_path = os.path.join('/tmp/logs', log_file)
-    fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=2)
-    fh.setLevel(log_level)
-
-    # Create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
-
-    # Create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-
-    # Add the handlers to the logger
-    logger.addHandler(fh)
-    logger.addHandler(ch)
-
-def close_logging():
-    """
-    Close all logging handlers.
-    """
-    logger = logging.getLogger()
-    for handler in logger.handlers:
-        handler.close()
-        logger.removeHandler(handler)
-
-def log_debug(message):
-    """
-    Log a debug message.
-    """
-    logger = logging.getLogger()
-    logger.debug(message)
-
-def log_error(message):
-    """
-    Log a error message.
-    """
-    logger = logging.getLogger()
-    logger.error(message)
 
 def compute_diff(old_lines, new_lines):
     """
@@ -327,7 +276,7 @@ def generate_code_completion(prompt, baseurl, model, options):
         'Host': baseurl.split('//')[1].split('/')[0]
     }
     endpoint = baseurl + "/api/generate"
-#    log_debug('endpoint: ' + endpoint)
+    log.debug('endpoint: ' + endpoint)
 
     data = {
         'model': model,
@@ -336,16 +285,16 @@ def generate_code_completion(prompt, baseurl, model, options):
         'raw' : True,
         'options': options
     }
-#    log_debug('request: ' + json.dumps(data, indent=4))
+    log.debug('request: ' + json.dumps(data, indent=4))
 
     response = requests.post(endpoint, headers=headers, json=data)
 
     if response.status_code == 200:
         json_response = response.json()
-#        log_debug('response: ' + json.dumps(json_response, indent=4))
+#        log.debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
 
-        log_debug(completion)
+        log.debug(completion)
         # find index of sub string
         index = completion.find('<|endoftext|>')
         if index == -1:
@@ -444,9 +393,9 @@ def vim_edit_code(request, firstline, lastline, settings):
         code      = "\n".join(code_lines)
         postamble = "\n".join(postamble_lines)
 
-        log_debug('preample: ' + preamble)
-        log_debug('code: ' + code)
-        log_debug('postamble: ' + postamble)
+        log.debug('preample: ' + preamble)
+        log.debug('code: ' + code)
+        log.debug('postamble: ' + postamble)
 
         # Edit the code
         new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
@@ -457,7 +406,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         # Finish operartion
         result = 'Done'
     except Exception as e:
-        log_error(f"Error in vim_edit_code: {e}")
+        log.error(f"Error in vim_edit_code: {e}")
         # Finish operation with error
         result = 'Error'
 
@@ -477,8 +426,7 @@ def start_vim_edit_code(request, firstline, lastline, settings):
     global g_start_line
     global g_end_line
 
-    setup_logging(log_level=logging.DEBUG)
-    log_debug(f'*** vim_edit_code: request={request}')
+    log.debug(f'*** vim_edit_code: request={request}')
 
     g_result = 'InProgress'
     g_start_line = int(firstline)
@@ -503,7 +451,7 @@ def get_job_status():
     global g_groups
     global g_change_index
 
-    log_debug(f"result={g_result}")
+    log.debug(f"result={g_result}")
     groups = None
     try:
         is_running = False
@@ -525,10 +473,9 @@ def get_job_status():
         g_change_index = 0
         result = 'Done'
     except Exception as e:
-        log_error(f"Error in get_job_status: {e}")
+        log.error(f"Error in get_job_status: {e}")
         result = 'Error'
 
-    close_logging()
     return result, g_groups
 
 def AcceptAllChanges():
@@ -598,24 +545,27 @@ def AcceptChange(index):
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring AcceptChange.")
         return
+    log.debug("AcceptChange")
     group = g_groups[g_change_index]
     start_line = group.get('start_line', 1)
     end_line = group.get('end_line', 1)
     buf = vim.current.buffer
 
+    log.debug(f"remove signs from {start_line} to {end_line}")
     # remove signs
     for line in range(start_line, end_line + 1):
         VimHelper.UnplaceSign(line, buf)
 
     # remove abovetext
+    log.debug(f"remove abovetext from {start_line} to {end_line}")
     vim.command(f'call prop_clear({start_line}, {end_line})')
-
 
 def RejectChange(index):
     global g_change_index, g_groups
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring RejectChange.")
         return
+    log.debug("RejectChange")
     group = g_groups[g_change_index]
     start_line = group.get('start_line', 1)
     end_line = group.get('end_line', 1)
@@ -624,6 +574,7 @@ def RejectChange(index):
     # undo all changes of current group
     lineno = start_line
     for line in group.get('changes'):
+        log.debug(f"remove signs from line {line}")
         VimHelper.UnplaceSign(lineno, buf)
         # undo change
         if (line.startswith('- ')):
@@ -636,6 +587,7 @@ def RejectChange(index):
             VimHelper.DeleteLine(lineno)
 
     # remove any abovetext
+    log.debug(f"remove abovetext from {start_line} to {end_line}")
     vim.command(f'call prop_clear({start_line}, {end_line})')
 
 # Main entry point
