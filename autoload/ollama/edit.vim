@@ -103,7 +103,7 @@ lastline = vim.eval('a:last_line')
 # Access global Vim variables
 settings = {
     'url': vim.eval('g:ollama_host'),
-    'model': vim.eval('g:ollama_model'),
+    'model': vim.eval('g:ollama_chat_model'),
     'options': vim.eval('l:model_options')
 }
 # Now pass these settings to the CodeEditor function
