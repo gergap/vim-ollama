@@ -89,6 +89,7 @@ function! s:EditCodeInternal(request, first_line, last_line) abort
         return
     endif
     let l:model_options = substitute(json_encode(g:ollama_chat_options), "\"", "\\\"", "g")
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
     " Call the python code to edit the code via Ollama.
     " The python code starts a worker thread so that the GUI stays responsive
@@ -100,12 +101,14 @@ import vim
 request = vim.eval('a:request')
 firstline = vim.eval('a:first_line')
 lastline = vim.eval('a:last_line')
+log_level = int(vim.eval('l:log_level'))
 # Access global Vim variables
 settings = {
     'url': vim.eval('g:ollama_host'),
     'model': vim.eval('g:ollama_chat_model'),
     'options': vim.eval('l:model_options')
 }
+CodeEditor.SetLogLevel(log_level)
 # Now pass these settings to the CodeEditor function
 CodeEditor.start_vim_edit_code(request, firstline, lastline, settings)
 EOF
