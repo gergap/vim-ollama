@@ -67,6 +67,8 @@ try:
 
         if groups:
             CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+        else:
+            vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
 
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
