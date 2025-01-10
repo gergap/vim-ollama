@@ -240,7 +240,11 @@ def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
         str: The prompt for the OpenAI API.
     """
 
-    chat_template = ChatTemplate(f"chat_templates/{template_name}")
+    # Get the directory where the Python script resides
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the full path to the config file relative to the script directory
+    template_path = os.path.join(script_dir, "chat_templates", template_name)
+    chat_template = ChatTemplate(template_path)
     chat = [
             { "role": "system", "content": "You are a Vim code assistant plugin." },
             { "role": "user", "content":
@@ -329,7 +333,8 @@ def edit_code(request, preamble, code, postamble, ft, settings):
     if settings.get('simulate', 0):
         response = settings['response']
     else:
-        prompt = create_prompt('chat_templates/chatml.jinja', request, preamble, code, postamble, ft)
+        # TODO: choose correct template based on selected model
+        prompt = create_prompt('chatml.jinja', request, preamble, code, postamble, ft)
         url = settings.get('url', DEFAULT_HOST)
         model = settings.get('model', DEFAULT_MODEL)
         options = settings.get('options', DEFAULT_OPTIONS)
