@@ -412,9 +412,9 @@ function ollama#Command(command) abort
     endif
 endfunction
 
-call ollama#setup#Init()
-
 " Define the available commands for completion
 function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
     return ['setup', 'config', 'enable', 'disable', 'toggle']
 endfunction
+
+call ollama#setup#Init()
