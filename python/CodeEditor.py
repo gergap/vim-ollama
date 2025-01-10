@@ -246,19 +246,19 @@ def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
             { "role": "user", "content":
 f"""```{ft}
 {preamble}
-<START EDITING HERE>{code}<STOP EDITING HERE>
+<START_EDIT_HERE>{code}<STOP_EDIT_HERE>
 {postamble}
 ```
-Please rewrite the entire code block above, editing the portion below "<START EDITING HERE>" in order to satisfy the following request: '{request}'. You should rewrite the entire code block without leaving placeholders, even if the code is the same as before. When you get to "<STOP EDITING HERE>", end your response.
+Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified text.
 """}
     ]
 
     prompt = chat_template.render(messages=chat, add_generation_prompt=True)
     # Start the answer of the assistant to set it on the right path...
-    prompt += f"""Sure! Here's the entire code block, including the rewritten portion:
+    prompt += f"""Sure! Here's the rewritten code block:
 ```c
 {preamble}
-<START EDITING HERE>"""
+<START_EDIT_HERE>"""
     debug_print(prompt)
     return prompt
 
@@ -347,7 +347,7 @@ def edit_code(request, preamble, code, postamble, ft, settings):
     last_line=None
     for line in lines:
         # find end tag in line
-        pos = line.find('<STOP EDITING HERE>')
+        pos = line.find('<STOP_EDIT_HERE>')
         if (pos == 0):
             break;
         elif (pos > 0):
