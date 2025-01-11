@@ -390,7 +390,7 @@ function ollama#Toggle() abort
     endif
 endfunction
 
-" Provide different commands: enable, disable, help
+" Provide different commands: enable, disable, help, etc.
 function ollama#Command(command) abort
     if a:command == 'setup'
         call ollama#setup#Setup()
@@ -403,8 +403,13 @@ function ollama#Command(command) abort
     elseif a:command == 'toggle'
         call ollama#Toggle()
     else
-        echo "Usage: Ollama <enable|disable|toggle>"
+        echo "Usage: Ollama <setup|config|enable|disable|toggle>"
     endif
 endfunction
 
 call ollama#setup#Init()
+
+" Define the available commands for completion
+function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
+    return ['setup', 'config', 'enable', 'disable', 'toggle']
+endfunction
