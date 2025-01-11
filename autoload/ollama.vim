@@ -358,7 +358,12 @@ function! ollama#InsertNextWord()
 endfunction
 
 function ollama#IsEnabled() abort
+    " Check if the global setting is enabled
     if exists('g:ollama_enabled') && g:ollama_enabled == 1
+        " Check if the buffer-local variable is set and disables completion
+        if exists('b:ollama_enabled') && b:ollama_enabled == 0
+            return 0
+        endif
         return 1
     else
         return 0
