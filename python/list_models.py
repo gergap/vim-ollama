@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import requests
 import argparse
+import sys
 
 def list_ollama_models(base_url):
     url = f"{base_url}/api/tags"
@@ -22,16 +23,16 @@ def list_ollama_models(base_url):
                     for model in models:
                         print(model['name'])  # Print the model name
                 else:
-                    print("No models found.")
+                    print("No models found.", file=sys.stderr)
             else:
-                print("'models' key not found in the response.")
+                print("'models' key not found in the response.", file=sys.stderr)
                 exit(1)
         else:
-            print(f"Failed to retrieve models. Status code: {response.status_code}")
+            print(f"Failed to retrieve models. Status code: {response.status_code}", file=sys.stderr)
             exit(1)
 
     except requests.exceptions.RequestException as e:
-        print(f"Error occurred while making the request: {e}")
+        print(f"Error occurred while making the request: {e}", file=sys.stderr)
         exit(1)
 
 def main():
