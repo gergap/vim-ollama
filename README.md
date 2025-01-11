@@ -3,14 +3,18 @@
 This plugin adds Copilot-like code completion support to Vim. It uses [Ollama](https://ollama.com) as a backend, which
 can run locally and does not require cloud services, thus preserving your privacy.
 
+<p align="center">
+<img src="screenshots/VimOllama_256x256.png" alt="Vim-Ollama Logo">
+</p>
+
 ## Motivation
 
 [Copilot.vim](https://github.com/github/copilot.vim) by Tim Pope is an excellent plugin for both Vim and NeoVim.
 However, it is limited to Microsoft's Copilot, a commercial cloud-based AI that requires sending all your data to
 Microsoft.
 
-With Ollama and freely available LLMs (e.g., Llama3, Codellama, Deepseek-coder-v2), you can achieve similar results
-without relying on the cloud. While other plugins are available, they typically require NeoVim, which isn't an
+With Ollama and freely available LLMs (e.g., Llama3, Codellama, Deepseek-coder-v2, etc.), you can achieve similar
+results without relying on the cloud. While other plugins are available, they typically require NeoVim, which isn't an
 alternative for me. I prefer using Vim in the terminal and do not want to switch to NeoVim for various reasons.
 
 ## Features
