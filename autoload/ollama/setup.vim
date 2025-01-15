@@ -237,7 +237,9 @@ function! s:FinalizeSetupTask()
                 \ "\" tab completion model",
                 \ "let g:ollama_model = '" . g:ollama_model . "'",
                 \ "\" chat model",
-                \ "let g:ollama_chat_model = '" . g:ollama_chat_model . "'" ]
+                \ "let g:ollama_chat_model = '" . g:ollama_chat_model . "'",
+                \ "",
+                \ "\" vim: filetype=vim.ollama" ]
     call writefile(l:config, l:config_file)
     echon "Configuration saved to " . l:config_file . "\n"
     call popup_notification("Setup complete", #{ pos: 'center'})
