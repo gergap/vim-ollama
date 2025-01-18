@@ -55,6 +55,9 @@ endif
 if !exists('g:ollama_context_lines')
     let g:ollama_context_lines = 30
 endif
+if !exists('g:ollama_use_inline_diff')
+    let g:ollama_use_inline_diff = 1
+endif
 
 " Defines the color scheme for ollama suggestions
 function! s:ColorScheme() abort

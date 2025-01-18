@@ -64,9 +64,13 @@ try:
     if result != 'InProgress':
         # Report changes in code done to user interface
         vim.command('call ollama#edit#EditCodeDone("' + str(result) + '")')
+        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
 
         if groups:
-            CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+            if use_inline_diff:
+                CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+            else:
+                vim.command("echo 'Applied changes.'")
         else:
             vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
 

@@ -237,6 +237,18 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_debounce_time = 300
 <
+7. g:ollama_use_inline_diff
+    - Description: When true, the `OllamaEdit` changes are applied as inline
+      diff which can be accepted or rejected individually in an interactive
+      way. When false, the plugin will apply the changes directly without
+      asking. This may be useful when tracking the code via Git. Using
+      vim-fugitive's `:GVdiffsplit` command you can compare the changes
+      in vimdiff mode.
+    - Default: 1
+    - Example:
+>
+        let g:ollama_use_inline_diff = 0
+<
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
