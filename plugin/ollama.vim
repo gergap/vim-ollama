@@ -35,6 +35,9 @@ endif
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
 endif
+if !exists('g:ollama_context_lines')
+    let g:ollama_context_lines = 30
+endif
 
 " Defines the color scheme for ollama suggestions
 function! s:ColorScheme() abort

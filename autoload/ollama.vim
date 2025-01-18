@@ -105,7 +105,7 @@ function! ollama#GetSuggestion(timer)
     let s:timer_id = -1
     let l:current_line = line('.')
     let l:current_col = col('.')
-    let l:context_lines = 30
+    let l:context_lines = g:ollama_context_lines
 
     " Get the lines before and after the current line
     let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)

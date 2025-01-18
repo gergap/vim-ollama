@@ -166,6 +166,28 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'num_predict': 256
                 \ }
 <
+
+5. g:ollama_context_lines
+    - Description: Sets the number of context lines before and after the
+      cursor to be transmitted to the LLM for tab completion.
+      When running a LLM locally on CPU (without GPU support), reduce this
+      value to speed up completion. Small values like 2 already work well,
+      for simple tasks.
+    - Default: 30
+>
+        let g:ollama_context_lines = 10
+<
+6. g:ollama_debounce_time
+    - Description: Sets the delay after the last keystroke before triggering
+      a new search. Using smaller values give you faster reaction times, but
+      create higher load on the system. Small values make only sense on fast
+      GPU based LLMs, where the LLM computation time is not much longer than
+      the debounce time.
+    - Default: 500 ms
+    - Example:
+>
+        let g:ollama_debounce_time = 300
+<
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
