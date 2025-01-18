@@ -114,7 +114,7 @@ def group_diff(diff, starting_line=1):
 
 def apply_diff(diff, buf, line_offset=0):
     """
-    Apply differences directly to a Vim buffer.
+    Apply differences directly to a Vim buffer as inline diff.
 
     Args:
         diff (iterable): The result of ndiff comparing old and new lines.
@@ -186,6 +186,58 @@ def apply_diff(diff, buf, line_offset=0):
     if deleted_lines:
         for i, deleted_line in enumerate(deleted_lines):
             VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
+
+def apply_change(diff, buf, line_offset=0):
+    """
+    Apply differences directly to a Vim buffer without inline diff.
+
+    Args:
+        diff (iterable): The result of ndiff comparing old and new lines.
+        buf: The Vim buffer to apply changes to.
+        line_offset (int): Line offset for the current buffer.
+    """
+    debug_print("\n".join(diff))
+
+    for line in diff:
+
+        if line.startswith('+ '):
+            debug_print(f"add line: '{line}'")
+            # Added line
+            lineno = line_offset
+            content = line[2:].rstrip()
+            VimHelper.InsertLine(lineno, content, buf)
+
+            line_offset += 1
+
+        elif line.startswith('- '):
+            debug_print("delete line")
+            # Deleted line
+            lineno = line_offset
+            old_content = VimHelper.DeleteLine(lineno, buf)
+            if old_content != line[2:]:
+                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
+
+        elif line.startswith('? '):
+            debug_print("info line")
+            # This line is a marker for the previous change (not handled)
+            continue
+
+        elif line.startswith('  '):
+            debug_print("unchanged line")
+
+            lineno = line_offset
+            old_content = VimHelper.GetLine(lineno, buf)
+            debug_print(f"line {lineno}: '{old_content}'")
+            debug_print(f"diffline {lineno}: '{line}'")
+            content = line[2:]
+            if content != old_content:
+                debug_print(f"existing line: '{old_content}'")
+                debug_print(f"expected line: '{content}'")
+                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
+            line_offset += 1
+        else:
+            debug_print(f"other: '{line}'")
+            line_offset += 1
 
 def accept_changes(buffer):
     """
@@ -480,12 +532,17 @@ def get_job_status():
             return g_result, None
 
         # Success:
-        apply_diff(g_diff, vim.current.buffer, g_start_line)
+        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
+        if use_inline_diff:
+            apply_diff(g_diff, vim.current.buffer, g_start_line)
+        else:
+            apply_change(g_diff, vim.current.buffer, g_start_line)
 
         g_groups = group_diff(g_diff, g_start_line)
         log.debug(g_groups)
         g_change_index = 0
         g_restored_lines = 0
+
         result = 'Done'
     except Exception as e:
         log.error(f"Error in get_job_status: {e}")
