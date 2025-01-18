@@ -141,6 +141,21 @@ function! s:StartChat(lines) abort
         stopinsert
     endfunc
 
+    let l:model_options = json_encode(g:ollama_model_options)
+    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
+    call ollama#logger#Debug("model_options=".l:model_options)
+
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+
+    let l:script_path = printf('%s/python/chat.py', expand('<script>:h:h:h'))
+    " Create the Python command
+    let l:command = ['python3', l:script_path,
+                \ '-m', g:ollama_chat_model,
+                \ '-u', g:ollama_host,
+                \ '-o', l:model_options,
+                \ '-l', l:log_level ]
+
     " Redirect job's IO to buffer
     let job_options = {
         \ 'out_cb': function('GotOutput'),
@@ -148,18 +163,8 @@ function! s:StartChat(lines) abort
         \ 'exit_cb': function('JobExit'),
         \ }
 
-    " Convert plugin debug level to python logger levels
-    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
-
-    " Start the Python script as a job
-    let l:command = printf('python3 %s/python/chat.py -m %s -u %s -l %u',
-                \ expand('<script>:h:h:h'),
-                \ g:ollama_chat_model, 
-                \ g:ollama_host,
-                \ l:log_level)
-
     " Start a shell in the background.
-    let s:job = job_start(l:command, job_options)
+    let s:job = job_start(l:command, l:job_options)
 
     " Create chat buffer
     let l:bufname = 'Ollama Chat'
@@ -176,7 +181,9 @@ function! s:StartChat(lines) abort
         " send lines
         if a:lines isnot v:null
             call append(line("$") - 1, a:lines)
-            call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
+            let l:prompt = join(a:lines, "\n")
+            call ollama#logger#Debug("Sending prompt '".l:prompt."'...")
+            call ch_sendraw(s:job, l:prompt .. "\n")
         endif
         return
     endif
