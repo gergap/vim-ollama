@@ -1,4 +1,4 @@
-" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2024-09-22
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-01-07
 
 *vim-ollama*
 
@@ -58,7 +58,12 @@ The vim-ollama plugin provides the following commands:
 
 1. :Ollama
     - Description: Sends commands to the plugin to change its state.
-    Available commands are `enable`, `disable` and `toggle`.
+    Available commands are:
+      - `setup`: Starts the Vim-Ollama setup wizard.
+      - `config`: Opens the Vim-Ollama default config file.
+      - `enable`: Enables AI tab completions.
+      - `disable`: Disables AI tab completions.
+      - `toggle`: Toggles the enabled state of the plugin.
 
     - Usage:
 >

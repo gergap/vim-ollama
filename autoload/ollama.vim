@@ -395,17 +395,26 @@ function ollama#Toggle() abort
     endif
 endfunction
 
-" Provide different commands: enable, disable, help
+" Provide different commands: enable, disable, help, etc.
 function ollama#Command(command) abort
-    if a:command == 'enable'
+    if a:command == 'setup'
+        call ollama#setup#Setup()
+    elseif a:command == 'config'
+        execute ":e ~/.vim/config/ollama.vim"
+    elseif a:command == 'enable'
         call ollama#Enable()
     elseif a:command == 'disable'
         call ollama#Disable()
     elseif a:command == 'toggle'
         call ollama#Toggle()
     else
-        echo "Usage: Ollama <enable|disable|toggle>"
+        echo "Usage: Ollama <setup|config|enable|disable|toggle>"
     endif
 endfunction
 
+call ollama#setup#Init()
 
+" Define the available commands for completion
+function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
+    return ['setup', 'config', 'enable', 'disable', 'toggle']
+endfunction

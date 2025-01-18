@@ -118,6 +118,16 @@ augroup ollama
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END
 
+" Set omnifunc for the current file type
+augroup OllamaCompletion
+    autocmd!
+    autocmd FileType vim.ollama setlocal omnifunc=ollama#config#OmniComplete
+    autocmd FileType vim.ollama let b:ollama_enabled=0
+    " trigger completion when : is pressed
+    autocmd FileType vim.ollama inoremap <silent> <buffer> : :<C-X><C-O>
+    autocmd FileType vim.ollama inoremap <silent> <buffer> <expr> ' ollama#config#TriggerModelCompletion()
+augroup END
+
 call s:ColorScheme()
 
 " Load autoload functions
@@ -128,4 +138,4 @@ command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
 command! OllamaChat call ollama#review#Chat()
-command! -nargs=1 Ollama call ollama#Command(<f-args>)
+command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)

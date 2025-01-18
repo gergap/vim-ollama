@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 - Add Edit functionality similar to Continue plugin.
 - List changes that are planned or being worked on here.
 
+## [Version 0.4] - 2025-01-07
+
+### Added
+- Add setup wizard.
+- New command `:Ollama setup`
+- New command `:Ollama config`
+- Add scripts for listing, pulling and loading Ollama models
+
+### Changes
+- Load new config file `$HOME/.vim/config/ollama.vim` if exists
+
 ## [Version 0.3] - 2025-01-06
 
 ### Changes
