@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 import requests
 import argparse
 import json

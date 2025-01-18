@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 # This script uses the generate API endpoint for oneshot code completion.
 import requests
 import sys
