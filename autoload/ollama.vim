@@ -22,19 +22,21 @@ let s:prop_id = -1
 " only when the user types text we want a reschedule
 let s:ignore_schedule = 0
 
-let s:has_nvim_ghost_text = has('nvim-0.6') && exists('*nvim_buf_get_mark')
 let s:vim_minimum_version = '9.0.0185'
 let s:has_vim_ghost_text = has('patch-' . s:vim_minimum_version) && has('textprop')
-let s:has_ghost_text = s:has_nvim_ghost_text || s:has_vim_ghost_text
 
 let s:hlgroup = 'OllamaSuggestion'
 let s:annot_hlgroup = 'OllamaAnnotation'
 
-if s:has_vim_ghost_text && empty(prop_type_get(s:hlgroup))
-    call prop_type_add(s:hlgroup, {'highlight': s:hlgroup})
-endif
-if s:has_vim_ghost_text && empty(prop_type_get(s:annot_hlgroup))
-    call prop_type_add(s:annot_hlgroup, {'highlight': s:annot_hlgroup})
+if s:has_vim_ghost_text
+    if empty(prop_type_get(s:hlgroup))
+        call prop_type_add(s:hlgroup, {'highlight': s:hlgroup})
+    endif
+    if empty(prop_type_get(s:annot_hlgroup))
+        call prop_type_add(s:annot_hlgroup, {'highlight': s:annot_hlgroup})
+    endif
+else
+    echom "warning: you Vim version does not support ghost text (textprop)"
 endif
 
 function! ollama#Schedule()
@@ -175,7 +177,7 @@ function! ollama#UpdatePreview(suggestion)
         if empty(text[-1])
             call remove(text, -1)
         endif
-        if empty(text) || !s:has_ghost_text
+        if empty(text) || !s:has_vim_ghost_text
             return ollama#ClearPreview()
         endif
         let annot= ''
@@ -194,8 +196,10 @@ endfunction
 
 function! ollama#ClearPreview()
     call ollama#logger#Debug("ClearPreview")
-    call prop_remove({'type': s:hlgroup, 'all': v:true})
-    call prop_remove({'type': s:annot_hlgroup, 'all': v:true})
+    if s:has_vim_ghost_text
+        call prop_remove({'type': s:hlgroup, 'all': v:true})
+        call prop_remove({'type': s:annot_hlgroup, 'all': v:true})
+    endif
 endfunction
 
 function! s:KillJob()
