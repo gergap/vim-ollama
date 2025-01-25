@@ -14,11 +14,12 @@ from OllamaLogger import OllamaLogger
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
+DEFAULT_TIMEOUT = 10
 
 # create logger
 log = OllamaLogger('ollama.log')
 
-async def stream_chat_message(messages, endpoint, model):
+async def stream_chat_message(messages, endpoint, model, timeout):
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -34,7 +35,7 @@ async def stream_chat_message(messages, endpoint, model):
     assistant_message = ""
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream('POST', endpoint, headers=headers, json=data) as response:
                 if response.status_code == 200:
                     async for line in response.aiter_lines():
@@ -69,7 +70,7 @@ async def stream_chat_message(messages, endpoint, model):
     if assistant_message:
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
-async def main(baseurl, model):
+async def main(baseurl, model, timeout):
     conversation_history = []
     endpoint = baseurl + "/api/chat"
     log.debug('endpoint: ' + endpoint)
@@ -88,7 +89,7 @@ async def main(baseurl, model):
                     conversation_history.append({"role": "user", "content": complete_message})
                     multiline_message = []
 
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, timeout))
                     await task
                 else:
                     multiline_message.append(user_message)
@@ -101,7 +102,7 @@ async def main(baseurl, model):
                     exit(0)
                 else:
                     conversation_history.append({"role": "user", "content": user_message})
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model))
+                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, timeout))
                     await task
 
         except KeyboardInterrupt:
@@ -119,13 +120,14 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
+    parser.add_argument('-t', '--timeout', type=int, default=DEFAULT_TIMEOUT, help="Specify the timeout")
     args = parser.parse_args()
 
     log.setLevel(args.log_level)
 
     while True:
         try:
-            asyncio.run(main(args.url, args.model))
+            asyncio.run(main(args.url, args.model, args.timeout))
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
