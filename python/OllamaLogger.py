@@ -17,7 +17,7 @@ class OllamaLogger:
 
     def __init__(self, log_filename, log_level=logging.ERROR):
         # Create a logger
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
 
         # Attempt to create a log directory and set up file logging
