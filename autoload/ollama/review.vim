@@ -152,10 +152,11 @@ function! s:StartChat(lines) abort
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
     " Start the Python script as a job
-    let l:command = printf('python3 %s/python/chat.py -m %s -u %s -l %u',
+    let l:command = printf('python3 %s/python/chat.py -m %s -u %s -t %s -l %u',
                 \ expand('<script>:h:h:h'),
                 \ g:ollama_chat_model, 
                 \ g:ollama_host,
+                \ g:ollama_timeout,
                 \ l:log_level)
 
     " Start a shell in the background.

@@ -154,8 +154,15 @@ You can configure vim-ollama using the following variables in your .vimrc:
     - Example:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
+
+4. g:ollama_timeout
+    - Description: Sets the timeout value in chat requests.
+    - Default: 10
+    - Example:
+>
+        let g:ollama_timeout = 10
 <
-4. g:ollama_model_options
+5. g:ollama_model_options
     - Description: Sets the default Ollama model options.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
