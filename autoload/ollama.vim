@@ -107,7 +107,7 @@ function! ollama#GetSuggestion(timer)
     let s:timer_id = -1
     let l:current_line = line('.')
     let l:current_col = col('.')
-    let l:context_lines = 30
+    let l:context_lines = g:ollama_context_lines
 
     " Get the lines before and after the current line
     let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
@@ -129,7 +129,7 @@ function! ollama#GetSuggestion(timer)
     let l:prompt = l:prefix . '<FILL_IN_HERE>' . l:suffix
 
     let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
-    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
+    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model." api_type".g:ollama_api_type)
     call ollama#logger#Debug("model_options=".l:model_options)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
@@ -138,7 +138,9 @@ function! ollama#GetSuggestion(timer)
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
-        \ "-l", l:log_level
+        \ "-l", l:log_level,
+        \ "-t", g:ollama_api_type,
+        \ "-s", g:ollama_key,
         \ ]
     call ollama#logger#Debug("command=". join(l:command, " "))
     let l:job_options = {
