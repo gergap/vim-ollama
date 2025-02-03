@@ -217,6 +217,15 @@ You can enable logging by specifying the following variables.
 >
         let g:ollama_logfile = '/path/to/vim-ollama.log'
 
+3. g:ollama_review_logfile
+    - Description: Configure the path logging the chat converstions.
+      This only we be logged on Debug level.
+    - Default: A random file in your temp directory will be created using
+      tempname(). This can result in a path like '/tmp/vBu3NCc/5-ollama-review.log'
+    - Example:
+>
+        let g:ollama_review_logfile = '/path/to/vim-ollama-review.log'
+
 ==============================================================================
 8. License                                            *vim-ollama-license*
 

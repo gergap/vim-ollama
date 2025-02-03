@@ -6,6 +6,10 @@ let s:buf = -1
 " Map a key to send user input to the chatbot
 nnoremap <buffer> <silent> <Enter> :call <sid>SendInputToChatBot()<CR>
 
+if !exists('g:ollama_review_logfile')
+    let g:ollama_review_logfile = tempname() . '-ollama-review.log'
+endif
+
 " Define a function to send user input to the chatbot
 function! s:SendInputToChatBot()
     " Get the user input
@@ -202,7 +206,9 @@ function! s:StartChat(lines) abort
     let l:buf = bufnr('')
     let s:buf = l:buf
     " Create a channel log so we can see what happens.
-    call ch_logfile('logfile', 'w')
+    if g:ollama_debug >= 4
+        call ch_logfile(g:ollama_review_logfile, 'w')
+    endif
 
     " Add a title to the chat buffer
     call append(0, "Chat with Bot")
