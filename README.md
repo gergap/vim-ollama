@@ -136,6 +136,17 @@ let g:ollama_model = 'qwen2.5-coder:3b'
 
 " Deepseek-coder-v2
 let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
+
+OpenAI-like FIM interface
+
+```
+let g:ollama_host = 'https://api.siliconflow.cn/v1'
+let g:ollama_model = 'deepseek-ai/DeepSeek-V2.5'
+let g:ollama_key = 'sk-xxxxxxxxxxxxx'
+let g:ollama_context_lines = 100
+```
+
+./autoload/ollama.vim
 ```
 
 | Variable              | Default                  | Description                            |

@@ -10,7 +10,7 @@ from OllamaLogger import OllamaLogger
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
-DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95}'
 
 # create logger
 log = OllamaLogger('ollama.log')
@@ -93,12 +93,45 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def generate_code_completion_openai(prompt, url, key, model, options, max_tokens=256):
+    parts = prompt.split('<FILL_IN_HERE>')
+
+    if len(parts) != 2:
+        log.error("Prompt does not contain '<FILL_IN_HERE>'.")
+        sys.exit(1)
+
+    newprompt = parts[0]
+    new_suffix = parts[1]
+    log.debug(f"newprompt: {newprompt}, new_suffix: {new_suffix}")
+
+    from openai import OpenAI
+    client = OpenAI(api_key=key, base_url=url)
+
+    try:
+        response = client.completions.create(
+                model=model,
+                prompt=newprompt,
+                suffix=new_suffix,
+                stream=False,
+                max_tokens=max_tokens,
+                **options
+
+        )
+
+        text = response.choices[0].text.strip()
+        return text
+    except Exception as e:
+        log.error(f"Error: {e}")
+        sys.exit(1)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
+    parser.add_argument('-t', '--api-type', type=str, default='ollama', help="ollama or openai")
+    parser.add_argument('-s', '--key', type=str, default='', help="please specify the key")
     args = parser.parse_args()
 
     log.setLevel(args.log_level)
@@ -112,8 +145,14 @@ if __name__ == "__main__":
     # strip suffix (e.g ':7b-code') from modelname
     modelname = args.model
     modelname = modelname.rsplit(':', 1)[0]
-    config = load_config(modelname)
 
     prompt = sys.stdin.read()
-    response = generate_code_completion(config, prompt, args.url, args.model, options)
+    if args.api_type == 'ollama':
+        config = load_config(modelname)
+        response = generate_code_completion(config, prompt, args.url, args.model, options)
+    elif args.api_type == 'openai':
+        response = generate_code_completion_openai(prompt, args.url, args.key, args.model, options)
+    else:
+        log.error("Please specify the correct api type")
+        sys.exit(1)
     print(response, end='')

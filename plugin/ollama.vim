@@ -40,6 +40,21 @@ if !exists('g:ollama_timeout')
     let g:ollama_timeout = 10
 endif
 
+if !exists('g:ollama_key')
+    " default code completion model
+    let g:ollama_key = ''
+endif
+
+if !exists('g:ollama_api_type')
+    " default to ollama
+    let g:ollama_api_type = 'ollama'
+endif
+
+if !exists('g:ollama_context_lines')
+    " default to 30
+    let g:ollama_context_lines = 30
+endif
+
 " Defines the color scheme for ollama suggestions
 function! s:ColorScheme() abort
     if &t_Co == 256
