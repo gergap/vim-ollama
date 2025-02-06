@@ -52,7 +52,7 @@ endfunction
 
 function! s:HandleTabCompletion() abort
     if &buftype == 'prompt'
-        " ignore tab in chat buffer
+        " ignore tab in chat buffer or when unmapping variable is set.
         return "\<Tab>"
     endif
     let suggestion = ollama#InsertSuggestion()
@@ -74,7 +74,8 @@ function! s:HandleTabCompletion() abort
             " rhs is an expression
             call ollama#logger#Info("<tab> expression")
             return "\<C-R>=" . g:ollama_original_tab_mapping.rhs . "\<CR>"
-        else
+        endif
+        if !exists('g:ollama_unmap_tab')
             " rhs is a string
             call ollama#logger#Info("<tab> string")
             let tab_fallback = substitute(json_encode(g:ollama_original_tab_mapping.rhs), '<', '\\<', 'g')

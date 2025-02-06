@@ -136,6 +136,9 @@ let g:ollama_model = 'qwen2.5-coder:3b'
 
 " Deepseek-coder-v2
 let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
+
+" Unmap tab as insertion key so you can use your own remaps.
+let g:ollama_unmap_tab = v:true
 ```
 
 | Variable              | Default                  | Description                            |
