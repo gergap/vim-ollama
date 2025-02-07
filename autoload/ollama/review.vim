@@ -159,6 +159,11 @@ function! s:StartChat(lines) abort
                 \ '-u', g:ollama_host,
                 \ '-o', l:model_options,
                 \ '-l', l:log_level ]
+    " Check if a system prompt was configured
+    if g:ollama_chat_systemprompt != ''
+         " add system prompt option
+        let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
 
     " Redirect job's IO to buffer
     let job_options = {

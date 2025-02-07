@@ -72,13 +72,16 @@ async def stream_chat_message(messages, endpoint, model, options):
     if assistant_message:
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
-async def main(baseurl, model, options):
+async def main(baseurl, model, options, systemprompt):
     conversation_history = []
     endpoint = baseurl + "/api/chat"
     log.debug('endpoint: ' + endpoint)
 
     multiline_input = False
     multiline_message = []
+
+    if systemprompt != '':
+        conversation_history.append({"role": "system", "content": systemprompt})
 
     while True:
         try:
@@ -122,6 +125,7 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
+    parser.add_argument('-s', '--system-prompt', type=str, default='', help="Specify alternative system prompt.")
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
     args = parser.parse_args()
 
@@ -135,7 +139,7 @@ if __name__ == "__main__":
 
     while True:
         try:
-            asyncio.run(main(args.url, args.model, options))
+            asyncio.run(main(args.url, args.model, options, args.system_prompt))
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")

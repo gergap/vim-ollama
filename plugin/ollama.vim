@@ -25,6 +25,10 @@ if !exists('g:ollama_chat_model')
     " default chat model
     let g:ollama_chat_model = 'llama3'
 endif
+if !exists('g:ollama_chat_systemprompt')
+    " empty means no system prompt, we use th built-in one
+    let g:ollama_chat_systemprompt = ''
+endif
 if !exists('g:ollama_model_options')
     " default model options
     let g:ollama_model_options = {
