@@ -51,10 +51,7 @@ if !exists('g:ollama_chat_options')
     " we need more prediction for larger tasks
     let g:ollama_chat_options = {
                 \ 'temperature': 0.2,
-                \ 'top_p': 0.95,
-                \ 'num_predict': 4096,
-                \ 'num_ctx': 8192,
-                \ 'keep_alive': 1800,
+                \ 'top_p': 0.95
                 \ }
 endif
 " Code edit specific settings

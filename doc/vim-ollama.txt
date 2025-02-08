@@ -241,10 +241,9 @@ You can configure vim-ollama using the following variables in your .vimrc:
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
 >
-        let g:ollama_model_options = {
-                \ 'temperature': 0,
-                \ 'top_p': 0.95,
-                \ 'num_predict': 256
+        let g:ollama_chat_options = {
+                \ 'temperature': 0.2,
+                \ 'top_p': 0.95
                 \ }
 <
 9. g:ollama_edit_model
@@ -259,7 +258,7 @@ You can configure vim-ollama using the following variables in your .vimrc:
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
 >
-        let g:ollama_model_options = {
+        let g:ollama_edit_options = {
                 \ 'temperature': 0,
                 \ 'top_p': 0.95,
                 \ 'num_predict': 256
