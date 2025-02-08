@@ -1,4 +1,4 @@
-" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-01-07
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-02-08
 
 *vim-ollama*
 

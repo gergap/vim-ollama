@@ -3,8 +3,21 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
-- Add Edit functionality similar to Continue plugin.
 - List changes that are planned or being worked on here.
+
+## [Version 1.0] - 2025-02-08
+
+### Added
+- Add code editing feature with inline diff support.
+- Improved setup wizard.
+- Improved tab fallback handling to fix issues with supertab plugin (fixes #18).
+- Improved logging configuration.
+- Add more configuration variables.
+- Fix potential conflicts with other Python loggers by using `getLogger(__name__)`
+
+### Changes
+- The variable `g:ollama_timeout` was renamed `g:ollama_chat_timeout` to indicate
+  that is is only related to interactive chats.
 
 ## [Version 0.4] - 2025-01-07
 

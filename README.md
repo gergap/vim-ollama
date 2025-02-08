@@ -19,8 +19,11 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## Features
 
-- Intelligent AI-based code completion
+- Intelligent AI-based code completion (aka tab completion)
 - Integrated chat support for code reviews and other interactions
+- Automatic code editing based in human description (NEW in V1.0)
+  - Supports inline-diff view for accepting changes interactively
+  - Or accept without prompt for a Git based workflow using Vim fugutive (:Gvdiffsplit)
 
 ![Demo](screenshots/game.gif)
 
@@ -44,7 +47,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## How It Works
 
-The plugin uses two Python scripts, `complete.py` and `chat.py`, to communicate with Ollama via its REST API. The first
+The plugin uses Python scripts, e.g. `complete.py` and `chat.py`, to communicate with Ollama via its REST API. The first
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
@@ -84,7 +87,7 @@ The script should output a completion as shown below:
 
 ```sh
 $> cd path/to/vim-ollama/python
-$> echo -e '<PRE> def compute_gcd(x, y): <SUF>return result <MID>' | ./complete.py -u http://localhost:11434 -m codellama:7b-code
+$> echo -e 'def compute_gcd(x, y): <FILL_IN_HERE>return result' | ./complete.py -u http://localhost:11434 -m codellama:7b-code
   if x == 0:
     return y
   else:
@@ -131,8 +134,9 @@ but in the bundled [JSON config files](python/configs). You can simply remove th
 | Variable              | Default                  | Description                            |
 |-----------------------|--------------------------|----------------------------------------|
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
-| `g:ollama_model`      | `qwen2.5-coder:1.5b`     | The LLM for code completions.          |
-| `g:ollama_chat_model` | `llama3.1:8b`            | The LLM for interactive conversations. |
+| `g:ollama_model`      | `starcoder2:3b`          | The LLM for code completions.          |
+| `g:ollama_edit_model` | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
+| `g:ollama_chat_model` | `llama3.1:8b`            | The LLM for chat conversations.        |
 
 When adding new unsupported code completion models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
 Simply add this missing file and create a merge request to get it included upstream.
