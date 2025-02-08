@@ -234,6 +234,12 @@ You can enable logging by specifying the following variables.
 >
         let g:ollama_review_logfile = '/path/to/vim-ollama-review.log'
 
+By default, the Python scripts used underneath use separate log files. The
+variable `g:ollama_debug` is passed to the Python calls to enable also the
+logging mechanism of the according script. However, the default log path
+is `/tmp/logs`, and the log filenames are `complete.log` for tab completions
+and `chat.log` for chat conversations.
+
 ==============================================================================
 8. License                                            *vim-ollama-license*
 

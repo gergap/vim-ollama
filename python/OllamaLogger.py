@@ -15,13 +15,12 @@ class OllamaLogger:
     INFO = logging.INFO
     DEBUG = logging.DEBUG
 
-    def __init__(self, log_filename, log_level=logging.ERROR):
+    def __init__(self, log_dir = '/tmp/logs', log_filename = 'ollama.log', log_level = logging.ERROR):
         # Create a logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
 
         # Attempt to create a log directory and set up file logging
-        log_dir = '/tmp/logs'
         self.fh = None  # File handler
 
         try:
