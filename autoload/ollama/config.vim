@@ -65,7 +65,7 @@ endfunction
 
 " Function to get variable names starting with g:ollama_
 function! OllamaVariableNames()
-    return [ 'ollama_host', 'ollama_model', 'ollama_chat_model', 'ollama_model_options', 'ollama_chat_options', 'ollama_debounce_time', 'ollama_debug', 'ollama_log_file', 'ollama_enabled']
+    return [ 'ollama_host', 'ollama_model', 'ollama_chat_model', 'ollama_chat_systemprompt', 'ollama_model_options', 'ollama_chat_options', 'ollama_context_lines', 'ollama_debounce_time', 'ollama_debug', 'ollama_log_file', 'ollama_enabled']
 endfunction
 
 function! ollama#config#OmniComplete(findstart, base)
