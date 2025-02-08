@@ -165,7 +165,7 @@ function! ollama#setup#Setup()
         echon "\n"
         " Select tab completion model
         while 1
-            let l:ans = input("Choose tab completion model: ")
+            let l:ans = input("Choose tab completion model (e.g. 'starcoder2:3b'): ")
             echon "\n"
             " Check if input is a number
             if l:ans =~ '^\d\+$'
@@ -181,7 +181,7 @@ function! ollama#setup#Setup()
         endwhile
         " Select chat model
         while 1
-            let l:ans = input("Choose chat model: ")
+            let l:ans = input("Choose chat model (e.g. 'llama3'): ")
             echon "\n"
             " Check if input is a number
             if l:ans =~ '^\d\+$'
@@ -190,6 +190,22 @@ function! ollama#setup#Setup()
                 if l:ans > 0 && l:ans <= len(l:models)
                     let g:ollama_chat_model = l:models[l:ans - 1]
                     echon "Configured '" . g:ollama_chat_model . "' as chat model.\n"
+                    break
+                endif
+            endif
+            echo "error: invalid index"
+        endwhile
+        " Select code edit model
+        while 1
+            let l:ans = input("Choose code edit model (e.g. 'qwen2.5-coder:7b'): ")
+            echon "\n"
+            " Check if input is a number
+            if l:ans =~ '^\d\+$'
+                let l:ans = str2nr(l:ans)
+                " Check range
+                if l:ans > 0 && l:ans <= len(l:models)
+                    let g:ollama_edit_model = l:models[l:ans - 1]
+                    echon "Configured '" . g:ollama_edit_model . "' as code edit model.\n"
                     break
                 endif
             endif
@@ -244,7 +260,12 @@ function! s:FinalizeSetupTask()
                 \ "\" chat model",
                 \ "let g:ollama_chat_model = '" . g:ollama_chat_model . "'",
                 \ "\" override chat system prompt",
-                \ "\"let g:ollama_chat_systemprompt = 'You are a coding assistant. Output only code, no explanations.'",
+                \ "\"let g:ollama_chat_systemprompt = 'Give funny answers.'",
+                \ "",
+                \ "\" edit model",
+                \ "let g:ollama_edit_model = '" . g:ollama_edit_model . "'",
+                \ "\" when disabled, LLM changs are applied directly. Useful when tracking changes via Git.",
+                \ "\"let g:ollama_use_inline_diff = 0",
                 \ "",
                 \ "\" debug settings",
                 \ "\"let g:ollama_debug = 4",

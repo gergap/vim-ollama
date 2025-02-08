@@ -94,7 +94,7 @@ function! s:EditCodeInternal(request, first_line, last_line) abort
     if exists('g:edit_in_progress') && g:edit_in_progress
         return
     endif
-    let l:model_options = substitute(json_encode(g:ollama_chat_options), "\"", "\\\"", "g")
+    let l:model_options = substitute(json_encode(g:ollama_edit_options), "\"", "\\\"", "g")
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
     " Call the python code to edit the code via Ollama.
@@ -111,7 +111,7 @@ log_level = int(vim.eval('l:log_level'))
 # Access global Vim variables
 settings = {
     'url': vim.eval('g:ollama_host'),
-    'model': vim.eval('g:ollama_chat_model'),
+    'model': vim.eval('g:ollama_edit_model'),
     'options': vim.eval('l:model_options')
 }
 CodeEditor.SetLogLevel(log_level)

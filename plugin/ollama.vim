@@ -17,17 +17,16 @@ endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
 endif
+" Tab completion specific settings
+if !exists('g:ollama_debounce_time')
+    let g:ollama_debounce_time = 500
+endif
+if !exists('g:ollama_context_lines')
+    let g:ollama_context_lines = 30
+endif
 if !exists('g:ollama_model')
     " default code completion model
     let g:ollama_model = 'codellama:code'
-endif
-if !exists('g:ollama_chat_model')
-    " default chat model
-    let g:ollama_chat_model = 'llama3'
-endif
-if !exists('g:ollama_chat_systemprompt')
-    " empty means no system prompt, we use th built-in one
-    let g:ollama_chat_systemprompt = ''
 endif
 if !exists('g:ollama_model_options')
     " default model options for code completion
@@ -38,22 +37,41 @@ if !exists('g:ollama_model_options')
                 \ 'num_predict': 128
                 \ }
 endif
+" Chat specific settings
+if !exists('g:ollama_chat_model')
+    " default chat model
+    let g:ollama_chat_model = 'llama3'
+endif
+if !exists('g:ollama_chat_systemprompt')
+    " empty means no system prompt, we use th built-in one
+    let g:ollama_chat_systemprompt = ''
+endif
 if !exists('g:ollama_chat_options')
-    " default model options for chat and code editing tasks
+    " default model options for chats
     " we need more prediction for larger tasks
     let g:ollama_chat_options = {
-                \ 'temperature': 0,
+                \ 'temperature': 0.2,
                 \ 'top_p': 0.95,
                 \ 'num_predict': 4096,
                 \ 'num_ctx': 8192,
                 \ 'keep_alive': 1800,
                 \ }
 endif
-if !exists('g:ollama_debounce_time')
-    let g:ollama_debounce_time = 500
+" Code edit specific settings
+if !exists('g:ollama_edit_model')
+    " default edit model
+    let g:ollama_edit_model = 'qwen2.5-coder:7b'
 endif
-if !exists('g:ollama_context_lines')
-    let g:ollama_context_lines = 30
+if !exists('g:ollama_edit_options')
+    " default model options for code editing tasks
+    " we need more prediction for larger tasks
+    let g:ollama_edit_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 4096,
+                \ 'num_ctx': 8192,
+                \ 'keep_alive': 1800,
+                \ }
 endif
 if !exists('g:ollama_use_inline_diff')
     let g:ollama_use_inline_diff = 1

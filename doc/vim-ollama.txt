@@ -181,30 +181,14 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_host = 'http://your-server:port'
 <
-2. g:ollama_chat_model
-    - Description: Sets the default Ollama model to use for interactive chats.
-      This model is also used for code editing tasks.
-    - Default: 'llama3'
-    - Example:
->
-        let g:ollama_chat_model = 'gpt4-turbo'
-<
-3. g:ollama_chat_systemprompt
-    - Description: Allows overriding the system prompt of the chat model.
-    - Default: ''. If not specified the built-in prompt will be used.
-    - Example:
->
-        let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
-        only code, no explanations.'
-<
-4. g:ollama_model
+2. g:ollama_model
     - Description: Sets the default Ollama model for code completions.
     - Default: 'codellama:code'
     - Example:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
 <
-5. g:ollama_model_options
+3. g:ollama_model_options
     - Description: Sets the default Ollama model options.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
@@ -216,7 +200,7 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ }
 <
 
-6. g:ollama_context_lines
+4. g:ollama_context_lines
     - Description: Sets the number of context lines before and after the
       cursor to be transmitted to the LLM for tab completion.
       When running a LLM locally on CPU (without GPU support), reduce this
@@ -226,7 +210,7 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_context_lines = 10
 <
-7. g:ollama_debounce_time
+5. g:ollama_debounce_time
     - Description: Sets the delay after the last keystroke before triggering
       a new search. Using smaller values give you faster reaction times, but
       create higher load on the system. Small values make only sense on fast
@@ -237,7 +221,51 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_debounce_time = 300
 <
-7. g:ollama_use_inline_diff
+6. g:ollama_chat_model
+    - Description: Sets the default Ollama model to use for interactive chats.
+    - Default: 'llama3'
+    - Example:
+>
+        let g:ollama_chat_model = 'gpt4-turbo'
+<
+7. g:ollama_chat_systemprompt
+    - Description: Allows overriding the system prompt of the chat model.
+    - Default: ''. If not specified the built-in prompt will be used.
+    - Example:
+>
+        let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
+        only code, no explanations.'
+
+8. g:ollama_chat_options
+    - Description: Sets the default Ollama model options for chat models.
+    - Default: '{"temperature": 0, "top_p": 0.95}'
+    - Example:
+>
+        let g:ollama_model_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 256
+                \ }
+<
+9. g:ollama_edit_model
+    - Description: Sets the default Ollama model to use for code editing.
+    - Default: 'qwen2.5-coder:7b'
+    - Example:
+>
+        let g:ollama_chat_model = 'qwen2.5-coder:7b'
+<
+10. g:ollama_edit_options
+    - Description: Sets the default Ollama model options for code edit models.
+    - Default: '{"temperature": 0, "top_p": 0.95}'
+    - Example:
+>
+        let g:ollama_model_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 256
+                \ }
+<
+11. g:ollama_use_inline_diff
     - Description: When true, the `OllamaEdit` changes are applied as inline
       diff which can be accepted or rejected individually in an interactive
       way. When false, the plugin will apply the changes directly without
@@ -249,6 +277,7 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_use_inline_diff = 0
 <
+
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
