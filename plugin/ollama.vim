@@ -112,12 +112,17 @@ function! s:MapTab() abort
     vmap <silent> <leader>r <Plug>(ollama-review)
 endfunction
 
+function! s:Init() abort
+    call ollama#setup#Init()
+    call s:MapTab()
+endfunction
+
 " Create autocommand group
 augroup ollama
     autocmd!
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
     autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
-    autocmd VimEnter              * call s:MapTab()
+    autocmd VimEnter              * call s:Init()
     autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
 augroup END

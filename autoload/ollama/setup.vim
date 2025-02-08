@@ -173,7 +173,7 @@ function! ollama#setup#Setup()
                 " Check range
                 if l:ans > 0 && l:ans <= len(l:models)
                     let g:ollama_model = l:models[l:ans - 1]
-                    echo "Configured '" . g:ollama_model . "' as tab completion model.\n"
+                    echon "Configured '" . g:ollama_model . "' as tab completion model.\n"
                     break
                 endif
             endif
@@ -189,7 +189,7 @@ function! ollama#setup#Setup()
                 " Check range
                 if l:ans > 0 && l:ans <= len(l:models)
                     let g:ollama_chat_model = l:models[l:ans - 1]
-                    echo "Configured '" . g:ollama_chat_model . "' as chat model.\n"
+                    echon "Configured '" . g:ollama_chat_model . "' as chat model.\n"
                     break
                 endif
             endif
