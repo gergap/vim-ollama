@@ -10,7 +10,7 @@ scriptencoding utf-8
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
     " Construct the shell command to call list_models.py with the provided URL
-    let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
+    let l:script_path = printf('%s/python/list_models.py 2>/dev/null', expand('<script>:h:h:h'))
     let l:command = 'python3 ' .. l:script_path .. ' -u ' .. shellescape(a:url)
 
     " Execute the shell command and capture the output
@@ -18,8 +18,8 @@ function! ollama#setup#GetModels(url)
 
     " Check for errors during the execution
     if v:shell_error != 0
-        echom "Error: Failed to fetch models from " . a:url
-        echoerr "Output: " . l:output
+        echom "Error: Failed to fetch models from " . a:url . ". Check if the URL is correct, Ollama is running and try again."
+        "echoerr "Output: " . l:output
         return [ 'error' ]
     endif
 
@@ -131,10 +131,55 @@ function! ollama#setup#PullModel(url, model)
     let s:pull_job = job_start(l:command, l:job_options)
 endfunction
 
+function! ollama#setup#ListModels(models, default)
+    " Display available models to the user
+    echon "Available Models:\n"
+    let l:idx = 1
+    let l:ret = -1
+    for l:model in a:models
+        if l:model == a:default
+            echon "  [" .. l:idx .. "] " .. l:model .. " (default)\n"
+            let l:ret = l:idx
+        else
+            echon "  [" .. l:idx .. "] " .. l:model .. "\n"
+        endif
+        let l:idx += 1
+    endfor
+    echon "\n"
+    " Return index of default model if it exists
+    return l:ret
+endfunction
+
+function! ollama#setup#SelectModel(kind, models, default)
+    " Display model list
+    let l:default_idx = ollama#setup#ListModels(a:models, a:default)
+    " Select model
+    while 1
+        if l:default_idx == -1
+            let l:msg = "Choose " . a:kind . " model: "
+        else
+            let l:msg = "Choose " . a:kind . " model (Press enter for '" . a:default . "'): "
+        endif
+        let l:ans = input(l:msg)
+        echon "\n"
+        " Check if input is a number
+        if l:ans =~ '^\d\+$'
+            let l:ans = str2nr(l:ans)
+            " Check range
+            if l:ans > 0 && l:ans <= len(a:models)
+                return l:ans
+            endif
+        elseif l:ans == "" && l:default_idx != -1
+            return l:default_idx
+        endif
+        echon "error: invalid index\n"
+    endwhile
+endfunction
+
 " Main Setup routine which helps the user to get started
 function! ollama#setup#Setup()
     " setup default local URL
-    let g:ollama_host = "http://localhost:11434"
+    "let g:ollama_host = "http://localhost:11434"
     let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
     if tolower(l:ans) == 'y'
         let g:ollama_host = input("Enter Ollama base URL: ")
@@ -145,67 +190,31 @@ function! ollama#setup#Setup()
     let l:models = ollama#setup#GetModels(g:ollama_host)
 
     " create async tasks
-    let s:setup_tasks = [function('s:PullCompletionModelTask'), function('s:PullChatModelTask'), function('s:FinalizeSetupTask')]
+    let s:setup_tasks = [function('s:PullCompletionModelTask'), function('s:PullEditModelTask'), function('s:PullChatModelTask'), function('s:FinalizeSetupTask')]
     let s:current_task = 2 " start with Finalize if no pulling is required
 
     if !empty(l:models)
-        " There are already Ollama modles available, so we use them
+        " There are already Ollama models available, so we can use them
         if l:models[0] == 'error'
             " loading models failed, abort
             echo "setup aborted due to a Ollama connection error"
             return
         endif
-        " Display available models to the user
-        echon "Available Models:\n"
-        let l:idx = 1
-        for l:model in l:models
-            echon "  [" .. l:idx .. "] " .. l:model .. "\n"
-            let l:idx += 1
-        endfor
-        echon "\n"
-        " Select tab completion model
         while 1
-            let l:ans = input("Choose tab completion model (e.g. 'starcoder2:3b'): ")
+            echon "  [1] Select an existing model\n"
+            echon "  [2] Pull default models for automatic setup\n"
+            let l:ans = input("Your choice: ")
             echon "\n"
             " Check if input is a number
             if l:ans =~ '^\d\+$'
                 let l:ans = str2nr(l:ans)
                 " Check range
-                if l:ans > 0 && l:ans <= len(l:models)
-                    let g:ollama_model = l:models[l:ans - 1]
-                    echon "Configured '" . g:ollama_model . "' as tab completion model.\n"
+                if l:ans == 1
+                    let l:pull_models = 0
                     break
-                endif
-            endif
-            echo "error: invalid index"
-        endwhile
-        " Select chat model
-        while 1
-            let l:ans = input("Choose chat model (e.g. 'llama3'): ")
-            echon "\n"
-            " Check if input is a number
-            if l:ans =~ '^\d\+$'
-                let l:ans = str2nr(l:ans)
-                " Check range
-                if l:ans > 0 && l:ans <= len(l:models)
-                    let g:ollama_chat_model = l:models[l:ans - 1]
-                    echon "Configured '" . g:ollama_chat_model . "' as chat model.\n"
-                    break
-                endif
-            endif
-            echo "error: invalid index"
-        endwhile
-        " Select code edit model
-        while 1
-            let l:ans = input("Choose code edit model (e.g. 'qwen2.5-coder:7b'): ")
-            echon "\n"
-            " Check if input is a number
-            if l:ans =~ '^\d\+$'
-                let l:ans = str2nr(l:ans)
-                " Check range
-                if l:ans > 0 && l:ans <= len(l:models)
-                    let g:ollama_edit_model = l:models[l:ans - 1]
-                    echon "Configured '" . g:ollama_edit_model . "' as code edit model.\n"
+                elseif l:ans == 2
+                    let l:pull_models = 1
+                    let s:current_task = 0
                     break
                 endif
             endif
@@ -213,12 +222,31 @@ function! ollama#setup#Setup()
         endwhile
     else
         let l:ans = input("No models found. Should I load a sane default configuration? (Y/n): ")
+        echon "\n"
         if tolower(l:ans) != 'n'
             let s:current_task = 0
         else
             echo "setup aborted"
             return
         endif
+        let l:pull_models = 1
+    endif
+
+    if l:pull_models == 0
+        " Do not pull, select existing models
+        let l:ans = ollama#setup#SelectModel("tab completion", l:models, "starcoder2:3b")
+        let g:ollama_model = l:models[l:ans - 1]
+        echon "Configured '" . g:ollama_model . "' as tab completion model.\n"
+        echon "------------------------------------------------------------\n"
+
+        let l:ans = ollama#setup#SelectModel("code edit", l:models, "qwen2.5-coder:7b")
+        let g:ollama_edit_model = l:models[l:ans - 1]
+        echon "Configured '" . g:ollama_edit_model . "' as code edit model.\n"
+        echon "------------------------------------------------------------\n"
+
+        let l:ans = ollama#setup#SelectModel("chat", l:models, "llama3.1:8b")
+        let g:ollama_chat_model = l:models[l:ans - 1]
+        echon "Configured '" . g:ollama_chat_model . "' as chat model.\n"
     endif
 
     call s:ExecuteNextSetupTask()
@@ -226,7 +254,7 @@ endfunction
 
 function! s:PullCompletionModelTask()
     " Set the default tab completion model
-    let g:ollama_model = "qwen2.5-coder:1.5b"
+    let g:ollama_model = "starcoder2:3b"
     call ollama#setup#PullModel(g:ollama_host, g:ollama_model)
 endfunction
 
@@ -234,6 +262,12 @@ function! s:PullChatModelTask()
     " Set the default chat model
     let g:ollama_chat_model = "llama3.1:8b"
     call ollama#setup#PullModel(g:ollama_host, g:ollama_chat_model)
+endfunction
+
+function! s:PullEditModelTask()
+    " Set the default code edit model
+    let g:ollama_edit_model = "qwen2.5-coder:7b"
+    call ollama#setup#PullModel(g:ollama_host, g:ollama_edit_model)
 endfunction
 
 " Finalize setup task is called after all setup tasks are completed
