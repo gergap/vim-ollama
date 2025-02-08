@@ -3,14 +3,18 @@
 This plugin adds Copilot-like code completion support to Vim. It uses [Ollama](https://ollama.com) as a backend, which
 can run locally and does not require cloud services, thus preserving your privacy.
 
+<p align="center">
+<img src="screenshots/VimOllama_256x256.png" alt="Vim-Ollama Logo">
+</p>
+
 ## Motivation
 
 [Copilot.vim](https://github.com/github/copilot.vim) by Tim Pope is an excellent plugin for both Vim and NeoVim.
 However, it is limited to Microsoft's Copilot, a commercial cloud-based AI that requires sending all your data to
 Microsoft.
 
-With Ollama and freely available LLMs (e.g., Llama3, Codellama, Deepseek-coder-v2), you can achieve similar results
-without relying on the cloud. While other plugins are available, they typically require NeoVim, which isn't an
+With Ollama and freely available LLMs (e.g., Llama3, Codellama, Deepseek-coder-v2, etc.), you can achieve similar
+results without relying on the cloud. While other plugins are available, they typically require NeoVim, which isn't an
 alternative for me. I prefer using Vim in the terminal and do not want to switch to NeoVim for various reasons.
 
 ## Features
@@ -102,52 +106,35 @@ Plug 'gergap/vim-ollama'
 call plug#end()
 ```
 
+## First Run
+
+Since V0.4, the plugin includes a setup wizard that helps you set up your
+initial configuration. This is especially useful for new users who are not
+familiar with Ollama or the different LLMs available as Open Source.
+
+The plugin will run the wizard automatically if the configuration file
+`~/.vim/config/ollama.vim` does not yet exist. If you want to start the wizard
+again, you can use the command `:Ollama setup` at any time, but be aware that
+it will overwrite the configuration file at the end.
+
+![First Use](screenshots/firstuse.gif)
+
 ## Configuration
 
-By default, the plugin uses Ollama on localhost. You can change this by adding the following variable to your `.vimrc`:
+It is recommended to use the file `~/.vim/config/ollama.vim` for configuring Vim-Ollama,
+but you can also override the settings in `~/.vimrc` as in previous versions.
 
-```vim
-let g:ollama_host = 'http://tux:11434'
-```
-
-Next, configure the LLM models and the corresponding fill-in-the-middle (FIM) tokens. The variable `g:ollama_model`
-defines the LLM for code completion tasks. This must be a model with fill-in-the-middle support; otherwise, code
-completion may not work as expected. The variable `g:ollama_chat_model` is used for interactive conversations, similar
-to ChatGPT.
-
-Example configuration:
-
-```vim
-" Default chat model
-let g:ollama_chat_model = 'llama3'
-
-" Codellama models
-let g:ollama_model = 'codellama:13b-code'
-let g:ollama_model = 'codellama:7b-code'
-let g:ollama_model = 'codellama:code'
-
-" Codegemma (small and fast)
-let g:ollama_model = 'codegemma:2b'
-
-" qwen2.5-coder (0.5b, 1.5b, 3b, 7b, 14b, 32b)
-" smaller is faster, bigger is better"
-" https://ollama.com/library/qwen2.5-coder
-let g:ollama_model = 'qwen2.5-coder:3b'
-
-" Deepseek-coder-v2
-let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
-```
+If you are migrating from previous versions, note that the FIM tokens are not configured anymore in Vim,
+but in the bundled [JSON config files](python/configs). You can simply remove the old settings from your
+`.vimrc`. The plugin should work with the most popular models out-of-the-box.
 
 | Variable              | Default                  | Description                            |
 |-----------------------|--------------------------|----------------------------------------|
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
-| `g:ollama_chat_model` | `llama3`                 | The LLM for interactive conversations. |
-| `g:ollama_model`      | `codellama:code`         | The LLM for code completions.          |
+| `g:ollama_model`      | `qwen2.5-coder:1.5b`     | The LLM for code completions.          |
+| `g:ollama_chat_model` | `llama3.1:8b`            | The LLM for interactive conversations. |
 
-When changing the code completion model, consult the model’s documentation to find the correct FIM tokens.
-
-In the folder `python/configs` you find the configuration of FIM tokens for various models.
-When adding new unsupported models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
+When adding new unsupported code completion models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
 Simply add this missing file and create a merge request to get it included upstream.
 Consult the model's documentation to find out the correct tokens.
 
@@ -155,5 +142,8 @@ Consult the model's documentation to find out the correct tokens.
 
 Simply start coding. The completions will appear as "ghost text" and can be accepted by pressing `<tab>`. To ignore
 them, just continue typing or press `<C-]>` to dismiss the suggestion.
+
+You can also accept just the one line using `<M-Right>` (Alt-Right) or one word
+using `<M-C-Right>` (Alt-Ctrl-Right) if you don't want to use the complete suggestion.
 
 See `:help vim-ollama` for more information.

@@ -1,4 +1,4 @@
-" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2024-09-22
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-01-07
 
 *vim-ollama*
 
@@ -51,6 +51,10 @@ Once installed, you can start using vim-ollama commands within Vim. The plugin
 will display completions automatically as ghost text. Hit the <Tab> key to
 accept the completion suggestion.
 
+You can also visually select parts of your code and use :OllamaEdit or the key
+<C-I> to start editing this code by using a LLM prompt. Is can be useful e.g.
+for adding comments, translating text, refactoring code and much more.
+
 ==============================================================================
 4. Commands                                           *vim-ollama-commands*
 
@@ -58,7 +62,12 @@ The vim-ollama plugin provides the following commands:
 
 1. :Ollama
     - Description: Sends commands to the plugin to change its state.
-    Available commands are `enable`, `disable` and `toggle`.
+    Available commands are:
+      - `setup`: Starts the Vim-Ollama setup wizard.
+      - `config`: Opens the Vim-Ollama default config file.
+      - `enable`: Enables AI tab completions.
+      - `disable`: Disables AI tab completions.
+      - `toggle`: Toggles the enabled state of the plugin.
 
     - Usage:
 >
@@ -106,6 +115,27 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaTask "check spelling of this text"
 <
+6. :OllamaEdit
+    - Description: Allows editing a selected text using the AI. This command
+    works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
+    a visual selection. Alternatively, you can use the mapping `<C-I>` to
+    achieve the same, but the command has the advantage of a command history,
+    which may be handy when you want to apply the same change to multiple
+    locations.
+    - Usage:
+>
+        :OllamaEdit [prompt]
+<
+    - Example:
+>
+        :OllamaEdit "add comments to this code"
+<
+    - Accepting and Rejecting changes: The changes made by the AI are applied
+    as an inline diff. You can accept/reject each individual change or all.
+    The dialog uses Vim's `popup_filter_yesno`, which means you can accept
+    using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
+    works like pressing 'n'. `
+
 ==============================================================================
 5. Maps                                               *vim-ollama-maps*
 
@@ -129,6 +159,16 @@ Other Maps ~
 <C-]>                   Dismiss the current suggestion.
 <Plug>(ollama-dismiss)
 
+<C-I>                   Starts editing the current selection or the whole file
+                        if there is not visual selection.
+<Plug>(ollama-edit)
+
+<C-Y>                   Accept all changes.
+<Plug>(ollama-accept-all-changes)
+
+<C-N>                   Reject all changes.
+<Plug>(ollama-reject-all-changes)
+
 ==============================================================================
 6. Configuration                                      *vim-ollama-config*
 
@@ -141,28 +181,14 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_host = 'http://your-server:port'
 <
-2. g:ollama_chat_model
-    - Description: Sets the default Ollama model to use for interactive chats.
-    - Default: 'llama3'
-    - Example:
->
-        let g:ollama_chat_model = 'gpt4-turbo'
-<
-3. g:ollama_model
+2. g:ollama_model
     - Description: Sets the default Ollama model for code completions.
     - Default: 'codellama:code'
     - Example:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
-
-4. g:ollama_timeout
-    - Description: Sets the timeout value in chat requests.
-    - Default: 10
-    - Example:
->
-        let g:ollama_timeout = 10
 <
-5. g:ollama_model_options
+3. g:ollama_model_options
     - Description: Sets the default Ollama model options.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
@@ -173,6 +199,90 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'num_predict': 256
                 \ }
 <
+4. g:ollama_context_lines
+    - Description: Sets the number of context lines before and after the
+      cursor to be transmitted to the LLM for tab completion.
+      When running a LLM locally on CPU (without GPU support), reduce this
+      value to speed up completion. Small values like 2 already work well,
+      for simple tasks.
+    - Default: 30
+>
+        let g:ollama_context_lines = 10
+<
+5. g:ollama_debounce_time
+    - Description: Sets the delay after the last keystroke before triggering
+      a new search. Using smaller values give you faster reaction times, but
+      create higher load on the system. Small values make only sense on fast
+      GPU based LLMs, where the LLM computation time is not much longer than
+      the debounce time.
+    - Default: 500 ms
+    - Example:
+>
+        let g:ollama_debounce_time = 300
+<
+6. g:ollama_chat_model
+    - Description: Sets the default Ollama model to use for interactive chats.
+    - Default: 'llama3'
+    - Example:
+>
+        let g:ollama_chat_model = 'gpt4-turbo'
+<
+7. g:ollama_chat_systemprompt
+    - Description: Allows overriding the system prompt of the chat model.
+    - Default: ''. If not specified the built-in prompt will be used.
+    - Example:
+>
+        let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
+        only code, no explanations.'
+<
+8. g:ollama_chat_options
+    - Description: Sets the default Ollama model options for chat models.
+    - Default: '{"temperature": 0, "top_p": 0.95}'
+    - Example:
+>
+        let g:ollama_chat_options = {
+                \ 'temperature': 0.2,
+                \ 'top_p': 0.95
+                \ }
+<
+9. g:ollama_chat_timeout
+    - Description: Sets the timeout value in chat requests.
+    - Default: 10
+    - Example:
+>
+        let g:ollama_chat_timeout = 10
+<
+10. g:ollama_edit_model
+    - Description: Sets the default Ollama model to use for code editing.
+    - Default: 'qwen2.5-coder:7b'
+    - Example:
+>
+        let g:ollama_chat_model = 'qwen2.5-coder:7b'
+<
+11. g:ollama_edit_options
+    - Description: Sets the default Ollama model options for code edit models.
+    - Default: '{"temperature": 0, "top_p": 0.95}'
+    - Example:
+>
+        let g:ollama_edit_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 256
+                \ }
+<
+12. g:ollama_use_inline_diff
+    - Description: When true, the `OllamaEdit` changes are applied as inline
+      diff which can be accepted or rejected individually in an interactive
+      way. When false, the plugin will apply the changes directly without
+      asking. This may be useful when tracking the code via Git. Using
+      vim-fugitive's `:GVdiffsplit` command you can compare the changes
+      in vimdiff mode.
+    - Default: 1
+    - Example:
+>
+        let g:ollama_use_inline_diff = 0
+<
+
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
@@ -205,6 +315,12 @@ You can enable logging by specifying the following variables.
     - Example:
 >
         let g:ollama_review_logfile = '/path/to/vim-ollama-review.log'
+
+By default, the Python scripts used underneath use separate log files. The
+variable `g:ollama_debug` is passed to the Python calls to enable also the
+logging mechanism of the according script. However, the default log path
+is `/tmp/logs`, and the log filenames are `complete.log` for tab completions
+and `chat.log` for chat conversations.
 
 ==============================================================================
 8. License                                            *vim-ollama-license*

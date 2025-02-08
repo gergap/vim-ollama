@@ -17,27 +17,64 @@ endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
 endif
+" Tab completion specific settings
+if !exists('g:ollama_debounce_time')
+    let g:ollama_debounce_time = 500
+endif
+if !exists('g:ollama_context_lines')
+    let g:ollama_context_lines = 30
+endif
 if !exists('g:ollama_model')
     " default code completion model
     let g:ollama_model = 'codellama:code'
 endif
+if !exists('g:ollama_model_options')
+    " default model options for code completion
+    " Predict less -> faster response time
+    let g:ollama_model_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 128
+                \ }
+endif
+" Chat specific settings
 if !exists('g:ollama_chat_model')
     " default chat model
     let g:ollama_chat_model = 'llama3'
 endif
-if !exists('g:ollama_model_options')
-    " default model options
-    let g:ollama_model_options = {
-                \ 'temperature': 0,
+if !exists('g:ollama_chat_systemprompt')
+    " empty means no system prompt, we use th built-in one
+    let g:ollama_chat_systemprompt = ''
+endif
+if !exists('g:ollama_chat_options')
+    " default model options for chats
+    " we need more prediction for larger tasks
+    let g:ollama_chat_options = {
+                \ 'temperature': 0.2,
                 \ 'top_p': 0.95
                 \ }
 endif
-if !exists('g:ollama_debounce_time')
-    let g:ollama_debounce_time = 500
+if !exists('g:ollama_chat_timeout')
+    let g:ollama_chat_timeout = 10
 endif
-
-if !exists('g:ollama_timeout')
-    let g:ollama_timeout = 10
+" Code edit specific settings
+if !exists('g:ollama_edit_model')
+    " default edit model
+    let g:ollama_edit_model = 'qwen2.5-coder:7b'
+endif
+if !exists('g:ollama_edit_options')
+    " default model options for code editing tasks
+    " we need more prediction for larger tasks
+    let g:ollama_edit_options = {
+                \ 'temperature': 0,
+                \ 'top_p': 0.95,
+                \ 'num_predict': 4096,
+                \ 'num_ctx': 8192,
+                \ 'keep_alive': 1800,
+                \ }
+endif
+if !exists('g:ollama_use_inline_diff')
+    let g:ollama_use_inline_diff = 1
 endif
 
 " Defines the color scheme for ollama suggestions
@@ -105,6 +142,12 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
+    nnoremap <Plug>(ollama-accept-changes) <Cmd>call ollama#edit#AcceptCurrent()<CR>
+    nnoremap <Plug>(ollama-reject-changes) <Cmd>call ollama#edit#RejectCurrent()<CR>
+    nnoremap <Plug>(ollama-accept-all-changes) <Cmd>call ollama#edit#AcceptAll()<CR>
+    nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
+    nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
+    vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
 
     " Setup default mappings
     imap <silent> <C-]>     <Plug>(ollama-dismiss)
@@ -112,6 +155,17 @@ function! s:MapTab() abort
     imap <silent> <M-Right> <Plug>(ollama-insert-line)
     imap <silent> <M-C-Right> <Plug>(ollama-insert-word)
     vmap <silent> <leader>r <Plug>(ollama-review)
+    nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
+    nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
+    nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
+    nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
+    nmap <silent> <C-I> <Plug>(ollama-edit)
+    vmap <silent> <C-I> <Plug>(ollama-edit)
+endfunction
+
+function! s:Init() abort
+    call ollama#setup#Init()
+    call s:MapTab()
 endfunction
 
 " Create autocommand group
@@ -119,9 +173,19 @@ augroup ollama
     autocmd!
     autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
     autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
-    autocmd VimEnter              * call s:MapTab()
+    autocmd VimEnter              * call s:Init()
     autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
+augroup END
+
+" Set omnifunc for the current file type
+augroup OllamaCompletion
+    autocmd!
+    autocmd FileType vim.ollama setlocal omnifunc=ollama#config#OmniComplete
+    autocmd FileType vim.ollama let b:ollama_enabled=0
+    " trigger completion when : is pressed
+    autocmd FileType vim.ollama inoremap <silent> <buffer> : :<C-X><C-O>
+    autocmd FileType vim.ollama inoremap <silent> <buffer> <expr> ' ollama#config#TriggerModelCompletion()
 augroup END
 
 call s:ColorScheme()
@@ -133,5 +197,35 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
+command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
 command! OllamaChat call ollama#review#Chat()
-command! -nargs=1 Ollama call ollama#Command(<f-args>)
+command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
+
+" Define new signs for diffs
+sign define NewLine text=+ texthl=DiffAdd
+sign define ChangedLine text=~ texthl=DiffChange
+sign define DeletedLine text=- texthl=DiffDelete
+" Define inline diff property types
+highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
+call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
+call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
+call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
+
+function! PluginInit() abort
+    " Add the plugin's python directory to Python's sys.path
+    python3 << EOF
+import sys
+import os
+
+# Adjust the path to point to the plugin's python directory
+plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
+if plugin_python_path not in sys.path:
+    sys.path.append(plugin_python_path)
+
+# Import your CodeEditor module
+import CodeEditor
+import VimHelper
+EOF
+endfunction
+
+call PluginInit()

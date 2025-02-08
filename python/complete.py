@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 # This script uses the generate API endpoint for oneshot code completion.
 import requests
 import sys
@@ -13,7 +15,7 @@ DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 
 # create logger
-log = OllamaLogger('ollama.log')
+log = None
 
 def load_config(modelname):
     # Get the directory where the Python script resides
@@ -99,8 +101,11 @@ if __name__ == "__main__":
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
+    parser.add_argument('-f', '--log-filename', type=str, default="complete.log", help="Specify log filename")
+    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs", help="Specify log file directory")
     args = parser.parse_args()
 
+    log = OllamaLogger(args.log_dir, args.log_filename)
     log.setLevel(args.log_level)
 
     # parse options JSON string

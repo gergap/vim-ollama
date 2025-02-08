@@ -145,6 +145,27 @@ function! s:StartChat(lines) abort
         stopinsert
     endfunc
 
+    let l:model_options = json_encode(g:ollama_model_options)
+    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
+    call ollama#logger#Debug("model_options=".l:model_options)
+
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+
+    let l:script_path = printf('%s/python/chat.py', expand('<script>:h:h:h'))
+    " Create the Python command
+    let l:command = ['python3', l:script_path,
+                \ '-m', g:ollama_chat_model,
+                \ '-u', g:ollama_host,
+                \ '-o', l:model_options,
+                \ '-t', g:ollama_chat_timeout,
+                \ '-l', l:log_level ]
+    " Check if a system prompt was configured
+    if g:ollama_chat_systemprompt != ''
+         " add system prompt option
+        let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
+
     " Redirect job's IO to buffer
     let job_options = {
         \ 'out_cb': function('GotOutput'),
@@ -152,19 +173,8 @@ function! s:StartChat(lines) abort
         \ 'exit_cb': function('JobExit'),
         \ }
 
-    " Convert plugin debug level to python logger levels
-    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
-
-    " Start the Python script as a job
-    let l:command = printf('python3 %s/python/chat.py -m %s -u %s -t %s -l %u',
-                \ expand('<script>:h:h:h'),
-                \ g:ollama_chat_model, 
-                \ g:ollama_host,
-                \ g:ollama_timeout,
-                \ l:log_level)
-
     " Start a shell in the background.
-    let s:job = job_start(l:command, job_options)
+    let s:job = job_start(l:command, l:job_options)
 
     " Create chat buffer
     let l:bufname = 'Ollama Chat'
@@ -181,7 +191,9 @@ function! s:StartChat(lines) abort
         " send lines
         if a:lines isnot v:null
             call append(line("$") - 1, a:lines)
-            call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
+            let l:prompt = join(a:lines, "\n")
+            call ollama#logger#Debug("Sending prompt '".l:prompt."'...")
+            call ch_sendraw(s:job, l:prompt .. "\n")
         endif
         return
     endif
@@ -278,6 +290,37 @@ function! ollama#review#Task(prompt) range
     call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
 endfunction
 
+function! ollama#review#Edit(prompt) range
+    let l:num_lines = a:lastline - a:firstline + 1
+    let l:max_context = 10
+    let l:start = a:firstline - l:max_context
+    if l:start < 1
+        let l:start = 1
+    endif
+    let l:end = a:lastline + l:max_context
+    if l:end > line('$')
+        let l:end = line('$')
+    endif
+    let l:preamble = getline(l:start, a:firstline - 1)
+    let l:lines = getline(a:firstline, a:lastline)
+    let l:postamble = getline(a:lastline + 1, l:end)
+    let l:ft = &filetype !=# '' ? &filetype : 'plaintext'
+
+    " Create prompt with context of code
+    let prompt_lines = ['<|im_start|>user', "```" . l:ft] + l:preamble +
+        \ ['<START EDITING HERE>'] + l:lines + ['<STOP EDITING HERE>'] + l:postamble + ["```",
+        \ "Please rewrite the entire code block above, editing the portion below " .
+        \ "\"<START EDITING HERE>\" in order to satisfy the following request: " .
+        \ a:prompt . ". You should rewrite the entire code block without leaving placeholders," .
+        \ " even if the code is the same as before. When you get to \"<STOP EDITING HERE>\", end your response.",
+        \ "<|im_end|>", "<|im_start|>assistant",
+        \ "Sure! Here's the entire code block, including the rewritten portion:",
+        \ "```" . ft] + l:preamble + ['<START EDITING HERE>']
+
+    call s:StartChat(l:prompt_lines)
+endfunction
+
 function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
+

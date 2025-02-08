@@ -107,7 +107,7 @@ function! ollama#GetSuggestion(timer)
     let s:timer_id = -1
     let l:current_line = line('.')
     let l:current_col = col('.')
-    let l:context_lines = 30
+    let l:context_lines = g:ollama_context_lines
 
     " Get the lines before and after the current line
     let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
@@ -362,7 +362,12 @@ function! ollama#InsertNextWord()
 endfunction
 
 function ollama#IsEnabled() abort
+    " Check if the global setting is enabled
     if exists('g:ollama_enabled') && g:ollama_enabled == 1
+        " Check if the buffer-local variable is set and disables completion
+        if exists('b:ollama_enabled') && b:ollama_enabled == 0
+            return 0
+        endif
         return 1
     else
         return 0
@@ -394,17 +399,24 @@ function ollama#Toggle() abort
     endif
 endfunction
 
-" Provide different commands: enable, disable, help
+" Provide different commands: enable, disable, help, etc.
 function ollama#Command(command) abort
-    if a:command == 'enable'
+    if a:command == 'setup'
+        call ollama#setup#Setup()
+    elseif a:command == 'config'
+        execute ":e ~/.vim/config/ollama.vim"
+    elseif a:command == 'enable'
         call ollama#Enable()
     elseif a:command == 'disable'
         call ollama#Disable()
     elseif a:command == 'toggle'
         call ollama#Toggle()
     else
-        echo "Usage: Ollama <enable|disable|toggle>"
+        echo "Usage: Ollama <setup|config|enable|disable|toggle>"
     endif
 endfunction
 
-
+" Define the available commands for completion
+function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
+    return ['setup', 'config', 'enable', 'disable', 'toggle']
+endfunction
