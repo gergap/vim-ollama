@@ -65,7 +65,7 @@ endfunction
 
 " Function to get variable names starting with g:ollama_
 function! OllamaVariableNames()
-    return [ 'ollama_host', 'ollama_model', 'ollama_chat_model', 'ollama_chat_systemprompt', 'ollama_model_options', 'ollama_chat_options', 'ollama_context_lines', 'ollama_debounce_time', 'ollama_debug', 'ollama_log_file', 'ollama_enabled']
+    return [ 'ollama_host', 'ollama_model', 'ollama_model_options', 'ollama_chat_model', 'ollama_chat_systemprompt', 'ollama_chat_options', 'ollama_edit_model', 'ollama_edit_options', 'ollama_context_lines', 'ollama_debounce_time', 'ollama_debug', 'ollama_log_file', 'ollama_enabled', 'ollama_use_inline_diff' ]
 endfunction
 
 function! ollama#config#OmniComplete(findstart, base)
@@ -75,7 +75,7 @@ function! ollama#config#OmniComplete(findstart, base)
     if a:findstart
         " Find the start position for completion
         " Case 1: Inside quotes for model name completion
-        if line =~# '\v(ollama_model|ollama_chat_model)\s*\=\s*'''
+        if line =~# '\v(ollama_model|ollama_chat_model|ollama_edit_model)\s*\=\s*'''
             let pos = matchstrpos(line, '=\s*''\zs[^'']')[1]
             return pos
 
@@ -89,7 +89,7 @@ function! ollama#config#OmniComplete(findstart, base)
     else
         " Provide completion options
         " Case 1: Completing model names
-        if line =~# '\v(ollama_model|ollama_chat_model)\s*\=\s*'''
+        if line =~# '\v(ollama_model|ollama_chat_model|ollama_edit_model)\s*\=\s*'''
             return OllamaModelNames()
 
         " Case 2: Completing variable names
@@ -104,7 +104,7 @@ endfunction
 
 function ollama#config#TriggerModelCompletion()
     let line = getline('.')
-    if line =~# '\v(ollama_model|ollama_chat_model)\s*\=\s*$'
+    if line =~# '\v(ollama_model|ollama_chat_model|ollama_edit_model)\s*\=\s*$'
         call ollama#config#FetchModels()
         return "'\<C-X>\<C-O>"
     else

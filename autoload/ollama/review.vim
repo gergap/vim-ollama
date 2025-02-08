@@ -289,6 +289,37 @@ function! ollama#review#Task(prompt) range
     call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
 endfunction
 
+function! ollama#review#Edit(prompt) range
+    let l:num_lines = a:lastline - a:firstline + 1
+    let l:max_context = 10
+    let l:start = a:firstline - l:max_context
+    if l:start < 1
+        let l:start = 1
+    endif
+    let l:end = a:lastline + l:max_context
+    if l:end > line('$')
+        let l:end = line('$')
+    endif
+    let l:preamble = getline(l:start, a:firstline - 1)
+    let l:lines = getline(a:firstline, a:lastline)
+    let l:postamble = getline(a:lastline + 1, l:end)
+    let l:ft = &filetype !=# '' ? &filetype : 'plaintext'
+
+    " Create prompt with context of code
+    let prompt_lines = ['<|im_start|>user', "```" . l:ft] + l:preamble +
+        \ ['<START EDITING HERE>'] + l:lines + ['<STOP EDITING HERE>'] + l:postamble + ["```",
+        \ "Please rewrite the entire code block above, editing the portion below " .
+        \ "\"<START EDITING HERE>\" in order to satisfy the following request: " .
+        \ a:prompt . ". You should rewrite the entire code block without leaving placeholders," .
+        \ " even if the code is the same as before. When you get to \"<STOP EDITING HERE>\", end your response.",
+        \ "<|im_end|>", "<|im_start|>assistant",
+        \ "Sure! Here's the entire code block, including the rewritten portion:",
+        \ "```" . ft] + l:preamble + ['<START EDITING HERE>']
+
+    call s:StartChat(l:prompt_lines)
+endfunction
+
 function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
+
