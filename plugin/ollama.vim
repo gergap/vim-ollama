@@ -153,7 +153,6 @@ augroup ollama
     autocmd VimEnter              * call s:Init()
     autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
-    autocmd VimEnter              * call ollama#setup#Init()
 augroup END
 
 " Set omnifunc for the current file type
