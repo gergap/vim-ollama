@@ -7,6 +7,14 @@ endif
 let g:loaded_ollama = 1
 
 if v:version < 800 || !exists('##InsertLeavePre')
+    let g:ollama_enabled = 0
+    echom "warning: your Vim version is too old. Vim-ollama is disabled."
+    finish
+endif
+
+if !has('python3')
+    let g:ollama_enabled = 0
+    echom "warning: your Vim version does not support python3. Vim-ollama is disabled."
     finish
 endif
 
