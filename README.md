@@ -29,9 +29,9 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## Screencasts
 
-### Creating a C application with command line option parsing using AI
+### Demo of Vim-Ollama 1.0
 
-[![Vim-Ollama Demo](screenshots/screenshot1.png)]https://www.youtube.com/watch?v=adakWGm1BDs)
+[![Vim-Ollama Demo](screenshots/vlcsnap-2025-02-09-19h31m08s418.png)](https://www.youtube.com/watch?v=adakWGm1BDs)
 
 ### Creating Enum to String Conversion function using AI
 
