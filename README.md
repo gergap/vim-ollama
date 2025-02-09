@@ -31,7 +31,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ### Creating a C application with command line option parsing using AI
 
-[![AI based code completion](screenshots/screenshot1.png)](https://www.youtube.com/watch?v=zhahVd8ibRM)
+[![Vim-Ollama Demo](screenshots/screenshot1.png)]https://www.youtube.com/watch?v=adakWGm1BDs)
 
 ### Creating Enum to String Conversion function using AI
 
