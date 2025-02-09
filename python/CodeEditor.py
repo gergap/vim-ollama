@@ -12,7 +12,7 @@ from ChatTemplate import ChatTemplate
 from OllamaLogger import OllamaLogger
 
 # create logger
-log = OllamaLogger('edit.log')
+log = None
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
@@ -37,7 +37,14 @@ g_debug_mode = False  # You can turn this on/off as needed
 g_change_index = -1
 g_dialog_callback = None
 
+def CreateLogger():
+    global log
+    log = OllamaLogger('/tmp/logs', 'edit.log')
+    log.setLevel(0)
+
 def SetLogLevel(level):
+    if log == None:
+        CreateLogger()
     log.setLevel(level)
 
 # Debug prints for development. This output is shown as Vim message.
@@ -485,11 +492,14 @@ def vim_edit_code(request, firstline, lastline, settings):
         g_result = result
 
 def start_vim_edit_code(request, firstline, lastline, settings):
+    global log
     global g_editing_thread
     global g_result
     global g_start_line
     global g_end_line
 
+    if log == None:
+        CreateLogger()
     log.debug(f'*** vim_edit_code: request={request}')
 
     g_result = 'InProgress'
