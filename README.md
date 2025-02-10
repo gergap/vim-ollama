@@ -23,7 +23,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 - Integrated chat support for code reviews and other interactions
 - Automatic code editing based in human description (NEW in V1.0)
   - Supports inline-diff view for accepting changes interactively
-  - Or accept without prompt for a Git based workflow using Vim fugutive (:Gvdiffsplit)
+  - Or accept without prompt for a Git based workflow using [vim-fugitive](https://github.com/tpope/vim-fugitive)
+    (e.g. using `:Gvdiffsplit`)
 
 ![Demo](screenshots/game.gif)
 
