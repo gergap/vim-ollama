@@ -12,6 +12,12 @@ if v:version < 800 || !exists('##InsertLeavePre')
     finish
 endif
 
+if has('nvim')
+    let g:ollama_enabled = 0
+    echom "warning: This plugin does not support NeoVim. Vim-ollama is disabled."
+    finish
+endif
+
 if !has('python3')
     let g:ollama_enabled = 0
     echom "warning: your Vim version does not support python3. Vim-ollama is disabled."
