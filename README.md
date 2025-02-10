@@ -130,9 +130,13 @@ it will overwrite the configuration file at the end.
 It is recommended to use the file `~/.vim/config/ollama.vim` for configuring Vim-Ollama,
 but you can also override the settings in `~/.vimrc` as in previous versions.
 
+Use the command `:Ollama config` to open the Vim-Ollama configuration file.
+
 If you are migrating from previous versions, note that the FIM tokens are not configured anymore in Vim,
 but in the bundled [JSON config files](python/configs). You can simply remove the old settings from your
 `.vimrc`. The plugin should work with the most popular models out-of-the-box.
+
+The most important variables: (see `:help vim-ollama` for more information)
 
 | Variable              | Default                  | Description                            |
 |-----------------------|--------------------------|----------------------------------------|
