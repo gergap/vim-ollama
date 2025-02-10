@@ -21,7 +21,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 - Intelligent AI-based code completion (aka tab completion)
 - Integrated chat support for code reviews and other interactions
-- Automatic code editing based in human description (NEW in V1.0)
+- Automatic code editing based on natural language (NEW in V1.0)
   - Supports inline-diff view for accepting changes interactively
   - Or accept without prompt for a Git based workflow using [vim-fugitive](https://github.com/tpope/vim-fugitive)
     (e.g. using `:Gvdiffsplit`)
@@ -52,7 +52,8 @@ The plugin uses Python scripts, e.g. `complete.py` and `chat.py`, to communicate
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
-This plugin supports Vim only, not NeoVim. If you're looking for a NeoVim plugin, check out
+[!NOTE]
+This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
 [LLM](https://github.com/huggingface/llm.nvim).
 
 ## Requirements
