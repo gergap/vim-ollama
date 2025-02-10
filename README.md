@@ -59,14 +59,14 @@ This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin
 ## Requirements
 
 - Python 3.x
-- Python package: `httpx>=0.23.3`, `requests`
+- Python package: `httpx>=0.23.3`, `requests`, `jinja2`
 
 ### Debian-based Systems
 
 If you're using a Debian-based distribution, you can install the required library directly:
 
 ```sh
-sudo apt install python3-httpx
+sudo apt install python3-httpx python3-jinja2
 ```
 
 ### Other systems
@@ -82,6 +82,7 @@ python -m venv $HOME/vim-ollama
 source $HOME/vim-ollama/bin/activate
 pip install httpx>=0.23.3
 pip install requests
+pip install jinja2
 ```
 
 Testing: You can test the python script on the shell to verify that it is working and all requirements are found.
