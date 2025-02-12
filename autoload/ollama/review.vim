@@ -3,24 +3,9 @@
 let s:job = v:null
 let s:buf = -1
 
-" Map a key to send user input to the chatbot
-nnoremap <buffer> <silent> <Enter> :call <sid>SendInputToChatBot()<CR>
-
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() . '-ollama-review.log'
 endif
-
-" Define a function to send user input to the chatbot
-function! s:SendInputToChatBot()
-    " Get the user input
-    let user_input = input(">>> ")
-
-    " Append the user's input to the buffer
-    call append(line('$'), user_input)
-
-    " Send the input to the chatbot
-    call ch_sendraw(b:chatbot_channel, user_input . "\n")
-endfunction
 
 func! ollama#review#KillChatBot()
     call ollama#logger#Debug("KillChatBot")
