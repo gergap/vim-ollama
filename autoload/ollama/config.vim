@@ -7,6 +7,26 @@ let s:model_list = ['starcoder2:3b', 'qwen2.5-coder:7b', 'codellama:code', 'llam
 let s:new_models = []
 let s:fetched = 0
 
+" Help text for balloon expression
+let s:help_text = {
+\ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
+\ 'ollama_model': 'Default model for <tab> completions.',
+\ 'ollama_model_options': 'Options for model customization.',
+\ 'ollama_context_lines': 'Number of context lines to consider (default=10).',
+\ 'ollama_debounce_time': 'Debounce time for completions in [ms] (default=500).',
+\ 'ollama_chat_model': 'Model used for chat interactions.',
+\ 'ollama_chat_systemprompt': 'System prompt for chat context.',
+\ 'ollama_chat_options': 'Chat model customization options.',
+\ 'ollama_chat_timeout': 'Timeout for chat responses in seconds (default=10).',
+\ 'ollama_edit_model': 'Model used for text editing.',
+\ 'ollama_edit_options': 'Options for edit model.',
+\ 'ollama_use_inline_diff': 'Use inline diff for edits (default=1).',
+\ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
+\ 'ollama_logfile': 'Logfile path for debugging.',
+\ 'ollama_review_logfile': 'Review-specific logfile path.',
+\ 'ollama_enabled': 'Enable or disable Ollama integration.'
+\ }
+
 " Retrieves the list of installed Ollama models asynchronously
 function! ollama#config#FetchModels() abort
     if (s:fetched)
@@ -127,6 +147,27 @@ function ollama#config#TriggerModelCompletion()
         return "'\<C-X>\<C-O>"
     else
         return "'"
+    endif
+endfunction
+
+function! ollama#config#SetupHelp() abort
+    " Check if balloon evaluation is supported
+    if has('balloon_eval')
+        setlocal balloonexpr=ollama#config#ShowHelp()
+        setlocal ballooneval
+        setlocal balloonevalterm
+    endif
+endfunction
+
+function! ollama#config#ShowHelp() abort
+    " Get the word under the mouse cursor if available, otherwise use the cursor position
+    let l:word = (exists('v:beval_text') && !empty(v:beval_text)) ? v:beval_text : expand('<cword>')
+
+    " Check if it's a relevant config variable
+    if has_key(s:help_text, l:word)
+        return s:help_text[l:word]
+    else
+        return ''
     endif
 endfunction
 

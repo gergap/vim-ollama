@@ -196,6 +196,7 @@ augroup END
 augroup OllamaCompletion
     autocmd!
     autocmd FileType vim.ollama setlocal omnifunc=ollama#config#OmniComplete
+    autocmd FileType vim.ollama call ollama#config#SetupHelp()
     autocmd FileType vim.ollama let b:ollama_enabled=0
     " trigger completion when : is pressed
     autocmd FileType vim.ollama inoremap <silent> <buffer> : :<C-X><C-O>
