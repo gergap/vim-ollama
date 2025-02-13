@@ -28,6 +28,9 @@ endif
 if !exists('g:ollama_enabled')
     let g:ollama_enabled = 1
 endif
+if !exists('g:ollama_no_maps')
+    let g:ollama_no_maps = 0
+endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
 endif
@@ -163,18 +166,22 @@ function! s:MapTab() abort
     nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
 
-    " Setup default mappings
-    imap <silent> <C-]>     <Plug>(ollama-dismiss)
+    " Tab is always mapped, because we have a fallback to the original mapping
     imap <silent> <Tab>     <Plug>(ollama-tab-completion)
-    imap <silent> <M-Right> <Plug>(ollama-insert-line)
-    imap <silent> <M-C-Right> <Plug>(ollama-insert-word)
-    vmap <silent> <leader>r <Plug>(ollama-review)
-    nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
-    nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
-    nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
-    nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
-    nmap <silent> <C-I> <Plug>(ollama-edit)
-    vmap <silent> <C-I> <Plug>(ollama-edit)
+
+    if g:ollama_no_maps != 1
+        " Setup default mappings
+        imap <silent> <C-]>     <Plug>(ollama-dismiss)
+        imap <silent> <M-Right> <Plug>(ollama-insert-line)
+        imap <silent> <M-C-Right> <Plug>(ollama-insert-word)
+        vmap <silent> <leader>r <Plug>(ollama-review)
+        nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
+        nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
+        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
+        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
+        nmap <silent> <C-I> <Plug>(ollama-edit)
+        vmap <silent> <C-I> <Plug>(ollama-edit)
+    endif
 endfunction
 
 function! s:Init() abort
