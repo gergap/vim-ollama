@@ -230,7 +230,7 @@ function! PluginInit() abort
             imap <M-Right> <Plug>(ollama-insert-line)
         endif
         if empty(mapcheck('<M-C-Right', 'i'))
-            imap <M-Right> <Plug>(ollama-insert-word)
+            imap <M-C-Right> <Plug>(ollama-insert-word)
         endif
         if empty(mapcheck('<leader>r', 'v'))
             vmap <leader>r <Plug>(ollama-review)
