@@ -226,10 +226,10 @@ function! PluginInit() abort
         if empty(mapcheck('<C-]>', 'i'))
             imap <C-]> <Plug>(ollama-dismiss)
         endif
-        if empty(mapcheck('<M-Right', 'i'))
+        if empty(mapcheck('<M-Right>', 'i'))
             imap <M-Right> <Plug>(ollama-insert-line)
         endif
-        if empty(mapcheck('<M-C-Right', 'i'))
+        if empty(mapcheck('<M-C-Right>', 'i'))
             imap <M-C-Right> <Plug>(ollama-insert-word)
         endif
         if empty(mapcheck('<leader>r', 'v'))
