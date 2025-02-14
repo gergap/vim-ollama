@@ -24,6 +24,7 @@ let s:help_text = {
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
 \ 'ollama_logfile': 'Logfile path for debugging.',
 \ 'ollama_review_logfile': 'Review-specific logfile path.',
+\ 'ollama_no_maps': 'Disable default mappings for Ollama plugs (default=0).',
 \ 'ollama_enabled': 'Enable or disable Ollama integration.'
 \ }
 
@@ -85,25 +86,7 @@ endfunction
 
 " Function to get variable names starting with g:ollama_
 function! OllamaVariableNames()
-    let var_names = [
-                \ 'ollama_host',
-                \ 'ollama_model',
-                \ 'ollama_model_options',
-                \ 'ollama_context_lines',
-                \ 'ollama_debounce_time',
-                \ 'ollama_chat_model',
-                \ 'ollama_chat_systemprompt',
-                \ 'ollama_chat_options',
-                \ 'ollama_chat_timeout',
-                \ 'ollama_edit_model',
-                \ 'ollama_edit_options',
-                \ 'ollama_use_inline_diff'
-                \ 'ollama_debug',
-                \ 'ollama_logfile',
-                \ 'ollama_review_logfile',
-                \ 'ollama_enabled',
-                \ ]
-    return var_names
+    return keys(s:help_text)
 endfunction
 
 function! ollama#config#OmniComplete(findstart, base)

@@ -282,6 +282,15 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_use_inline_diff = 0
 <
+13. g:ollama_no_maps
+    - Description: Disables all default mappings except for `<tab>` which has
+      a built-in fallback mechanism. This can be useful to avoid conflicts
+      with other plugins and to define your own mappings for vim-ollama.
+    - Default: 0
+    - Example:
+>
+        let g:ollama_no_maps = 1
+<
 
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*

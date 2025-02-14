@@ -28,6 +28,9 @@ endif
 if !exists('g:ollama_enabled')
     let g:ollama_enabled = 1
 endif
+if !exists('g:ollama_no_maps')
+    let g:ollama_no_maps = 0
+endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
 endif
@@ -163,18 +166,9 @@ function! s:MapTab() abort
     nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
 
-    " Setup default mappings
-    imap <silent> <C-]>     <Plug>(ollama-dismiss)
+    " Tab is always mapped, because we have a fallback to the original mapping
     imap <silent> <Tab>     <Plug>(ollama-tab-completion)
-    imap <silent> <M-Right> <Plug>(ollama-insert-line)
-    imap <silent> <M-C-Right> <Plug>(ollama-insert-word)
-    vmap <silent> <leader>r <Plug>(ollama-review)
-    nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
-    nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
-    nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
-    nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
-    nmap <silent> <C-I> <Plug>(ollama-edit)
-    vmap <silent> <C-I> <Plug>(ollama-edit)
+
 endfunction
 
 function! s:Init() abort
@@ -227,6 +221,34 @@ call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
 function! PluginInit() abort
+    if g:ollama_no_maps != 1
+        " Setup default mappings
+        if empty(mapcheck('<C-]>', 'i'))
+            imap <C-]> <Plug>(ollama-dismiss)
+        endif
+        if empty(mapcheck('<M-Right', 'i'))
+            imap <M-Right> <Plug>(ollama-insert-line)
+        endif
+        if empty(mapcheck('<M-C-Right', 'i'))
+            imap <M-Right> <Plug>(ollama-insert-word)
+        endif
+        if empty(mapcheck('<leader>r', 'v'))
+            vmap <leader>r <Plug>(ollama-review)
+        endif
+        if empty(mapcheck('<C-I>', 'n'))
+            nmap <C-I> <Plug>(ollama-edit)
+        endif
+        if empty(mapcheck('<C-I>', 'v'))
+            vmap <C-I> <Plug>(ollama-edit)
+        endif
+
+"       These mappings are currently not used
+"        nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
+"        nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
+"        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
+"        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
+    endif
+
     " Add the plugin's python directory to Python's sys.path
     python3 << EOF
 import sys
