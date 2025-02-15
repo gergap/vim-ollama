@@ -130,7 +130,7 @@ function! s:StartChat(lines) abort
         stopinsert
     endfunc
 
-    let l:model_options = json_encode(g:ollama_model_options)
+    let l:model_options = json_encode(g:ollama_chat_options)
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
     call ollama#logger#Debug("model_options=".l:model_options)
 
