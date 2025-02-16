@@ -69,6 +69,68 @@ If you're using a Debian-based distribution, you can install the required librar
 sudo apt install python3-httpx python3-jinja2
 ```
 
+### macOS
+
+In latest vim (version 9.x), make sure the vim is enabled with python3.
+
+```sh
+vim --version | grep python3
+```
+
+Make sure following exists:
+
+```
++python3
+```
+
+Since this plugin use the embedded python3 environment built with vim while vim
+does not respect the venv settings, here is the steps to install:
+
+Find the correct python versions by inputting in vim
+
+```
+:python3 import sys; print(sys.path)
+```
+
+It shows something like this:
+
+```
+['/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python313.zip'
+```
+
+Make sure the python3 could run: (In your environment the version could be different):
+
+```sh
+#  > /opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/bin/python3
+Python 3.13.2 (main, Feb  4 2025, 14:51:09) [Clang 16.0.0 (clang-1600.0.26.6)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>>
+```
+
+Now create a venv, the directory name `~/vim-python` could be different:
+
+
+```
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/bin/python3 -m venv ~/vim-python
+```
+
+Install the required packages in the created virtual environment:
+
+```
+source ~/vim-python/bin/activate
+pip install httpx
+pip install socksio
+pip install jinja2
+```
+
+Add the site-packahes path in ~/.vimrc:
+
+```
+let g:ollama_venv_site_packages='/path/to/vim-python/lib/python3.13/site-packages'
+```
+
+launch vim in regular way (without activate the virtual environment).
+
 ### Other systems
 
 System wide installation using `pip install` is not recommended,
@@ -144,6 +206,7 @@ The most important variables: (see `:help vim-ollama` for more information)
 | `g:ollama_model`      | `starcoder2:3b`          | The LLM for code completions.          |
 | `g:ollama_edit_model` | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
 | `g:ollama_chat_model` | `llama3.1:8b`            | The LLM for chat conversations.        |
+| `g:ollama_venv_site_packages` | ``               | The virtual venv site packages path    |
 
 When adding new unsupported code completion models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
 Simply add this missing file and create a merge request to get it included upstream.

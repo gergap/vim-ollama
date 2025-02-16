@@ -6,6 +6,10 @@ if exists('g:loaded_ollama')
 endif
 let g:loaded_ollama = 1
 
+if !exists('g:ollama_venv_site_packages')
+    let g:ollama_venv_site_packages = ''
+endif
+
 if v:version < 800 || !exists('##InsertLeavePre')
     let g:ollama_enabled = 0
     echom "warning: your Vim version is too old. Vim-ollama is disabled."
@@ -258,6 +262,11 @@ import os
 plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
 if plugin_python_path not in sys.path:
     sys.path.append(plugin_python_path)
+
+venv_site_packages = vim.eval('g:ollama_venv_site_packages')
+if venv_site_packages:
+    sys.path.append(venv_site_packages)
+# print(sys.path) to debug
 
 # Import your CodeEditor module
 import CodeEditor
