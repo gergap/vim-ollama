@@ -151,15 +151,6 @@ endfunction
 
 " Map <Tab> to insert suggestion
 function! s:MapTab() abort
-    " Save the existing <Tab> mapping in insert mode
-    if !exists('g:ollama_original_tab_mapping') || empty(g:ollama_original_tab_mapping)
-        call ollama#logger#Info("Mapping <tab> to vim-ollama")
-        let g:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
-        call ollama#logger#Info("Original Mapping: " . string(g:ollama_original_tab_mapping))
-    else
-        call ollama#logger#Info("Not mapping <tab> to vim-ollama, because mapping already exists")
-    endif
-
     " Create plugs
     inoremap <Plug>(ollama-trigger-completion) <Cmd>call ollama#TriggerCompletion()<CR>
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
@@ -175,9 +166,21 @@ function! s:MapTab() abort
     nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
 
-    " Tab is always mapped, because we have a fallback to the original mapping
-    imap <silent> <Tab>     <Plug>(ollama-tab-completion)
+    if !exists('g:ollama_no_tab_map')
+        " Save the existing <Tab> mapping in insert mode
+        if !exists('g:ollama_original_tab_mapping') || empty(g:ollama_original_tab_mapping)
+            call ollama#logger#Info("Mapping <tab> to vim-ollama")
+            let g:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
+            call ollama#logger#Info("Original Mapping: " . string(g:ollama_original_tab_mapping))
+        else
+            call ollama#logger#Info("Not mapping <tab> to vim-ollama, because mapping already exists")
+        endif
 
+        " Always map tab key, unless the user insists on not using <tab> for AI completion.
+        " The plugin has a fallback to the original <tab> mapping if no AI
+        " completion is available.
+        imap <silent> <Tab> <Plug>(ollama-tab-completion)
+    endif
 endfunction
 
 function! s:Init() abort

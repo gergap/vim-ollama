@@ -312,7 +312,18 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_no_maps = 1
 <
-14. g:ollama_use_venv
+14. g:ollama_no_tab_map
+    - Description: If this variable is defined, the default <tab> mapping
+      will not be created.
+    - Default: undefined
+    - Example:
+>
+        let g:ollama_no_tab_map = v:true
+        inoremap ,a <Plug>(ollama-tab-completion)
+        inoremap ,w <Plug>(ollama-insert-word)
+        inoremap ,l <Plug>(ollama-insert-line)
+<
+15. g:ollama_use_venv
     - Description: Enables the usage of python virtual environments for
       executing the required python scripts. If enabled it will install
       the required packages automatically in this vim-ollama specific

@@ -166,4 +166,6 @@ them, just continue typing or press `<C-]>` to dismiss the suggestion.
 You can also accept just the one line using `<M-Right>` (Alt-Right) or one word
 using `<M-C-Right>` (Alt-Ctrl-Right) if you don't want to use the complete suggestion.
 
+To disable the default mappings use `:Ollama config` and change `g:ollama_no_maps` and/or `g:ollama_no_tab_map`.
+
 See `:help vim-ollama` for more information.
