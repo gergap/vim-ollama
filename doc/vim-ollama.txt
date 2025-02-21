@@ -292,6 +292,16 @@ You can configure vim-ollama using the following variables in your .vimrc:
         let g:ollama_no_maps = 1
 <
 
+13. g:ollama_unmap_tab
+    - Description: Variable, which if set to anything, will unmap tab as the
+      suggestion insertion key.
+    - Default: undefined
+    - Example:
+>
+        let g:ollama_unmap_tab = v:true
+        inoremap ,- <Plug>(ollama-insert-word)
+        inoremap ,c <Plug>(ollama-insert-line)
+
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 

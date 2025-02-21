@@ -109,10 +109,12 @@ function! s:HandleTabCompletion() abort
         " ignore tab in chat buffer
         return "\<Tab>"
     endif
-    let suggestion = ollama#InsertSuggestion()
-    if suggestion != '\t'
-        " AI suggestion was inserted
-        return ''
+    if !exists('g:ollama_unmap_tab')
+      let suggestion = ollama#InsertSuggestion()
+      if suggestion != '\t' 
+          " AI suggestion was inserted
+          return ''
+      endif
     endif
     call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
 
