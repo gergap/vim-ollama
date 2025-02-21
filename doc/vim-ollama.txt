@@ -210,11 +210,11 @@ You can configure vim-ollama using the following variables in your .vimrc:
         let g:ollama_context_lines = 10
 <
 5. g:ollama_debounce_time
-    - Description: Sets the delay after the last keystroke before triggering
-      a new search. Using smaller values give you faster reaction times, but
-      create higher load on the system. Small values make only sense on fast
-      GPU based LLMs, where the LLM computation time is not much longer than
-      the debounce time.
+    - Description: Sets the delay after the last keystroke before triggering a
+      new search. Using smaller values give you faster reaction times, but
+      creates a higher load on the system. Smaller values only make sense on
+      faster GPU based LLMs where computation time is not much longer than the
+      debounce time.
     - Default: 500 ms
     - Example:
 >
@@ -228,8 +228,9 @@ You can configure vim-ollama using the following variables in your .vimrc:
         let g:ollama_chat_model = 'gpt4-turbo'
 <
 7. g:ollama_chat_systemprompt
-    - Description: Allows overriding the system prompt of the chat model.
-    - Default: ''. If not specified the built-in prompt will be used.
+    - Description: Allows overriding the system prompt of the chat model. If
+      not specified the models default system prompt will be used.
+    - Default: ''
     - Example:
 >
         let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
