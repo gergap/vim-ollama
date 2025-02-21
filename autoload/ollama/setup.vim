@@ -191,7 +191,7 @@ function! ollama#setup#Setup()
 
     " create async tasks
     let s:setup_tasks = [function('s:PullCompletionModelTask'), function('s:PullEditModelTask'), function('s:PullChatModelTask'), function('s:FinalizeSetupTask')]
-    let s:current_task = 2 " start with Finalize if no pulling is required
+    let s:current_task = 3 " start with Finalize if no pulling is required
 
     if !empty(l:models)
         " There are already Ollama models available, so we can use them
