@@ -52,7 +52,7 @@ will display completions automatically as ghost text. Hit the <Tab> key to
 accept the completion suggestion.
 
 You can also visually select parts of your code and use :OllamaEdit or the key
-<C-I> to start editing this code by using a LLM prompt. Is can be useful e.g.
+`<leader>e` to start editing this code by using a LLM prompt. Is can be useful e.g.
 for adding comments, translating text, refactoring code and much more.
 
 ==============================================================================
@@ -118,7 +118,7 @@ The vim-ollama plugin provides the following commands:
 6. :OllamaEdit
     - Description: Allows editing a selected text using the AI. This command
     works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
-    a visual selection. Alternatively, you can use the mapping `<C-I>` to
+    a visual selection. Alternatively, you can use the mapping `<leader>e` to
     achieve the same, but the command has the advantage of a command history,
     which may be handy when you want to apply the same change to multiple
     locations.
@@ -159,7 +159,7 @@ Other Maps ~
 <C-]>                   Dismiss the current suggestion.
 <Plug>(ollama-dismiss)
 
-<C-I>                   Starts editing the current selection or the whole file
+<leader>e               Starts editing the current selection or the whole file
                         if there is not visual selection.
 <Plug>(ollama-edit)
 

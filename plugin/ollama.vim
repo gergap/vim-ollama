@@ -235,11 +235,11 @@ function! PluginInit() abort
         if empty(mapcheck('<leader>r', 'v'))
             vmap <leader>r <Plug>(ollama-review)
         endif
-        if empty(mapcheck('<C-I>', 'n'))
-            nmap <C-I> <Plug>(ollama-edit)
+        if empty(mapcheck('<leader>e', 'n'))
+            nmap <leader>e <Plug>(ollama-edit)
         endif
-        if empty(mapcheck('<C-I>', 'v'))
-            vmap <C-I> <Plug>(ollama-edit)
+        if empty(mapcheck('<leader>e', 'v'))
+            vmap <leader>e <Plug>(ollama-edit)
         endif
 
 "       These mappings are currently not used
