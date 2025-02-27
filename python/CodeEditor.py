@@ -459,12 +459,12 @@ def vim_edit_code(request, firstline, lastline, settings):
         code_lines      = buffer[start:end + 1]
         postamble_lines = buffer[end + 1:postamble_end]
 
-        # Join arryas to strings
+        # Join arrays to strings
         preamble  = "\n".join(preamble_lines)
         code      = "\n".join(code_lines)
         postamble = "\n".join(postamble_lines)
 
-        log.debug('preample: ' + preamble)
+        log.debug('preamble: ' + preamble)
         log.debug('code: ' + code)
         log.debug('postamble: ' + postamble)
 
@@ -474,7 +474,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         # Produce diff
         diff = compute_diff(code_lines, new_code_lines)
 
-        # Finish operartion
+        # Finish operation
         result = 'Done'
     except Exception as e:
         log.error(f"Error in vim_edit_code: {e}")
@@ -654,8 +654,8 @@ def RejectChange(index):
     log.debug("RejectChange")
     group = g_groups[g_change_index]
     log.debug(group)
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
+    start_line = group.get('start_line', 1) - g_restored_lines
+    end_line = group.get('end_line', 1) - g_restored_lines
     buf = vim.current.buffer
 
     # remove any abovetext
@@ -672,13 +672,15 @@ def RejectChange(index):
             content = line[2:]
             # restore deleted line
             log.debug(f"restore line {lineno}")
-            VimHelper.InsertLine(lineno, content)
+            VimHelper.InsertLine(lineno+1, content)
             lineno += 1
             g_restored_lines += 1
         elif (line.startswith('+ ')):
             # remove added line
             log.debug(f"delete line {lineno}")
-            VimHelper.DeleteLine(lineno)
+            VimHelper.DeleteLine(start_line)
+            g_restored_lines += 1
+            lineno += 1
     log.debug(f"restored_lines={g_restored_lines}")
 
 
