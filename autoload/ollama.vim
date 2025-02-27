@@ -36,7 +36,7 @@ if s:has_vim_ghost_text
         call prop_type_add(s:annot_hlgroup, {'highlight': s:annot_hlgroup})
     endif
 else
-    echom "warning: your Vim version does not support ghost text (textprop)"
+    echom "warning: Vim " . s:vim_minimum_version . " or newer is required to support ghost text (textprop)"
 endif
 
 function! ollama#Schedule()
