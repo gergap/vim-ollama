@@ -311,7 +311,8 @@ def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
             { "role": "user", "content":
 f"""```{ft}
 {preamble}
-<START_EDIT_HERE>{code}<STOP_EDIT_HERE>
+<START_EDIT_HERE>{code}
+<STOP_EDIT_HERE>
 {postamble}
 ```
 Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified text.
