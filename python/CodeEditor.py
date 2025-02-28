@@ -459,12 +459,12 @@ def vim_edit_code(request, firstline, lastline, settings):
         code_lines      = buffer[start:end + 1]
         postamble_lines = buffer[end + 1:postamble_end]
 
-        # Join arryas to strings
+        # Join arrays to strings
         preamble  = "\n".join(preamble_lines)
         code      = "\n".join(code_lines)
         postamble = "\n".join(postamble_lines)
 
-        log.debug('preample: ' + preamble)
+        log.debug('preamble: ' + preamble)
         log.debug('code: ' + code)
         log.debug('postamble: ' + postamble)
 
@@ -474,7 +474,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         # Produce diff
         diff = compute_diff(code_lines, new_code_lines)
 
-        # Finish operartion
+        # Finish operation
         result = 'Done'
     except Exception as e:
         log.error(f"Error in vim_edit_code: {e}")
@@ -626,12 +626,17 @@ def NextChange():
 def AcceptChange(index):
     global g_change_index, g_groups
     global g_restored_lines
+
+    # sanity check
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring AcceptChange.")
         return
+
     log.debug("AcceptChange")
+    # get current change
     group = g_groups[g_change_index]
     log.debug(group)
+    # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
     end_line = group.get('end_line', 1) + g_restored_lines
     buf = vim.current.buffer
@@ -648,12 +653,17 @@ def AcceptChange(index):
 def RejectChange(index):
     global g_change_index, g_groups
     global g_restored_lines
+
+    # sanity check
     if not g_groups or g_change_index is None:
         print("No groups or invalid index, ignoring RejectChange.")
         return
+
     log.debug("RejectChange")
+    # get current change
     group = g_groups[g_change_index]
     log.debug(group)
+    # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
     end_line = group.get('end_line', 1) + g_restored_lines
     buf = vim.current.buffer
