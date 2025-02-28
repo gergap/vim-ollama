@@ -49,7 +49,7 @@ if !exists('g:ollama_model_options')
     " default model options for code completion
     " Predict less -> faster response time
     let g:ollama_model_options = {
-                \ 'temperature': 0,
+                \ 'temperature': 0.2,
                 \ 'top_p': 0.95,
                 \ 'num_predict': 128
                 \ }
@@ -155,6 +155,7 @@ function! s:MapTab() abort
     " Create plugs
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
+    inoremap <Plug>(ollama-next-completion) <Cmd>call ollama#NextCompletion()<CR>
     inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
@@ -225,6 +226,9 @@ function! PluginInit() abort
         " Setup default mappings
         if empty(mapcheck('<C-]>', 'i'))
             imap <C-]> <Plug>(ollama-dismiss)
+        endif
+        if empty(mapcheck('<M-Down>', 'i'))
+            imap <M-Down> <Plug>(ollama-next-completion)
         endif
         if empty(mapcheck('<M-Right>', 'i'))
             imap <M-Right> <Plug>(ollama-insert-line)

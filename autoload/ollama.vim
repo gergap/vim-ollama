@@ -16,6 +16,8 @@ let s:kill_job = v:null
 let s:prompt = ''
 " current suggestions
 let s:suggestion = ''
+" seed for cycling through different solutions
+let s:seed = 1
 " text property id for ghost text
 let s:prop_id = -1
 " suppress internally trigger reschedules due to inserts
@@ -39,6 +41,22 @@ else
     echom "warning: Vim " . s:vim_minimum_version . " or newer is required to support ghost text (textprop)"
 endif
 
+" Triggers a fresh completion
+function! ollama#TriggerCompletion(timer)
+    call ollama#logger#Debug("TriggerCompletion...")
+    let s:seed = 1
+    call ollama#GetSuggestion()
+endfunction
+
+" Get the next completion with a new seed value
+function! ollama#NextCompletion()
+    call ollama#logger#Debug("NextCompletion...")
+    let s:seed = s:seed + 1
+    call ollama#GetSuggestion()
+endfunction
+
+" This function schedule a completion after a debounce wait time
+" to avoid starting and canceling completions all the time while typing.
 function! ollama#Schedule()
     if !ollama#IsEnabled()
         return
@@ -54,10 +72,13 @@ function! ollama#Schedule()
         call ollama#logger#Debug("Ignoring prompt buffer")
         return
     endif
+    " kill any existing timers
     call s:KillTimer()
+    " clear ghosttext
     let s:suggestion = ''
     call ollama#UpdatePreview(s:suggestion)
-    let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
+    " start debounce timer
+    let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#TriggerCompletion')
 endfunction
 
 " handle output on stdout
@@ -101,7 +122,7 @@ function! s:HandleExit(job, exit_code)
     let s:prompt = ''
 endfunction
 
-function! ollama#GetSuggestion(timer)
+function! ollama#GetSuggestion()
     call ollama#logger#Debug("GetSuggestion")
     " reset timer handle when called
     let s:timer_id = -1
