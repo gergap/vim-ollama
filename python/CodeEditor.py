@@ -689,6 +689,7 @@ def RejectChange(index):
             # remove added line
             log.debug(f"delete line {lineno}")
             VimHelper.DeleteLine(lineno)
+            g_restored_lines -= 1
     log.debug(f"restored_lines={g_restored_lines}")
 
 
