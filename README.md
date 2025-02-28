@@ -66,7 +66,7 @@ This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin
 If you're using a Debian-based distribution, you can install the required library directly:
 
 ```sh
-sudo apt install python3-httpx python3-jinja2
+sudo apt install python3-httpx python3-jinja2 python3-requests
 ```
 
 ### Other systems
