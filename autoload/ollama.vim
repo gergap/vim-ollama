@@ -55,6 +55,16 @@ function! ollama#NextCompletion()
     call ollama#GetSuggestion()
 endfunction
 
+" Get the previous completion with the previous seed value
+function! ollama#PrevCompletion()
+    call ollama#logger#Debug("PrevCompletion...")
+    let s:seed = s:seed - 1
+    if s:seed < 1
+        let s:seed = 1
+    endif
+    call ollama#GetSuggestion()
+endfunction
+
 " This function schedule a completion after a debounce wait time
 " to avoid starting and canceling completions all the time while typing.
 function! ollama#Schedule()
@@ -149,6 +159,8 @@ function! ollama#GetSuggestion()
 
     let l:prompt = l:prefix . '<FILL_IN_HERE>' . l:suffix
 
+    " update seed
+    let g:ollama_model_options.seed = s:seed
     let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
     call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
     call ollama#logger#Debug("model_options=".l:model_options)

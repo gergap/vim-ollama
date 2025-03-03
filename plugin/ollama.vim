@@ -156,6 +156,7 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
     inoremap <Plug>(ollama-next-completion) <Cmd>call ollama#NextCompletion()<CR>
+    inoremap <Plug>(ollama-prev-completion) <Cmd>call ollama#PrevCompletion()<CR>
     inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
@@ -229,6 +230,9 @@ function! PluginInit() abort
         endif
         if empty(mapcheck('<M-Down>', 'i'))
             imap <M-Down> <Plug>(ollama-next-completion)
+        endif
+        if empty(mapcheck('<M-Up>', 'i'))
+            imap <M-Up> <Plug>(ollama-prev-completion)
         endif
         if empty(mapcheck('<M-Right>', 'i'))
             imap <M-Right> <Plug>(ollama-insert-line)
