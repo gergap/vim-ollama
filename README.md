@@ -116,7 +116,7 @@ call plug#end()
 
 Since V0.4, the plugin includes a setup wizard that helps you set up your
 initial configuration. This is especially useful for new users who are not
-familiar with Ollama or the different LLMs available as Open Source.
+familiar with Ollama or the different Open Source LLMs available.
 
 The plugin will run the wizard automatically if the configuration file
 `~/.vim/config/ollama.vim` does not yet exist. If you want to start the wizard
@@ -156,5 +156,10 @@ them, just continue typing or press `<C-]>` to dismiss the suggestion.
 
 You can also accept just the one line using `<M-Right>` (Alt-Right) or one word
 using `<M-C-Right>` (Alt-Ctrl-Right) if you don't want to use the complete suggestion.
+
+To unmap tab as insertion key so you can use your own remaps set this global variable in your `.vimrc`.
+```
+let g:ollama_unmap_tab = v:true
+```
 
 See `:help vim-ollama` for more information.
