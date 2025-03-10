@@ -10,8 +10,9 @@ scriptencoding utf-8
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
     " Construct the shell command to call list_models.py with the provided URL
-    let l:script_path = printf('%s/python/list_models.py 2>/dev/null', expand('<script>:h:h:h'))
+    let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
     let l:command = 'python3 ' .. l:script_path .. ' -u ' .. shellescape(a:url)
+    let l:command .= ' 2>/dev/null'
 
     " Execute the shell command and capture the output
     let l:output = system(l:command)
