@@ -9,6 +9,7 @@ let s:fetched = 0
 
 " Help text for balloon expression
 let s:help_text = {
+\ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',

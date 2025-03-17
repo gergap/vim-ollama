@@ -31,6 +31,11 @@ endif
 if !exists('g:ollama_no_maps')
     let g:ollama_no_maps = 0
 endif
+if !exists('g:ollama_use_venv')
+    " Off for backwards compatibility
+    " The setup wizard will create a config where this is enabled by default.
+    let g:ollama_use_venv = 0
+endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
 endif

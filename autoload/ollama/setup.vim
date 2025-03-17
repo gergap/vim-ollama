@@ -179,6 +179,12 @@ endfunction
 
 " Main Setup routine which helps the user to get started
 function! ollama#setup#Setup()
+    " select Python configuration
+    let l:ans = input("Create a Python virtual environment and install all required packages? (Y/n): ")
+    if tolower(l:ans) != 'n'
+        let g:ollama_use_venv = 1
+    endif
+    echon "\n"
     " setup default local URL
     "let g:ollama_host = "http://localhost:11434"
     let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
@@ -283,6 +289,8 @@ function! s:FinalizeSetupTask()
 
     " Write the configuration to the file
     let l:config = [
+                \ "\" Use Python virtual environment (and install packages via pip)",
+                \ "let g:ollama_use_venv = " . g:ollama_use_venv,
                 \ "\" Ollama base URL",
                 \ "let g:ollama_host = '" . g:ollama_host . "'",
                 \ "\" tab completion model",
@@ -331,8 +339,34 @@ function! s:ExecuteNextSetupTask()
     endif
 endfunction
 
-function ollama#setup#Init() abort
+function! ollama#setup#EnsureVenv() abort
+    let l:venv_path = expand('$HOME/.vim/venv/ollama')
+    let l:pip_path = l:venv_path . '/bin/pip'
+    let l:reqs = ['httpx>=0.23.3', 'requests', 'jinja2']
+
+    " Check if virtual environment already exists
+    if !isdirectory(l:venv_path)
+        echon "Setting up Python virtual environment for Vim-Ollama...\n"
+        call system('python3 -m venv ' . shellescape(l:venv_path))
+
+        " Install dependencies if not already installed
+        if !filereadable(l:pip_path)
+            echon "Error: Failed to create virtual environment.\n"
+            return
+        endif
+
+        echon "Installing dependencies...\n"
+        call system(l:pip_path . ' install ' . join(l:reqs, ' '))
+        echon "Dependencies installed successfully.\n"
+    endif
+
+    " export venv path
+    let g:ollama_venv_path = l:venv_path
+endfunction
+
+function! ollama#setup#Init() abort
     let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
+
     " check if config file exists
     if !filereadable(l:ollama_config)
         echon "Welcome to Vim-Ollama!\n"
@@ -343,10 +377,15 @@ function ollama#setup#Init() abort
         endif
         echon "\n"
 
+        " Ensure venv and dependencies are set up
+        call ollama#setup#EnsureVenv()
         call ollama#setup#Setup()
     else
         " load the config file
         execute 'source' l:ollama_config
+        if g:ollama_use_venv
+            " Ensure venv and dependencies are set up
+            call ollama#setup#EnsureVenv()
+        endif
     endif
 endfunction
-
