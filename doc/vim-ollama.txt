@@ -291,6 +291,17 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_no_maps = 1
 <
+14. g:ollama_use_venv
+    - Description: Enables the usage of python virtual environments for
+      executing the required python scripts. If enabled it will install
+      the required packages automatically in this vim-ollama specific
+      virtual environment.
+      When disabled, you an still manually install the packges as before.
+    - Default: 0 (if missing), but setup wizard creates a config with 1 by default.
+    - Example:
+>
+        let g:ollama_use_venv = 1
+<
 
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
