@@ -38,7 +38,7 @@ function! ollama#config#FetchModels() abort
 
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
-    let l:command = ['python3', l:script_path, '-u', g:ollama_host]
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', g:ollama_host]
 
     " Define the callback for when the job finishes
     let l:job_options = {

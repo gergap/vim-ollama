@@ -11,8 +11,9 @@ scriptencoding utf-8
 function! ollama#setup#GetModels(url)
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
-    let l:command = 'python3 ' .. l:script_path .. ' -u ' .. shellescape(a:url)
-    let l:command .= ' 2>/dev/null'
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', shellescape(a:url), '2>/dev/null' ]
+    " list to string conversion
+    let l:command = join(l:command, ' ')
 
     " Execute the shell command and capture the output
     let l:output = system(l:command)
@@ -97,7 +98,7 @@ endfunction
 function! ollama#setup#PullModel(url, model)
     " Construct the shell command to call the Python script
     let l:script_path = printf('%s/python/pull_model.py', expand('<script>:h:h:h'))
-    let l:command = ['python3', l:script_path, '-u', a:url, '-m', a:model]
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', a:url, '-m', a:model ]
 
     " Log the command being run
     call ollama#logger#Debug("command=". join(l:command, " "))
@@ -360,8 +361,8 @@ function! ollama#setup#EnsureVenv() abort
         echon "Dependencies installed successfully.\n"
     endif
 
-    " export venv path
-    let g:ollama_venv_path = l:venv_path
+    " Change path to python to venv
+    let g:ollama_python_interpreter = l:venv_path . '/bin/python'
 endfunction
 
 function! ollama#setup#Init() abort

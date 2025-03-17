@@ -139,7 +139,8 @@ function! s:StartChat(lines) abort
 
     let l:script_path = printf('%s/python/chat.py', expand('<script>:h:h:h'))
     " Create the Python command
-    let l:command = ['python3', l:script_path,
+    let l:command = [ g:ollama_python_interpreter,
+                \ l:script_path,
                 \ '-m', g:ollama_chat_model,
                 \ '-u', g:ollama_host,
                 \ '-o', l:model_options,
