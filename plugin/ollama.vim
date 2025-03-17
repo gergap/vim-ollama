@@ -262,7 +262,22 @@ function! PluginInit() abort
 import sys
 import os
 
-# Adjust the path to point to the plugin's python directory
+# Create default venv path
+venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
+
+# Check if the venv path exists
+if os.path.exists(venv_path):
+    #print('Found venv:', venv_path)
+
+    venv_bin = os.path.join(venv_path, 'bin', 'python3')
+    venv_site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+
+    # Ensure the virtual environment's site-packages is in sys.path
+    if venv_site_packages not in sys.path:
+        #print(f'Adding venv site-packages to path: {venv_site_packages}')
+        sys.path.insert(0, venv_site_packages)
+
+# Adjust the path to point to the plugin's Python directory
 plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
 if plugin_python_path not in sys.path:
     sys.path.append(plugin_python_path)
