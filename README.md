@@ -53,11 +53,19 @@ The plugin uses Python scripts, e.g. `complete.py` and `chat.py`, to communicate
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
-[!NOTE]
-This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
-[LLM](https://github.com/huggingface/llm.nvim).
+> [!NOTE]
+> This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
+> [LLM](https://github.com/huggingface/llm.nvim).
 
 ## Requirements
+
+> [!NOTE]
+> Since V1.1.0 the plugin can create a Python virtual environment and install all dependencies
+> automatically, when you run the setup wizard. This wizard is started automatically when your use
+> the plugin the first time. You can also use `:Ollama setup` to run it again.
+> This section is kept for users who started with an older version. I recommend to migrate
+> to the new configuration, though. I might remove this section in the future, when the new
+> venv support has proven to work well.
 
 - Python 3.x
 - Python package: `httpx>=0.23.3`, `requests`, `jinja2`
