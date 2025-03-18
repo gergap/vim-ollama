@@ -229,6 +229,8 @@ call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
 function! PluginInit() abort
+    " Store plugin path in helper variable to simplify other code
+    let g:ollama_plugin_dir=expand('<sfile>:p:h:h')
     if g:ollama_no_maps != 1
         " Setup default mappings
         if empty(mapcheck('<C-]>', 'i'))
@@ -256,36 +258,6 @@ function! PluginInit() abort
 "        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
 "        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
     endif
-
-    " Add the plugin's python directory to Python's sys.path
-    python3 << EOF
-import sys
-import os
-
-# Create default venv path
-venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
-
-# Check if the venv path exists
-if os.path.exists(venv_path):
-    #print('Found venv:', venv_path)
-
-    venv_bin = os.path.join(venv_path, 'bin', 'python3')
-    venv_site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
-
-    # Ensure the virtual environment's site-packages is in sys.path
-    if venv_site_packages not in sys.path:
-        #print(f'Adding venv site-packages to path: {venv_site_packages}')
-        sys.path.insert(0, venv_site_packages)
-
-# Adjust the path to point to the plugin's Python directory
-plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
-if plugin_python_path not in sys.path:
-    sys.path.append(plugin_python_path)
-
-# Import your CodeEditor module
-import CodeEditor
-import VimHelper
-EOF
 endfunction
 
 call PluginInit()

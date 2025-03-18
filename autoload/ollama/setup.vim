@@ -180,12 +180,6 @@ endfunction
 
 " Main Setup routine which helps the user to get started
 function! ollama#setup#Setup()
-    " select Python configuration
-    let l:ans = input("Create a Python virtual environment and install all required packages? (Y/n): ")
-    if tolower(l:ans) != 'n'
-        let g:ollama_use_venv = 1
-    endif
-    echon "\n"
     " setup default local URL
     "let g:ollama_host = "http://localhost:11434"
     let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
@@ -370,12 +364,67 @@ function! ollama#setup#EnsureVenv() abort
     if !isdirectory(l:venv_path)
         echon "Setting up Python virtual environment for Vim-Ollama...\n"
         call system('python3 -m venv ' . shellescape(l:venv_path))
+        echon "Succeeded.\n"
 
         call ollama#setup#PipInstall()
     endif
 
     " Change path to python to venv
     let g:ollama_python_interpreter = l:venv_path . '/bin/python'
+endfunction
+
+" Loads the plugin's python modules
+function! s:LoadPluginPyModules() abort
+    python3 << EOF
+import os
+import sys
+import vim
+
+# Adjust the path to point to the plugin's Python directory
+plugin_python_path = os.path.join(vim.eval("g:ollama_plugin_dir"), "python")
+if plugin_python_path not in sys.path:
+    sys.path.append(plugin_python_path)
+
+try:
+    # Import your CodeEditor module
+    import CodeEditor
+    import VimHelper
+except ImportError as e:
+    print(f'Error importing CodeEditor module:\n{e}')
+EOF
+endfunction
+
+" Initializes venv for python.
+" This must be done before loading the plugin's py modules,
+" to ensure the plugin's python requirements are available.
+function! s:SetupPyVEnv() abort
+    python3 << EOF
+import os
+import sys
+import vim
+# Check if venv is enabled
+use_venv = vim.eval('g:ollama_use_venv') or 0
+
+# Should we use a venv?
+if use_venv:
+    # Create default venv path
+    venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
+    # Check if the venv path exists
+    if os.path.exists(venv_path):
+        #print('Found venv:', venv_path)
+
+        venv_bin = os.path.join(venv_path, 'bin', 'python3')
+        venv_site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+
+        # Ensure the virtual environment's site-packages is in sys.path
+        if venv_site_packages not in sys.path:
+            #print(f'Adding venv site-packages to path: {venv_site_packages}')
+            sys.path.insert(0, venv_site_packages)
+    else:
+        print('Venv not found: '. venv_path)
+else:
+    print('Venv disabled')
+EOF
 endfunction
 
 function! ollama#setup#Init() abort
@@ -391,15 +440,27 @@ function! ollama#setup#Init() abort
         endif
         echon "\n"
 
+        " select Python configuration
+        let l:ans = input("Create a Python virtual environment and install all required packages? (Y/n): ")
+        if tolower(l:ans) != 'n'
+            echon "let g:ollama_use_venv=1\n"
+            let g:ollama_use_venv = 1
+        endif
+        echon "\n"
+
         " Ensure venv and dependencies are set up
         call ollama#setup#EnsureVenv()
         call ollama#setup#Setup()
+        call s:SetupPyVEnv()
+        call s:LoadPluginPyModules()
     else
         " load the config file
         execute 'source' l:ollama_config
         if g:ollama_use_venv
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
+            call s:SetupPyVEnv()
         endif
+        call s:LoadPluginPyModules()
     endif
 endfunction
