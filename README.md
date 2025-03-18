@@ -25,6 +25,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
   - Supports inline-diff view for accepting changes interactively
   - Or accept without prompt for a Git based workflow using [vim-fugitive](https://github.com/tpope/vim-fugitive)
     (e.g. using `:Gvdiffsplit`)
+- Python venv support for easier installation (NEW in V1.1)
 
 ![Demo](screenshots/game.gif)
 
