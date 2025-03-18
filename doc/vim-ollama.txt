@@ -1,4 +1,4 @@
-" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-02-08
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-03-18
 
 *vim-ollama*
 
@@ -68,6 +68,10 @@ The vim-ollama plugin provides the following commands:
       - `enable`: Enables AI tab completions.
       - `disable`: Disables AI tab completions.
       - `toggle`: Toggles the enabled state of the plugin.
+      - `pipinstall`: Installs all python dependencies in a Vim-Ollama
+        specific virtual environment. This is done automatically during
+        the setup wizard, but this command may be useful when updating
+        the plugin and the python requirements have changed.
 
     - Usage:
 >
@@ -290,6 +294,17 @@ You can configure vim-ollama using the following variables in your .vimrc:
     - Example:
 >
         let g:ollama_no_maps = 1
+<
+14. g:ollama_use_venv
+    - Description: Enables the usage of python virtual environments for
+      executing the required python scripts. If enabled it will install
+      the required packages automatically in this vim-ollama specific
+      virtual environment.
+      When disabled, you an still manually install the packges as before.
+    - Default: 0 (if missing), but setup wizard creates a config with 1 by default.
+    - Example:
+>
+        let g:ollama_use_venv = 1
 <
 
 ==============================================================================

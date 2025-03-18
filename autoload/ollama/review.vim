@@ -137,9 +137,10 @@ function! s:StartChat(lines) abort
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
-    let l:script_path = printf('%s/python/chat.py', expand('<script>:h:h:h'))
+    let l:script_path = printf('%s/python/chat.py', g:ollama_plugin_dir)
     " Create the Python command
-    let l:command = ['python3', l:script_path,
+    let l:command = [ g:ollama_python_interpreter,
+                \ l:script_path,
                 \ '-m', g:ollama_chat_model,
                 \ '-u', g:ollama_host,
                 \ '-o', l:model_options,

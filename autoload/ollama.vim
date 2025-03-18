@@ -134,7 +134,8 @@ function! ollama#GetSuggestion(timer)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     " Adjust the command to use the prompt as stdin input
-    let l:command = [ "python3", expand('<script>:h:h') . "/python/complete.py",
+    let l:command = [ g:ollama_python_interpreter,
+        \ g:ollama_plugin_dir . "/python/complete.py",
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
@@ -411,12 +412,14 @@ function ollama#Command(command) abort
         call ollama#Disable()
     elseif a:command == 'toggle'
         call ollama#Toggle()
+    elseif a:command == 'pipinstall'
+        call ollama#setup#PipInstall()
     else
-        echo "Usage: Ollama <setup|config|enable|disable|toggle>"
+        echo "Usage: Ollama <setup|config|enable|disable|toggle|pipinstall>"
     endif
 endfunction
 
 " Define the available commands for completion
 function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
-    return ['setup', 'config', 'enable', 'disable', 'toggle']
+    return ['setup', 'config', 'enable', 'disable', 'toggle', 'pipinstall']
 endfunction

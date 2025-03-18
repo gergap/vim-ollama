@@ -18,7 +18,10 @@ if has('nvim')
     finish
 endif
 
-if !has('python3')
+if has('python3')
+    " Use system's python3 by default (can be changed by venv)
+    let g:ollama_python_interpreter = 'python3'
+else
     let g:ollama_enabled = 0
     echom "warning: your Vim version does not support python3. Vim-ollama is disabled."
     finish
@@ -30,6 +33,11 @@ if !exists('g:ollama_enabled')
 endif
 if !exists('g:ollama_no_maps')
     let g:ollama_no_maps = 0
+endif
+if !exists('g:ollama_use_venv')
+    " Off for backwards compatibility
+    " The setup wizard will create a config where this is enabled by default.
+    let g:ollama_use_venv = 0
 endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
@@ -221,6 +229,8 @@ call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
 function! PluginInit() abort
+    " Store plugin path in helper variable to simplify other code
+    let g:ollama_plugin_dir=expand('<sfile>:p:h:h')
     if g:ollama_no_maps != 1
         " Setup default mappings
         if empty(mapcheck('<C-]>', 'i'))
@@ -248,21 +258,6 @@ function! PluginInit() abort
 "        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
 "        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
     endif
-
-    " Add the plugin's python directory to Python's sys.path
-    python3 << EOF
-import sys
-import os
-
-# Adjust the path to point to the plugin's python directory
-plugin_python_path = os.path.join(vim.eval("expand('<sfile>:p:h:h')"), "python")
-if plugin_python_path not in sys.path:
-    sys.path.append(plugin_python_path)
-
-# Import your CodeEditor module
-import CodeEditor
-import VimHelper
-EOF
 endfunction
 
 call PluginInit()

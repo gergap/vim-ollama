@@ -9,6 +9,7 @@ let s:fetched = 0
 
 " Help text for balloon expression
 let s:help_text = {
+\ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',
@@ -36,8 +37,8 @@ function! ollama#config#FetchModels() abort
     let s:fetched = 1
 
     " Construct the shell command to call list_models.py with the provided URL
-    let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
-    let l:command = ['python3', l:script_path, '-u', g:ollama_host]
+    let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', g:ollama_host]
 
     " Define the callback for when the job finishes
     let l:job_options = {

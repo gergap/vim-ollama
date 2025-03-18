@@ -10,9 +10,10 @@ scriptencoding utf-8
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
     " Construct the shell command to call list_models.py with the provided URL
-    let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
-    let l:command = 'python3 ' .. l:script_path .. ' -u ' .. shellescape(a:url)
-    let l:command .= ' 2>/dev/null'
+    let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', shellescape(a:url), '2>/dev/null' ]
+    " list to string conversion
+    let l:command = join(l:command, ' ')
 
     " Execute the shell command and capture the output
     let l:output = system(l:command)
@@ -96,8 +97,8 @@ endfunction
 " Pulls the given model in Ollama asynchronously
 function! ollama#setup#PullModel(url, model)
     " Construct the shell command to call the Python script
-    let l:script_path = printf('%s/python/pull_model.py', expand('<script>:h:h:h'))
-    let l:command = ['python3', l:script_path, '-u', a:url, '-m', a:model]
+    let l:script_path = printf('%s/python/pull_model.py', g:ollama_plugin_dir)
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', a:url, '-m', a:model ]
 
     " Log the command being run
     call ollama#logger#Debug("command=". join(l:command, " "))
@@ -283,6 +284,8 @@ function! s:FinalizeSetupTask()
 
     " Write the configuration to the file
     let l:config = [
+                \ "\" Use Python virtual environment (and install packages via pip)",
+                \ "let g:ollama_use_venv = " . g:ollama_use_venv,
                 \ "\" Ollama base URL",
                 \ "let g:ollama_host = '" . g:ollama_host . "'",
                 \ "\" tab completion model",
@@ -331,8 +334,102 @@ function! s:ExecuteNextSetupTask()
     endif
 endfunction
 
-function ollama#setup#Init() abort
+" Install all dependencies using Pip
+function! ollama#setup#PipInstall() abort
+    let l:venv_path = expand('$HOME/.vim/venv/ollama')
+    let l:pip_path = l:venv_path . '/bin/pip'
+    let l:reqs = ["'httpx>=0.23.3'", 'requests', 'jinja2']
+
+    if !g:ollama_use_venv
+        echon "Error: you need to enable ollama_use_venv and restart Vim first."
+        return
+    endif
+
+    " Check if pip exists in venv
+    if !filereadable(l:pip_path)
+        echon "Error: Failed to create virtual environment.\n"
+        return
+    endif
+
+    echon "Installing dependencies...\n"
+    call system(l:pip_path . ' install ' . join(l:reqs, ' '))
+    echon "Dependencies installed successfully.\n"
+endfunction
+
+" Creates a Python virtual environment and installs all depedencies
+function! ollama#setup#EnsureVenv() abort
+    let l:venv_path = expand('$HOME/.vim/venv/ollama')
+
+    " Check if virtual environment already exists
+    if !isdirectory(l:venv_path)
+        echon "Setting up Python virtual environment for Vim-Ollama...\n"
+        call system('python3 -m venv ' . shellescape(l:venv_path))
+        echon "Succeeded.\n"
+
+        call ollama#setup#PipInstall()
+    endif
+
+    " Change path to python to venv
+    let g:ollama_python_interpreter = l:venv_path . '/bin/python'
+endfunction
+
+" Loads the plugin's python modules
+function! s:LoadPluginPyModules() abort
+    python3 << EOF
+import os
+import sys
+import vim
+
+# Adjust the path to point to the plugin's Python directory
+plugin_python_path = os.path.join(vim.eval("g:ollama_plugin_dir"), "python")
+if plugin_python_path not in sys.path:
+    sys.path.append(plugin_python_path)
+
+try:
+    # Import your CodeEditor module
+    import CodeEditor
+    import VimHelper
+except ImportError as e:
+    print(f'Error importing CodeEditor module:\n{e}')
+EOF
+endfunction
+
+" Initializes venv for python.
+" This must be done before loading the plugin's py modules,
+" to ensure the plugin's python requirements are available.
+function! s:SetupPyVEnv() abort
+    python3 << EOF
+import os
+import sys
+import vim
+# Check if venv is enabled
+use_venv = vim.eval('g:ollama_use_venv') or 0
+
+# Should we use a venv?
+if use_venv:
+    # Create default venv path
+    venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
+    # Check if the venv path exists
+    if os.path.exists(venv_path):
+        #print('Found venv:', venv_path)
+
+        venv_bin = os.path.join(venv_path, 'bin', 'python3')
+        venv_site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
+
+        # Ensure the virtual environment's site-packages is in sys.path
+        if venv_site_packages not in sys.path:
+            #print(f'Adding venv site-packages to path: {venv_site_packages}')
+            sys.path.insert(0, venv_site_packages)
+    else:
+        print('Venv not found: '. venv_path)
+else:
+    print('Venv disabled')
+EOF
+endfunction
+
+function! ollama#setup#Init() abort
     let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
+
     " check if config file exists
     if !filereadable(l:ollama_config)
         echon "Welcome to Vim-Ollama!\n"
@@ -343,10 +440,27 @@ function ollama#setup#Init() abort
         endif
         echon "\n"
 
+        " select Python configuration
+        let l:ans = input("Create a Python virtual environment and install all required packages? (Y/n): ")
+        if tolower(l:ans) != 'n'
+            echon "let g:ollama_use_venv=1\n"
+            let g:ollama_use_venv = 1
+        endif
+        echon "\n"
+
+        " Ensure venv and dependencies are set up
+        call ollama#setup#EnsureVenv()
         call ollama#setup#Setup()
+        call s:SetupPyVEnv()
+        call s:LoadPluginPyModules()
     else
         " load the config file
         execute 'source' l:ollama_config
+        if g:ollama_use_venv
+            " Ensure venv and dependencies are set up
+            call ollama#setup#EnsureVenv()
+            call s:SetupPyVEnv()
+        endif
+        call s:LoadPluginPyModules()
     endif
 endfunction
-
