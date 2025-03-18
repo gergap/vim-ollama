@@ -340,25 +340,38 @@ function! s:ExecuteNextSetupTask()
     endif
 endfunction
 
-function! ollama#setup#EnsureVenv() abort
+" Install all dependencies using Pip
+function! ollama#setup#PipInstall() abort
     let l:venv_path = expand('$HOME/.vim/venv/ollama')
     let l:pip_path = l:venv_path . '/bin/pip'
     let l:reqs = ['httpx>=0.23.3', 'requests', 'jinja2']
+
+    if !g:ollama_use_venv
+        echon "Error: you need to enable ollama_use_venv and restart Vim first."
+        return
+    endif
+
+    " Check if pip exists in venv
+    if !filereadable(l:pip_path)
+        echon "Error: Failed to create virtual environment.\n"
+        return
+    endif
+
+    echon "Installing dependencies...\n"
+    call system(l:pip_path . ' install ' . join(l:reqs, ' '))
+    echon "Dependencies installed successfully.\n"
+endfunction
+
+" Creates a Python virtual environment and installs all depedencies
+function! ollama#setup#EnsureVenv() abort
+    let l:venv_path = expand('$HOME/.vim/venv/ollama')
 
     " Check if virtual environment already exists
     if !isdirectory(l:venv_path)
         echon "Setting up Python virtual environment for Vim-Ollama...\n"
         call system('python3 -m venv ' . shellescape(l:venv_path))
 
-        " Install dependencies if not already installed
-        if !filereadable(l:pip_path)
-            echon "Error: Failed to create virtual environment.\n"
-            return
-        endif
-
-        echon "Installing dependencies...\n"
-        call system(l:pip_path . ' install ' . join(l:reqs, ' '))
-        echon "Dependencies installed successfully.\n"
+        call ollama#setup#PipInstall()
     endif
 
     " Change path to python to venv

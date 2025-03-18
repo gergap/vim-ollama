@@ -68,6 +68,10 @@ The vim-ollama plugin provides the following commands:
       - `enable`: Enables AI tab completions.
       - `disable`: Disables AI tab completions.
       - `toggle`: Toggles the enabled state of the plugin.
+      - `pipinstall`: Installs all python dependencies in a Vim-Ollama
+        specific virtual environment. This is done automatically during
+        the setup wizard, but this command may be useful when updating
+        the plugin and the python requirements have changed.
 
     - Usage:
 >

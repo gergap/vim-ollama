@@ -412,12 +412,14 @@ function ollama#Command(command) abort
         call ollama#Disable()
     elseif a:command == 'toggle'
         call ollama#Toggle()
+    elseif a:command == 'pipinstall'
+        call ollama#setup#PipInstall()
     else
-        echo "Usage: Ollama <setup|config|enable|disable|toggle>"
+        echo "Usage: Ollama <setup|config|enable|disable|toggle|pipinstall>"
     endif
 endfunction
 
 " Define the available commands for completion
 function! ollama#CommandComplete(ArgLead, CmdLine, CursorPos)
-    return ['setup', 'config', 'enable', 'disable', 'toggle']
+    return ['setup', 'config', 'enable', 'disable', 'toggle', 'pipinstall']
 endfunction
