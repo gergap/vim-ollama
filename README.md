@@ -61,9 +61,9 @@ uses these scripts via I/O redirection to integrate AI results into Vim.
 
 > [!NOTE]
 > Since V1.1.0 the plugin can create a Python virtual environment and install all dependencies
-> automatically, when you run the setup wizard. This wizard is started automatically when your use
-> the plugin the first time. You can also use `:Ollama setup` to run it again.
-> This section is kept for users who started with an older version. I recommend to migrate
+> automatically, when you run the setup wizard. This wizard is started automatically when you use
+> the plugin for the first time. You can also use `:Ollama setup` to run it again.
+> This section is kept for users who started with an older version. I recommend migrating
 > to the new configuration, though. I might remove this section in the future, when the new
 > venv support has proven to work well.
 
