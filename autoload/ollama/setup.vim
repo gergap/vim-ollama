@@ -10,7 +10,7 @@ scriptencoding utf-8
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
     " Construct the shell command to call list_models.py with the provided URL
-    let l:script_path = printf('%s/python/list_models.py', expand('<script>:h:h:h'))
+    let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
     let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', shellescape(a:url), '2>/dev/null' ]
     " list to string conversion
     let l:command = join(l:command, ' ')
@@ -97,7 +97,7 @@ endfunction
 " Pulls the given model in Ollama asynchronously
 function! ollama#setup#PullModel(url, model)
     " Construct the shell command to call the Python script
-    let l:script_path = printf('%s/python/pull_model.py', expand('<script>:h:h:h'))
+    let l:script_path = printf('%s/python/pull_model.py', g:ollama_plugin_dir)
     let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', a:url, '-m', a:model ]
 
     " Log the command being run

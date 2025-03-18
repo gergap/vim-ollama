@@ -135,7 +135,7 @@ function! ollama#GetSuggestion(timer)
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
-        \ expand('<script>:h:h') . "/python/complete.py",
+        \ g:ollama_plugin_dir . "/python/complete.py",
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
