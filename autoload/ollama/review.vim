@@ -65,17 +65,6 @@ function! s:StartChat(lines) abort
     " Function handling output from the shell: Add it above the prompt.
     func! GotOutput(channel, msg)
         call ollama#logger#Debug("GotOutput: ".a:msg)
-        " Save current buffer and window settings
-        let l:current_win = win_getid()
-        let l:current_buf = bufnr('%')
-        let l:need_restore = 0
-
-        if l:current_buf != s:buf
-            call ollama#logger#Debug("switch to chat buffer")
-            let l:need_restore = 1
-            " Switch to the chat buffer
-            execute 'buffer' s:buf
-        endif
 
         " append lines
         let l:lines = split(a:msg, "\n")
@@ -86,15 +75,8 @@ function! s:StartChat(lines) abort
                 call ollama#logger#Debug("idx=".l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
-            call append(line("$") - 1, l:line)
+            call appendbufline(s:buf, "$", l:line)
         endfor
-
-        if l:need_restore == 1
-            call ollama#logger#Debug("restore previous buffer")
-            " Restore previous buffer and window
-            execute 'buffer' l:current_buf
-            call win_gotoid(l:current_win)
-        endif
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
