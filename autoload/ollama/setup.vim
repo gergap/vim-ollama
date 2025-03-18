@@ -338,7 +338,7 @@ endfunction
 function! ollama#setup#PipInstall() abort
     let l:venv_path = expand('$HOME/.vim/venv/ollama')
     let l:pip_path = l:venv_path . '/bin/pip'
-    let l:reqs = ['httpx>=0.23.3', 'requests', 'jinja2']
+    let l:reqs = ["'httpx>=0.23.3'", 'requests', 'jinja2']
 
     if !g:ollama_use_venv
         echon "Error: you need to enable ollama_use_venv and restart Vim first."
