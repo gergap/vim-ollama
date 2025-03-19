@@ -90,10 +90,22 @@ function! s:StartChat(lines, systemprompt) abort
                     call ollama#logger#Debug("no filename")
                 else
                     call ollama#logger#Debug("got filename=".l:filename)
+
+                    " Extract directory from filename
+                    let l:dirname = fnamemodify(l:filename, ':h')
+
+                    " Ensure the directory exists
+                    if !isdirectory(l:dirname)
+                        call mkdir(l:dirname, 'p')
+                    endif
+
                     " move to left pane
                     execute 'wincmd h'
-                    " open file in new window
+                    " open/create file in new window
                     execute 'edit!' l:filename
+                    " delete any existing content, so that the LLM can replace
+                    " it with a new version
+                    execute 'normal! ggdG'
                     " store buffer handle in s:outputbuf
                     let s:outputbuf = bufnr()
                     let s:num_files_generated += 1
@@ -327,4 +339,5 @@ function! ollama#review#CodeGen(prompt)
     let l:systemprompt = "You are a code generator AI running inside Vim. When creating code examples use the special command `\\file{filename}` to mark the start of a new file, followed by the markdown code snippets. Don't generate any explanations. Finish generation by writing 'Finished.' on a new line."
     let s:num_files_generated = 0
     call s:StartChat([ a:prompt ], l:systemprompt)
+    stopinsert
 endfunction
