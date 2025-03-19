@@ -259,7 +259,7 @@ function! s:StartChat(lines, systemprompt) abort
     call append(0, "Chat with Bot")
     call append(1, "-------------")
     if a:systemprompt != ''
-        call append(2, "System prompt: ".a:systemprompt)
+        call append(2, split(a:systemprompt, "\n"))
     endif
     if a:lines isnot v:null
         call append("$", a:lines)
@@ -338,7 +338,7 @@ endfunction
 
 " Create chat window with custom prompt
 function! ollama#review#CodeGen(prompt)
-    let l:systemprompt = "You are a code generator AI running inside Vim. When creating code examples use the special command `\\file{filename}` to mark the start of a new file, followed by the markdown code snippets. Don't generate any explanations. Finish generation by writing 'Finished.' on a new line."
+    let l:systemprompt = "You are a code generator AI running inside Vim. Your task is to generate multiple files for a project based on user instructions. Follow these strict rules:\n\n1. **File Declaration:**\n   - Each new file **must** start with `\\file{filename}`, where `filename` is a valid file path.\n   - Ensure filenames are relevant and avoid invalid characters.\n\n2. **Code Blocks:**\n   - After declaring a file, provide its contents as a fenced markdown block using triple backticks (```) with the appropriate language tag (e.g., ```python, ```html).\n   - Do **not** include explanations, comments, or additional text.\n\n3. **Completion Signal:**\n   - Once all files are generated, write **\"Finished.\"** on a new line to indicate the end.\n\n4. **No Assumptions:**\n   - Only generate files explicitly requested by the user.\n   - Do not assume extra dependencies or structure unless mentioned.\n\nStrictly follow this format to ensure seamless parsing in Vim."
     let s:num_files_generated = 0
     call s:StartChat([ a:prompt ], l:systemprompt)
     stopinsert
