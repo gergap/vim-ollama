@@ -2,6 +2,9 @@
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 let s:job = v:null
 let s:buf = -1
+let s:outputbuf = -1
+let s:code_status = 0 " 0: Idle, 1: Code Started, 2: Code End
+let s:num_files_generated = 0
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() . '-ollama-review.log'
@@ -50,7 +53,7 @@ function! s:FindBufferWindow(bufnr)
     return -1
 endfunction
 
-function! s:StartChat(lines) abort
+function! s:StartChat(lines, systemprompt) abort
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
         call ollama#logger#Debug("TextEntered: ".a:text)
@@ -75,7 +78,58 @@ function! s:StartChat(lines) abort
                 call ollama#logger#Debug("idx=".l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
-            call appendbufline(s:buf, "$", l:line)
+
+            " check for '\file{filename}', capture the filename
+            if l:line =~ '^\\file{'
+                " Use matchlist to capture the filename inside the braces
+                let match_result = matchlist(l:line, '\\file{\(.*\)}')
+                " The first element of the list is the full match, the second is the captured filename
+                let l:filename = match_result[1]
+
+                if l:filename  == ''
+                    call ollama#logger#Debug("no filename")
+                else
+                    call ollama#logger#Debug("got filename=".l:filename)
+                    " move to left pane
+                    execute 'wincmd h'
+                    " open file in new window
+                    execute 'edit!' l:filename
+                    " store buffer handle in s:outputbuf
+                    let s:outputbuf = bufnr()
+                    let s:num_files_generated += 1
+                    return
+                endif
+            elseif l:line =~'^Finished.'
+                call appendbufline(s:outputbuf, "$", "TATA")
+                if s:num_files_generated > 0
+                    call appendbufline(s:outputbuf, "$", s:num_files_generated. " files generated. Use :wa to save them all.")
+                    return
+                endif
+            endif
+
+            " check if output should be redirected to new file
+            if s:outputbuf != -1
+                " check s:code_status
+                if l:line =~ '^```'
+                    if s:code_status == 0
+                        let s:code_status = 1
+                    else
+                        let s:outputbuf = -1
+                        let s:code_status = 0
+                        " delete first empty line
+                        execute 'normal! ggdd'
+                        " switch back to chat window
+                        execute 'wincmd l'
+                    endif
+                    return
+                endif
+                if s:code_status == 1
+                    call appendbufline(s:outputbuf, "$", l:line)
+                endif
+            else
+                " append to chat buffer
+                call appendbufline(s:buf, "$", l:line)
+            endif
         endfor
     endfunc
 
@@ -129,7 +183,10 @@ function! s:StartChat(lines) abort
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
     " Check if a system prompt was configured
-    if g:ollama_chat_systemprompt != ''
+    if a:systemprompt != ''
+         " add system prompt option
+        let l:command += [ '-s', a:systemprompt ]
+    elseif g:ollama_chat_systemprompt != ''
          " add system prompt option
         let l:command += [ '-s', g:ollama_chat_systemprompt ]
     endif
@@ -187,8 +244,11 @@ function! s:StartChat(lines) abort
     " Add a title to the chat buffer
     call append(0, "Chat with Bot")
     call append(1, "-------------")
+    if a:systemprompt != ''
+        call append(2, "System prompt: ".a:systemprompt)
+    endif
     if a:lines isnot v:null
-        call append(2, a:lines)
+        call append("$", a:lines)
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
 
@@ -262,3 +322,9 @@ function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
 
+" Create chat window with custom prompt
+function! ollama#review#CodeGen(prompt)
+    let l:systemprompt = "You are a code generator AI running inside Vim. When creating code examples use the special command `\\file{filename}` to mark the start of a new file, followed by the markdown code snippets. Don't generate any explanations. Finish generation by writing 'Finished.' on a new line."
+    let s:num_files_generated = 0
+    call s:StartChat([ a:prompt ], l:systemprompt)
+endfunction
