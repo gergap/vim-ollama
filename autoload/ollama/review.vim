@@ -5,6 +5,7 @@ let s:buf = -1
 let s:outputbuf = -1
 let s:code_status = 0 " 0: Idle, 1: Code Started, 2: Code End
 let s:num_files_generated = 0
+let s:lineno = 0
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() . '-ollama-review.log'
@@ -112,9 +113,10 @@ function! s:StartChat(lines, systemprompt) abort
                     return
                 endif
             elseif l:line =~'^Finished.'
-                call appendbufline(s:outputbuf, "$", "TATA")
+                call appendbufline(s:buf, "$", "TATAAA!")
                 if s:num_files_generated > 0
-                    call appendbufline(s:outputbuf, "$", s:num_files_generated. " files generated. Use :wa to save them all.")
+                    call appendbufline(s:buf, "$", s:num_files_generated. " files generated. Use :wa to save them all.")
+                    let s:num_files_generated = 0
                     return
                 endif
             endif
@@ -125,18 +127,18 @@ function! s:StartChat(lines, systemprompt) abort
                 if l:line =~ '^```'
                     if s:code_status == 0
                         let s:code_status = 1
+                        let s:lineno = 1
                     else
                         let s:outputbuf = -1
                         let s:code_status = 0
-                        " delete first empty line
-                        execute 'normal! ggdd'
                         " switch back to chat window
                         execute 'wincmd l'
                     endif
                     return
                 endif
                 if s:code_status == 1
-                    call appendbufline(s:outputbuf, "$", l:line)
+                    call setbufline(s:outputbuf, s:lineno, l:line)
+                    let s:lineno = s:lineno + 1
                 endif
             else
                 " append to chat buffer
