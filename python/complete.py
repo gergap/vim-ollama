@@ -17,6 +17,53 @@ DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 # create logger
 log = None
 
+def load_template_remote(base_url, model_name):
+    """
+    Load model template via REST API.
+    """
+    url = f"{base_url}/api/show"
+    data = {"name": model_name}
+
+    try:
+        response = requests.post(url, json=data)
+
+        if response.status_code == 200:
+            model_info = response.json()
+
+            if info_key in model_info:
+                return model_info['template']
+            else:
+                print("Key 'template' not found in model info.")
+                exit(1)
+        else:
+            print(f"Failed to retrieve model info. Status code: {response.status_code}")
+            exit(1)
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error occurred while making the request: {e}")
+        exit(1)
+
+def load_template(base_url, model_name):
+    """
+    Load model template from file, but fallback to remote loading
+    and caching it locally.
+    """
+    # get the directory where the python script resides
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # construct the full path to the config file relative to the script directory
+    templ_path = os.path.join(script_dir, "configs", f"{modelname}.templ")
+    try:
+        with open(templ_path, 'r') as file:
+            template = json.load(file)
+            return template
+    except filenotfounderror:
+        template = load_template_remote(base_url, model_name)
+        # save template
+        with open(templ_path, 'w') as file:
+            file.write(template)
+
+        return template
+
 def load_config(modelname):
     # Get the directory where the Python script resides
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,8 +74,8 @@ def load_config(modelname):
             config = json.load(file)
             return config
     except FileNotFoundError:
-        log.error(f"Config file {config_path} not found.")
-        sys.exit(1)
+        log.info(f"Config file {config_path} not found.")
+        return None
 
 # config.json example:
 # {
@@ -50,11 +97,47 @@ def fill_in_the_middle(config, prompt):
         sys.exit(1)
 
     newprompt = config["pre"] + parts[0] + config["suffix"] + parts[1] + config["middle"]
-    log.debug(newprompt)
+    log.debug('fill_in_the_middle: ' + newprompt)
 
     return newprompt
 
-def generate_code_completion(config, prompt, baseurl, model, options):
+def process_go_template(template, prompt):
+    """
+    searches for the string '<FILL_IN_HERE>' in the prompt and
+    creates a model specific fill-in-the-middle-prompt using
+    the included Go template.
+    """
+    parts = prompt.split('<FILL_IN_HERE>')
+    log.debug(parts)
+
+    if len(parts) != 2:
+        log.error("Prompt does not contain '<FILL_IN_HERE>'.")
+        sys.exit(1)
+
+    values = {
+        "Prompt": parts[0],
+        "Suffix": parts[1]
+    }
+
+    try:
+        # Call the Go program with the template as stdin and JSON data as an argument
+        result = subprocess.run(
+            ["./process_template", json.dumps(values)],
+            input=template,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        newprompt = result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        log.error(f"Failed to process template: {e}")
+        sys.exit(1)
+
+    log.debug('process_go_template: ' + newprompt)
+
+    return newprompt
+
+def generate_code_completion(prompt, baseurl, model, options):
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -62,9 +145,6 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     }
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
-
-    # generate model specific prompt
-    prompt = fill_in_the_middle(config, prompt)
 
     data = {
         'model': model,
@@ -114,11 +194,20 @@ if __name__ == "__main__":
     except:
         options = DEFAULT_OPTIONS
 
+    prompt = sys.stdin.read()
+
     # strip suffix (e.g ':7b-code') from modelname
     modelname = args.model
     modelname = modelname.rsplit(':', 1)[0]
     config = load_config(modelname)
 
-    prompt = sys.stdin.read()
-    response = generate_code_completion(config, prompt, args.url, args.model, options)
+    if config:
+        # generate model specific prompt
+        prompt = fill_in_the_middle(config, prompt)
+    else:
+        # Use Go template for generating prompt
+        template = load_template(args.url, args.model)
+        prompt = process_go_template(template, prompt)
+
+    response = generate_code_completion(prompt, args.url, args.model, options)
     print(response, end='')
