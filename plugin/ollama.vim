@@ -217,6 +217,7 @@ command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-
 command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
+command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 
 " Define new signs for diffs
 sign define NewLine text=+ texthl=DiffAdd

@@ -140,6 +140,21 @@ The vim-ollama plugin provides the following commands:
     using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
     works like pressing 'n'. `
 
+7. :OllamaPull
+    - Description: Pulls a new model. This works like `ollama pull` command
+    but via the REST API and the configured `g:ollama_host` URL, so you can use
+    this to pull new models on remote machines, without needing to SSH in to
+    this machine.
+    It uses the existing 'pull' function that was created for the setup wizard.
+    - Usage:
+>
+        :OllamaPull [modelname]
+<
+    - Example:
+>
+        :OllamaPull qwen2.5-coder:1.5b
+<
+
 ==============================================================================
 5. Maps                                               *vim-ollama-maps*
 
