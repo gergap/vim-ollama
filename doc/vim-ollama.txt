@@ -234,6 +234,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
       create higher load on the system. Small values make only sense on fast
       GPU based LLMs, where the LLM computation time is not much longer than
       the debounce time.
+      By settings this to 0 you can disable the auto-trigger behavior and
+      define a mapping for `<Plug>(ollama-trigger-completion)` instead.
     - Default: 500 ms
     - Example:
 >
