@@ -182,13 +182,17 @@ endfunction
 function! s:Init() abort
     call ollama#setup#Init()
     call s:MapTab()
+    if g:ollama_debounce_time > 0
+        augroup ollama_schedule
+            autocmd CursorMovedI  * if &buftype != 'prompt' | call ollama#Schedule() | endif
+            autocmd InsertLeave   * if &buftype != 'prompt' | call ollama#Dismiss() | endif
+        augroup END
+    endif
 endfunction
 
 " Create autocommand group
 augroup ollama
     autocmd!
-    autocmd CursorMovedI          * if &buftype != 'prompt' | call ollama#Schedule() | endif
-    autocmd InsertLeave           * if &buftype != 'prompt' | call ollama#Dismiss() | endif
     autocmd VimEnter              * call s:Init()
     autocmd BufDelete             * call ollama#review#BufDelete(expand("<abuf>"))
     autocmd ColorScheme,VimEnter  * call s:ColorScheme()
