@@ -161,6 +161,7 @@ function! s:MapTab() abort
     endif
 
     " Create plugs
+    inoremap <Plug>(ollama-trigger-completion) <Cmd>call ollama#TriggerCompletion()<CR>
     inoremap <Plug>(ollama-dismiss)        <Cmd>call ollama#Dismiss()<CR>
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
     inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>

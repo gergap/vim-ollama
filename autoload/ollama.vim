@@ -39,6 +39,23 @@ else
     echom "warning: Vim " . s:vim_minimum_version . " or newer is required to support ghost text (textprop)"
 endif
 
+function! ollama#TriggerCompletion()
+    call ollama#logger#Debug("TriggerCompletion...")
+    if !ollama#IsEnabled()
+        return
+    endif
+    " get current buffer type
+    if &buftype=='prompt'
+        call ollama#logger#Debug("Ignoring prompt buffer")
+        return
+    endif
+    call s:KillTimer()
+    let s:suggestion = ''
+    call ollama#UpdatePreview(s:suggestion)
+    " directly call GetSuggestion without timer
+    call ollama#GetSuggestion(0)
+endfunction
+
 function! ollama#Schedule()
     if !ollama#IsEnabled()
         return
@@ -48,7 +65,6 @@ function! ollama#Schedule()
         let s:ignore_schedule = 0
         return
     endif
-    call ollama#logger#Debug("Scheduling timer...")
     " get current buffer type
     if &buftype=='prompt'
         call ollama#logger#Debug("Ignoring prompt buffer")
@@ -57,6 +73,7 @@ function! ollama#Schedule()
     call s:KillTimer()
     let s:suggestion = ''
     call ollama#UpdatePreview(s:suggestion)
+    call ollama#logger#Debug("Scheduling debounce timer...")
     let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
 endfunction
 
