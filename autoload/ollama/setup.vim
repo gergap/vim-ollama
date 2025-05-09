@@ -448,10 +448,12 @@ function! ollama#setup#Init() abort
         endif
         echon "\n"
 
-        " Ensure venv and dependencies are set up
-        call ollama#setup#EnsureVenv()
+        if g:ollama_use_venv
+            " Ensure venv and dependencies are set up
+            call ollama#setup#EnsureVenv()
+            call s:SetupPyVEnv()
+        endif
         call ollama#setup#Setup()
-        call s:SetupPyVEnv()
         call s:LoadPluginPyModules()
     else
         " load the config file
