@@ -18,7 +18,7 @@ if has('nvim')
     finish
 endif
 
-if has('python3')
+if has('python3') || has('python3_dynamic')
     " Use system's python3 by default (can be changed by venv)
     let g:ollama_python_interpreter = 'python3'
 else
