@@ -9,9 +9,14 @@ scriptencoding utf-8
 
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
+    if has('win32') || has('win64')
+        let l:null_redirect = '2>nul'
+    else
+        let l:null_redirect = '2>/dev/null'
+    endif
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
-    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', shellescape(a:url), '2>/dev/null' ]
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', shellescape(a:url), l:null_redirect ]
     " list to string conversion
     let l:command = join(l:command, ' ')
 
