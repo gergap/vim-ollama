@@ -13,6 +13,10 @@ from OllamaLogger import OllamaLogger
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+# When set to true, we use our own templates and don't use the Ollama built-in templates.
+# Is is the only way to make this work reliable. As soon is this works also with Ollama
+# REST API reliable we can get rid of our own templates.
+USE_CUSTOM_TEMPLATE = True
 
 # create logger
 log = None
@@ -63,16 +67,39 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
 
-    # generate model specific prompt
-    prompt = fill_in_the_middle(config, prompt)
+    if USE_CUSTOM_TEMPLATE:
+        log.info('Using custom prompt in raw mode')
+        # generate model specific prompt using our templates
+        prompt = fill_in_the_middle(config, prompt)
+        # Use Ollama Codegen API in raw mode, bypassing the Ollama template processing
+        data = {
+            'model': model,
+            'prompt': prompt,
+            'stream': False,
+            'raw' : True,
+            'options': options
+        }
+    else:
+        log.info("Using Ollama's built-in templates and suffix argument.")
+        # Use Ollama code completion API using built-in templates.
+        # Code completion should be done between prompt and suffix argument
+        parts = prompt.split('<FILL_IN_HERE>')
+        log.debug(parts)
 
-    data = {
-        'model': model,
-        'prompt': prompt,
-        'stream': False,
-        'raw' : True,
-        'options': options
-    }
+        if len(parts) != 2:
+            log.error("Prompt does not contain '<FILL_IN_HERE>'.")
+            sys.exit(1)
+
+        prompt = parts[0]
+        suffix = parts[1]
+        data = {
+            'model': model,
+            'prompt': prompt,
+            'suffix': suffix,
+            'stream': False,
+            'raw' : False,
+            'options': options
+        }
     log.debug('request: ' + json.dumps(data, indent=4))
 
     response = requests.post(endpoint, headers=headers, json=data)
@@ -103,10 +130,12 @@ if __name__ == "__main__":
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
     parser.add_argument('-f', '--log-filename', type=str, default="complete.log", help="Specify log filename")
     parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs", help="Specify log file directory")
+    parser.add_argument('-T', action='store_false', default=True, help="Use Ollama code generation suffix (experimental)")
     args = parser.parse_args()
 
     log = OllamaLogger(args.log_dir, args.log_filename)
     log.setLevel(args.log_level)
+    USE_CUSTOM_TEMPLATE = args.T
 
     # parse options JSON string
     try:
@@ -117,7 +146,10 @@ if __name__ == "__main__":
     # strip suffix (e.g ':7b-code') from modelname
     modelname = args.model
     modelname = modelname.rsplit(':', 1)[0]
-    config = load_config(modelname)
+    if USE_CUSTOM_TEMPLATE:
+        config = load_config(modelname)
+    else:
+        config = None
 
     prompt = sys.stdin.read()
     response = generate_code_completion(config, prompt, args.url, args.model, options)
