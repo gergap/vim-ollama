@@ -11,11 +11,14 @@ func! ollama#review#KillChatBot()
     call ollama#logger#Debug("KillChatBot")
 
     " Stop the job if it exists
-    if exists("s:job") && type(s:job) == v:t_number
+    if exists("s:job") && type(s:job) == v:t_job
+        call ch_sendraw(s:job, "quit\n")
         call job_stop(s:job)
         while job_status(s:job) == 'run'
             sleep 1
         endwhile
+    else
+        call ollama#logger#Debug("No job to kill")
     endif
 endfunc
 
