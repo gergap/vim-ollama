@@ -174,7 +174,11 @@ function! s:StartChat(lines) abort
     endif
 
     " Create new chat buffer
-    execute 'vnew' l:bufname
+    if exists('g:ollama_split_vertically') && g:ollama_split_vertically == 1
+        execute 'vnew' l:bufname
+    else
+        execute 'new' l:bufname
+    endif
     " Set the filetype to ollama-chat
 "    setlocal filetype=ollama-chat
     setlocal filetype=markdown

@@ -335,6 +335,15 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_use_venv = 1
 <
+16. g:ollama_split_vertically
+    - Description: When this variable is defined and set to 1 the OllamaChat
+      command will create a vertical split, otherwise a horizontal split is
+      used.
+    - Default: 1
+>
+        " prefer horizontal split
+        let g:ollama_split_vertically = 0
+<
 
 ==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*

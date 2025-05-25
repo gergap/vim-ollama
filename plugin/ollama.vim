@@ -101,6 +101,9 @@ endif
 if !exists('g:ollama_use_inline_diff')
     let g:ollama_use_inline_diff = 1
 endif
+if !exists('g:ollama_split_vertically')
+    let g:ollama_split_vertically = 1
+endif
 
 " Defines the color scheme for ollama suggestions
 function! s:ColorScheme() abort
