@@ -58,6 +58,8 @@ function! s:StartChat(lines) abort
             " don't send empty messages
             return
         endif
+        " exit insert mode
+        call feedkeys("\<Esc>")
         " Send the text to a shell with Enter appended.
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
@@ -76,6 +78,11 @@ function! s:StartChat(lines) abort
                 let l:line = strpart(l:line, 0, l:idx)
             endif
             call appendbufline(s:buf, "$", l:line)
+            call feedkeys("G") "jump to end
+            if l:idx != -1
+                " start insert mode
+                call feedkeys("a")
+            endif
         endfor
     endfunc
 
