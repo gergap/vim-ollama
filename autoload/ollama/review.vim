@@ -193,6 +193,7 @@ function! s:StartChat(lines) abort
     setlocal wrap
     let l:buf = bufnr('')
     let s:buf = l:buf
+    let b:coc_enabled = 0 " disable CoC in chat buffer
     " Create a channel log so we can see what happens.
     if g:ollama_debug >= 4
         call ch_logfile(g:ollama_review_logfile, 'w')
