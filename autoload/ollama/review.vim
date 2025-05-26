@@ -17,6 +17,7 @@ func! ollama#review#KillChatBot()
         while job_status(s:job) == 'run'
             sleep 1
         endwhile
+        let s:buf = -1
     else
         call ollama#logger#Debug("No job to kill")
     endif
@@ -118,8 +119,11 @@ function! s:StartChat(lines) abort
         setlocal modifiable
         " output info message
         call append(line("$") - 1, "Chat process terminated with exit code ".a:status)
-        call append(line("$") - 1, "Use ':q!' or ':bd!' to delete this buffer and run ':OllamaChat' again to create a new session.")
+        call append(line("$") - 1, "Use ':q' or ':bd' to delete this buffer and run ':OllamaChat' again to create a new session.")
         stopinsert
+        let s:buf = -1
+        " avoid saving and make :q just work
+        setlocal nomodified
     endfunc
 
     let l:model_options = json_encode(g:ollama_chat_options)
@@ -156,15 +160,14 @@ function! s:StartChat(lines) abort
 
     " Create chat buffer
     let l:bufname = 'Ollama Chat'
-    let l:bufnr = bufnr(l:bufname)
-    if (l:bufnr != -1)
+    if (s:buf != -1)
         " buffer already exists
-        let l:chat_win = s:FindBufferWindow(l:bufnr)
+        let l:chat_win = s:FindBufferWindow(s:buf)
         " switch to existing buffer
         if l:chat_win != -1
             execute l:chat_win . 'wincmd w'
         else
-            execute 'buffer' l:bufnr
+            execute 'buffer' s:buf
         endif
         " send lines
         if a:lines isnot v:null
@@ -200,7 +203,7 @@ function! s:StartChat(lines) abort
     endif
 
     " Add a title to the chat buffer
-    call append(0, "Chat with Bot")
+    call append(0, "Chat with Bot (type 'quit' to exit, press CTRL-C to interrupt output)")
     call append(1, "-------------")
     if a:lines isnot v:null
         call append(2, a:lines)
