@@ -53,7 +53,10 @@ def fill_in_the_middle(config, prompt):
         log.error("Prompt does not contain '<FILL_IN_HERE>'.")
         sys.exit(1)
 
-    newprompt = config["pre"] + parts[0] + config["suffix"] + parts[1] + config["middle"]
+    if "suffix" in config["pre"]:
+        newprompt = config["pre"] + parts[1] + config["suffix"] + parts[0] + config["middle"]
+    else:
+        newprompt = config["pre"] + parts[0] + config["suffix"] + parts[1] + config["middle"]
     log.debug(newprompt)
 
     return newprompt

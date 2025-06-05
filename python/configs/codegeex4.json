@@ -1,0 +1,5 @@
+{
+    "pre": "<|user|>\n<|code_suffix|>",
+    "suffix": "<|code_prefix|>",
+    "middle": "<|code_middle|><|assistant|>\n"
+}
