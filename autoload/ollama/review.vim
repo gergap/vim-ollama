@@ -82,6 +82,11 @@ function! s:StartChat(lines) abort
                 let l:line = strpart(l:line, 0, l:idx)
             endif
             call appendbufline(s:buf, "$", l:line)
+            " check if in insert mode
+            if mode() == 'i'
+                " start insert mode again
+                call feedkeys("\<Esc>")
+            endif
             call feedkeys("G") "jump to end
             if l:idx != -1
                 " start insert mode
