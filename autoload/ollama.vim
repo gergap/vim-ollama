@@ -191,7 +191,13 @@ function! ollama#UpdatePreview(suggestion)
     call ollama#logger#Debug("UpdatePreview: suggestion='".json_encode(a:suggestion)."'")
     if !empty(a:suggestion)
         let s:suggestion = a:suggestion
-        let text = split(s:suggestion, "\r\n\\=\\|\n", 1)
+        let text = []
+        if exists('g:ollama_suggestion_indicator')
+            let text = [g:ollama_suggestion_indicator]
+        else
+            let text = split(a:suggestion, "\r\n\\=\\|\n", 1)
+        endif
+
         if empty(text[-1])
             call remove(text, -1)
         endif
