@@ -2,6 +2,7 @@
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 let s:job = v:null
 let s:buf = -1
+let s:ollama_bufname = 'Ollama Chat'
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() . '-ollama-review.log'
@@ -82,15 +83,17 @@ function! s:StartChat(lines) abort
                 let l:line = strpart(l:line, 0, l:idx)
             endif
             call appendbufline(s:buf, "$", l:line)
-            " check if in insert mode
-            if mode() == 'i'
-                " start insert mode again
-                call feedkeys("\<Esc>")
-            endif
-            call feedkeys("G") "jump to end
-            if l:idx != -1
-                " start insert mode
-                call feedkeys("a")
+            if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
+                " check if in insert mode
+                if mode() == 'i'
+                    " start insert mode again
+                    call feedkeys("\<Esc>")
+                endif
+	        call feedkeys("G") "jump to end
+                if l:idx != -1
+                    " start insert mode
+                    call feedkeys("a")
+                endif
             endif
         endfor
     endfunc
@@ -164,7 +167,7 @@ function! s:StartChat(lines) abort
     let s:job = job_start(l:command, l:job_options)
 
     " Create chat buffer
-    let l:bufname = 'Ollama Chat'
+    let l:bufname = s:ollama_bufname
     if (s:buf != -1)
         " buffer already exists
         let l:chat_win = s:FindBufferWindow(s:buf)
