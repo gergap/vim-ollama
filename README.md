@@ -121,6 +121,16 @@ Plug 'gergap/vim-ollama'
 call plug#end()
 ```
 
+> [!NOTE] You can also install a plugin from a local path. This is useful for development
+> or when installing the plugin without Internet access. When using the plugin offline,
+> you also need to ensure all Python requirements are installed.
+
+```vim
+call plug#begin()
+...
+Plug '/path/to/vim-ollama'
+call plug#end()
+```
 ## First Run
 
 Since V0.4, the plugin includes a setup wizard that helps you set up your
