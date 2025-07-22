@@ -98,6 +98,19 @@ if !exists('g:ollama_edit_options')
                 \ 'keep_alive': 1800,
                 \ }
 endif
+if !exists('g:ollama_provider')
+    " API provider to use: 'ollama' or 'openai'
+    let g:ollama_provider = 'ollama'
+endif
+if !exists('g:ollama_openai_api_key')
+    " OpenAI API key for OpenAI provider
+    let g:ollama_openai_api_key = ''
+endif
+if !exists('g:ollama_openai_model')
+    " Default OpenAI model for completion and chat
+    let g:ollama_openai_model = 'gpt-4.1-mini'
+endif
+
 if !exists('g:ollama_use_inline_diff')
     let g:ollama_use_inline_diff = 1
 endif

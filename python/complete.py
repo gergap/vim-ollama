@@ -9,6 +9,15 @@ import json
 import os
 from OllamaLogger import OllamaLogger
 
+# Fallback for OpenAI fill-in-the-middle tokens when using custom templates
+# Default FIM tokens for OpenAI models
+OPENAI_FIM_CONFIG = {
+    'pre': '<|fim_prefix|> ',
+    'middle': ' <|fim_middle|>',
+    'suffix': ' <|fim_suffix|>',
+    'eot': ''
+}
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
@@ -125,8 +134,61 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def generate_openai_code_completion(config, prompt, model, options, api_key):
+    try:
+        import openai
+    except ImportError:
+        log.error("openai package not installed. Install with `pip install openai`. ")
+        sys.exit(1)
+    # Set API key
+    if api_key:
+        openai.api_key = api_key
+    else:
+        key = os.getenv('OPENAI_API_KEY')
+        if not key:
+            log.error("OpenAI API key not provided. Use --api-key or set OPENAI_API_KEY.")
+            sys.exit(1)
+        openai.api_key = key
+
+    # Prepare prompt for fill-in-the-middle if requested
+    if USE_CUSTOM_TEMPLATE:
+        cfg = config or OPENAI_FIM_CONFIG
+        prompt = fill_in_the_middle(cfg, prompt)
+
+    # support both pre-1.0 and >=1.0 openai packages
+    try:
+        if hasattr(openai, 'OpenAI'):
+            client = openai.OpenAI()
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{'role': 'user', 'content': prompt}],
+                temperature=options.get('temperature', 0),
+                top_p=options.get('top_p', 1)
+            )
+            content = resp.choices[0].message.content
+        else:
+            resp = openai.ChatCompletion.create(
+                model=model,
+                messages=[{'role': 'user', 'content': prompt}],
+                temperature=options.get('temperature', 0),
+                top_p=options.get('top_p', 1)
+            )
+            content = resp.choices[0].message.content
+    except Exception as e:
+        log.error(f"OpenAI API error: {e}")
+        sys.exit(1)
+
+    # Remove end-of-text marker if present
+    try:
+        idx = content.find(config.get('eot', ''))
+        if idx != -1:
+            content = content[:idx]
+    except Exception:
+        pass
+    return content.rstrip()
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
+    parser = argparse.ArgumentParser(description="Complete code with Ollama or OpenAI LLM.")
     parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
     parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
     parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
@@ -134,6 +196,10 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--log-filename', type=str, default="complete.log", help="Specify log filename")
     parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs", help="Specify log file directory")
     parser.add_argument('-T', action='store_false', default=True, help="Use Ollama code generation suffix (experimental)")
+    parser.add_argument('-p', '--provider', choices=['ollama', 'openai'], default='ollama',
+                        help="API provider to use (ollama or openai)")
+    parser.add_argument('-k', '--api-key', type=str, default='',
+                        help="OpenAI API key (or set OPENAI_API_KEY)")
     args = parser.parse_args()
 
     log = OllamaLogger(args.log_dir, args.log_filename)
@@ -146,14 +212,21 @@ if __name__ == "__main__":
     except:
         options = DEFAULT_OPTIONS
 
-    # strip suffix (e.g ':7b-code') from modelname
-    modelname = args.model
-    modelname = modelname.rsplit(':', 1)[0]
-    if USE_CUSTOM_TEMPLATE:
+    # strip suffix (e.g ':7b-code') for config lookup
+    modelname = args.model.rsplit(':', 1)[0]
+    config = None
+    if USE_CUSTOM_TEMPLATE and args.provider == 'ollama':
         config = load_config(modelname)
-    else:
-        config = None
+    elif USE_CUSTOM_TEMPLATE and args.provider == 'openai':
+        # use default OpenAI FIM config if no model-specific file
+        try:
+            config = load_config(modelname)
+        except SystemExit:
+            config = OPENAI_FIM_CONFIG
 
     prompt = sys.stdin.read()
-    response = generate_code_completion(config, prompt, args.url, args.model, options)
+    if args.provider == 'openai':
+        response = generate_openai_code_completion(config, prompt, args.model, options, args.api_key)
+    else:
+        response = generate_code_completion(config, prompt, args.url, args.model, options)
     print(response, end='')

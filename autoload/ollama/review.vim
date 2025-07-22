@@ -145,15 +145,19 @@ function! s:StartChat(lines) abort
     " Create the Python command
     let l:command = [ g:ollama_python_interpreter,
                 \ l:script_path,
-                \ '-m', g:ollama_chat_model,
+                \ '-p', g:ollama_provider,
+                \ '-m', (g:ollama_provider ==# 'openai' ? g:ollama_openai_model : g:ollama_chat_model),
                 \ '-u', g:ollama_host,
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
     " Check if a system prompt was configured
     if g:ollama_chat_systemprompt != ''
-         " add system prompt option
+        " add system prompt option
         let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
+    if g:ollama_provider ==# 'openai' && !empty(g:ollama_openai_api_key)
+        let l:command += ['-k', g:ollama_openai_api_key]
     endif
 
     " Redirect job's IO to buffer
@@ -287,4 +291,3 @@ endfunction
 function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
-
