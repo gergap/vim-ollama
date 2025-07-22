@@ -164,12 +164,13 @@ The most important variables: (see `:help vim-ollama` for more information)
 | Variable              | Default                  | Description                            |
 |-----------------------|--------------------------|----------------------------------------|
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
-| `g:ollama_model`          | `starcoder2:3b`          | The LLM for code completions.          |
-| `g:ollama_edit_model`     | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
-| `g:ollama_chat_model`     | `llama3.1:8b`            | The LLM for chat conversations.        |
-| `g:ollama_provider`       | `'ollama'`               | API provider to use: `'ollama'` or `'openai'`. |
-| `g:ollama_openai_api_key`  | `''`                     | OpenAI API key for OpenAI provider.    |
-| `g:ollama_openai_model`    | `'gpt-4.1-mini'`        | OpenAI model for completions and chat.  |
+| `g:ollama_model`                | `starcoder2:3b`          | The LLM for code completions.          |
+| `g:ollama_model_provider`       | `'ollama'`               | Provider for code completions.          |
+| `g:ollama_edit_model`           | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
+| `g:ollama_edit_model_provider`  | `'ollama'`               | Provider for code edits.               |
+| `g:ollama_chat_model`           | `llama3.1:8b`            | The LLM for chat conversations.        |
+| `g:ollama_chat_model_provider`  | `'ollama'`               | Provider for chat conversations.       |
+| `g:ollama_openai_api_key`       | `''`                     | OpenAI API key for OpenAI provider.    |
 
 When adding new unsupported code completion models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
 Simply add this missing file and create a merge request to get it included upstream.
