@@ -16,7 +16,6 @@ log = None
 
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
-DEFAULT_HOST = 'http://tux:11434'
 DEFAULT_MODEL = 'qwen2.5-coder:14b'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 CONTEXT_LINES = 10
