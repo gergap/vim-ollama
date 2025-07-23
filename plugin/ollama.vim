@@ -41,6 +41,9 @@ if !exists('g:ollama_use_venv')
 endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
+else
+    " strip any trailing slash from the URL
+    let g:ollama_host = substitute(g:ollama_host, '/$', '', '')
 endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
