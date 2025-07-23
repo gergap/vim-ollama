@@ -15,6 +15,10 @@ let s:help_text = {
 \ 'ollama_model_options': 'Options for model customization.',
 \ 'ollama_context_lines': 'Number of context lines to consider (default=10).',
 \ 'ollama_debounce_time': 'Debounce time for completions in [ms] (default=500).',
+\ 'ollama_completion_allowlist_filetype':
+\     'Only run compltion for these filetypes (default=[]).',
+\ 'ollama_completion_denylist_filetype':
+\     'Do not run compltion for these filetypes (default=[]).',
 \ 'ollama_chat_model': 'Model used for chat interactions.',
 \ 'ollama_chat_systemprompt': 'System prompt for chat context.',
 \ 'ollama_chat_options': 'Chat model customization options.',
