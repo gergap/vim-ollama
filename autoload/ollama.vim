@@ -107,6 +107,7 @@ function! s:HandleExit(job, exit_code)
             echom "Check if g:ollama_host=".g:ollama_host." is correct."
             echohl None
         else
+            let s:kill_job = v:null
             call ollama#logger#Debug("Process terminated as expected")
         endif
         call ollama#ClearPreview()
