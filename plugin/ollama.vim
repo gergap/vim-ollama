@@ -128,10 +128,10 @@ function! s:HandleTabCompletion() abort
         " AI suggestion was inserted
         return ''
     endif
-    call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
 
     " fallback to default tab completion if no suggestion was inserted
     if exists('g:ollama_original_tab_mapping') && !empty(g:ollama_original_tab_mapping)
+        call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
         if g:ollama_original_tab_mapping.rhs =~# '^<Plug>'
             call ollama#logger#Info("<tab> feedkeys")
             call feedkeys("\<Plug>" . matchstr(g:ollama_original_tab_mapping.rhs, '^<Plug>\zs.*'), 'm')
