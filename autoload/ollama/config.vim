@@ -26,6 +26,10 @@ let s:help_text = {
 \ 'ollama_logfile': 'Logfile path for debugging.',
 \ 'ollama_review_logfile': 'Review-specific logfile path.',
 \ 'ollama_no_maps': 'Disable default mappings for Ollama plugs (default=0).',
+\ 'ollama_model_provider': 'Provider for code completions: "ollama" or "openai".',
+\ 'ollama_edit_model_provider': 'Provider for code edits: "ollama" or "openai".',
+\ 'ollama_chat_model_provider': 'Provider for chat conversations: "ollama" or "openai".',
+\ 'ollama_openai_api_key': 'OpenAI API key for OpenAI provider.',
 \ 'ollama_enabled': 'Enable or disable Ollama integration.'
 \ }
 
@@ -156,4 +160,3 @@ function! ollama#config#ShowHelp() abort
 endfunction
 
 " vim: filetype=vim
-

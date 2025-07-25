@@ -1,4 +1,4 @@
-# Ollama Support for Vim
+# Ollama and OpenAI Support for Vim
 
 This plugin adds Copilot-like code completion support to Vim. It uses [Ollama](https://ollama.com) as a backend, which
 can run locally and does not require cloud services, thus preserving your privacy.
@@ -53,6 +53,9 @@ The plugin uses Python scripts, e.g. `complete.py` and `chat.py`, to communicate
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
+It also supports using the OpenAI API as a backend. When configured with the `openai` provider and a valid API key,
+the plugin will call the OpenAI Chat Completions endpoint for both code completions and chat interactions.
+
 > [!NOTE]
 > This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
 > [LLM](https://github.com/huggingface/llm.nvim).
@@ -68,7 +71,7 @@ uses these scripts via I/O redirection to integrate AI results into Vim.
 > venv support has proven to work well.
 
 - Python 3.x
-- Python package: `httpx>=0.23.3`, `requests`, `jinja2`
+- Python package: `httpx>=0.23.3`, `requests`, `jinja2`, `openai`
 
 ### Debian-based Systems
 
@@ -161,9 +164,13 @@ The most important variables: (see `:help vim-ollama` for more information)
 | Variable              | Default                  | Description                            |
 |-----------------------|--------------------------|----------------------------------------|
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
-| `g:ollama_model`      | `starcoder2:3b`          | The LLM for code completions.          |
-| `g:ollama_edit_model` | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
-| `g:ollama_chat_model` | `llama3.1:8b`            | The LLM for chat conversations.        |
+| `g:ollama_model`                | `starcoder2:3b`          | The LLM for code completions.          |
+| `g:ollama_model_provider`       | `'ollama'`               | Provider for code completions.          |
+| `g:ollama_edit_model`           | `qwen2.5-coder:3b`       | The LLM for code editing tasks.        |
+| `g:ollama_edit_model_provider`  | `'ollama'`               | Provider for code edits.               |
+| `g:ollama_chat_model`           | `llama3.1:8b`            | The LLM for chat conversations.        |
+| `g:ollama_chat_model_provider`  | `'ollama'`               | Provider for chat conversations.       |
+| `g:ollama_openai_api_key`       | `''`                     | OpenAI API key for OpenAI provider.    |
 
 When adding new unsupported code completion models you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`.
 Simply add this missing file and create a merge request to get it included upstream.

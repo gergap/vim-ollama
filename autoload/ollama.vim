@@ -153,11 +153,15 @@ function! ollama#GetSuggestion(timer)
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
         \ g:ollama_plugin_dir . "/python/complete.py",
+        \ "-p", g:ollama_model_provider,
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]
+    if g:ollama_model_provider ==# 'openai' && !empty(g:ollama_openai_api_key)
+        let l:command += ['-k', g:ollama_openai_api_key]
+    endif
     call ollama#logger#Debug("command=". join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',

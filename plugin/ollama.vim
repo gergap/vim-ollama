@@ -101,6 +101,23 @@ if !exists('g:ollama_edit_options')
                 \ 'keep_alive': 1800,
                 \ }
 endif
+if !exists('g:ollama_model_provider')
+    " Provider for code completions: 'ollama' or 'openai'
+    let g:ollama_model_provider = 'ollama'
+endif
+if !exists('g:ollama_edit_model_provider')
+    " Provider for code edits: 'ollama' or 'openai'
+    let g:ollama_edit_model_provider = 'ollama'
+endif
+if !exists('g:ollama_chat_model_provider')
+    " Provider for chat conversations: 'ollama' or 'openai'
+    let g:ollama_chat_model_provider = 'ollama'
+endif
+if !exists('g:ollama_openai_api_key')
+    " OpenAI API key for OpenAI provider
+    let g:ollama_openai_api_key = ''
+endif
+
 if !exists('g:ollama_use_inline_diff')
     let g:ollama_use_inline_diff = 1
 endif
