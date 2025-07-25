@@ -243,9 +243,11 @@ call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
+" expand does funky stuff inside of a function need to set it here
+let s:ollama_plugin_dir=expand('<sfile>:p:h:h')
 function! PluginInit() abort
     " Store plugin path in helper variable to simplify other code
-    let g:ollama_plugin_dir=expand('<sfile>:p:h:h')
+    let g:ollama_plugin_dir=s:ollama_plugin_dir
     if g:ollama_no_maps != 1
         " Setup default mappings
         if empty(mapcheck('<C-]>', 'i'))
