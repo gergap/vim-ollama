@@ -379,6 +379,8 @@ function! ollama#setup#EnsureVenv() abort
 endfunction
 
 " Loads the plugin's python modules
+
+if g:ollama_embedded_python
 function! s:LoadPluginPyModules() abort
     python3 << EOF
 import os
@@ -391,17 +393,19 @@ if plugin_python_path not in sys.path:
     sys.path.append(plugin_python_path)
 
 try:
-    # Import your CodeEditor module
+    # Import plugin modules
     import CodeEditor
     import VimHelper
 except ImportError as e:
     print(f'Error importing CodeEditor module:\n{e}')
 EOF
 endfunction
+endif
 
 " Initializes venv for python.
 " This must be done before loading the plugin's py modules,
 " to ensure the plugin's python requirements are available.
+if g:ollama_embedded_python
 function! s:SetupPyVEnv() abort
     python3 << EOF
 import os
@@ -412,25 +416,23 @@ use_venv = vim.eval('g:ollama_use_venv') or 0
 
 # Should we use a venv?
 if use_venv:
-    # Create default venv path
     venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
-    # Check if the venv path exists
     if os.path.exists(venv_path):
-        #print('Found venv:', venv_path)
-
         venv_bin = os.path.join(venv_path, 'bin', 'python3')
-        venv_site_packages = os.path.join(venv_path, 'lib', f'python{sys.version_info.major}.{sys.version_info.minor}', 'site-packages')
-
-        # Ensure the virtual environment's site-packages is in sys.path
+        venv_site_packages = os.path.join(
+            venv_path,
+            'lib', f'python{sys.version_info.major}.{sys.version_info.minor}',
+            'site-packages'
+        )
         if venv_site_packages not in sys.path:
-            #print(f'Adding venv site-packages to path: {venv_site_packages}')
             sys.path.insert(0, venv_site_packages)
     else:
-        print('Venv not found: '. venv_path)
+        print('Venv not found: ' + venv_path)
 else:
     print('Venv disabled')
 EOF
 endfunction
+endif
 
 function! ollama#setup#Init() abort
     let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
@@ -453,21 +455,25 @@ function! ollama#setup#Init() abort
         endif
         echon "\n"
 
-        if g:ollama_use_venv
+        if g:ollama_use_venv && g:ollama_embedded_python
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
             call s:SetupPyVEnv()
         endif
         call ollama#setup#Setup()
-        call s:LoadPluginPyModules()
+        if g:ollama_embedded_python
+            call s:LoadPluginPyModules()
+        endif
     else
         " load the config file
         execute 'source' l:ollama_config
-        if g:ollama_use_venv
+        if g:ollama_use_venv && g:ollama_embedded_python
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
             call s:SetupPyVEnv()
         endif
-        call s:LoadPluginPyModules()
+        if g:ollama_embedded_python
+            call s:LoadPluginPyModules()
+        endif
     endif
 endfunction
