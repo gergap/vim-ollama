@@ -41,9 +41,6 @@ endif
 
 function! ollama#TriggerCompletion()
     call ollama#logger#Debug("TriggerCompletion...")
-    if !ollama#IsEnabled()
-        return
-    endif
     " get current buffer type
     if &buftype=='prompt'
         call ollama#logger#Debug("Ignoring prompt buffer")
