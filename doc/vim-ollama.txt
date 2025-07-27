@@ -200,6 +200,49 @@ Other Maps ~
 
 You can configure vim-ollama using the following variables in your .vimrc:
 
+                                                      *g:ollama_enabled*
+g:ollama_enabled
+    - Description: When set to `1` (or 'v:true') enables vim-ollama
+      autocompletion for all buffers, by default.  But also see
+      `b:ollama_enabled`.  If set to any other value, vim-ollama
+      autocompletion will be disabled by default for all buffers.
+
+      Can be modified either directly, or via the `:Ollama enable`,
+      `:Ollama disable`, and `:Ollama toggle` commands.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enabled = 0
+<
+                                                      *b:ollama_enabled*
+b:ollama_enabled
+    - Description: Similar to `g:ollama_enabled`, but affects a single buffer.
+      When unset, `g:ollama_enabled` is used.
+
+      If you want to disable vim-ollama autocompletion by default, but enable
+      it for individual buffers, you can set `g:ollama_enabled` to 'v:false',
+      and use an 'autocmd' to set `b:ollama_enabled` to 'v:true' for
+      individual buffers.
+
+      Or vice versa, you can set `g:ollama_enabled` to 'v:true', and use an
+      'autocmd' to set `b:ollama_enabled` to 'v:false' for individual buffers.
+
+    - Default: unset
+    - Example:
+>
+        " Disable vim-ollama autocompletion for a specific filetype
+        augroup DisableOllamaAutoCompletionForPerl
+          autocmd!
+          autocmd FileType perl let b:ollama_enabled = v:false
+        augroup END
+
+        " Enable vim-ollama autocompletion only for a specific filetype
+        let g:ollama_enabled = v:false
+        augroup EnableOllamaAutoCompletionForPerl
+          autocmd!
+          autocmd FileType perl let b:ollama_enabled = v:true
+        augroup END
+<
                                                       *g:ollama_host*
 g:ollama_host
     - Description: Sets the Ollama host address and port.
