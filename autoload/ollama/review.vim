@@ -267,22 +267,6 @@ function! ollama#review#Task(prompt) range
     call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
 endfunction
 
-" Create chat with code review prompt
-function! ollama#review#Review() range
-    call s:StartChatWithContext("Please review the following code:", a:firstline, a:lastline)
-endfunction
-
-" Create chat with spell checking prompt
-function! ollama#review#SpellCheck() range
-    call s:StartChatWithContext("Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:", a:firstline, a:lastline)
-endfunction
-
-" Create chat window with custom prompt
-function! ollama#review#Task(prompt) range
-    call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
-endfunction
-
 function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
-
