@@ -117,35 +117,43 @@ function! s:HandleExit(job, exit_code)
     let s:prompt = ''
 endfunction
 
-function! ollama#GetSuggestion(timer)
-    call ollama#logger#Debug("GetSuggestion")
-    " reset timer handle when called
-    let s:timer_id = -1
-    let l:current_line = line('.')
-    let l:current_col = col('.')
+" Constructs a prompt for the completion request.
+function! s:ConstructPrompt()
+    let l:line = line('.')
+    let l:col = col('.')
     let l:context_lines = g:ollama_context_lines
 
     " Get the lines before and after the current line
-    let l:prefix_lines = getline(max([1, l:current_line - l:context_lines]), l:current_line - 1)
-    let l:suffix_lines = getline(l:current_line + 1, min([line('$'), l:current_line + l:context_lines]))
+    let l:prefix_lines = getline(max([1, l:line - l:context_lines]), l:line - 1)
+    let l:suffix_lines = getline(l:line + 1, min([line('$'), l:line + l:context_lines]))
 
     " Combine prefix lines and current line's prefix part
     let l:prefix = join(l:prefix_lines, "\n")
     if !empty(l:prefix)
         let l:prefix ..= "\n"
     endif
-    let l:prefix ..= strpart(getline('.'), 0, l:current_col - 1)
+    let l:prefix ..= strpart(getline('.'), 0, l:col - 1)
     " Combine suffix lines and current line's suffix part
-    let l:suffix = strpart(getline('.'), l:current_col - 1)
+    let l:suffix = strpart(getline('.'), l:col - 1)
     if !empty(l:suffix)
         let l:suffix ..= "\n"
     endif
     let l:suffix ..= join(l:suffix_lines, "\n")
 
-    let l:prompt = l:prefix .. '<FILL_IN_HERE>' .. l:suffix
+    return l:prefix .. '<FILL_IN_HERE>' .. l:suffix
+endfunction
 
-    let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
-    call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host
+function! ollama#GetSuggestion(timer)
+    call ollama#logger#Debug("GetSuggestion")
+    " reset timer handle when called
+    let s:timer_id = -1
+
+    let l:prompt = s:ConstructPrompt()
+
+    let l:model_options =
+          \ substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
+    call ollama#logger#Debug(
+          \ "Connecting to Ollama on " .. g:ollama_host
           \ .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
     " Convert plugin debug level to python logger levels
