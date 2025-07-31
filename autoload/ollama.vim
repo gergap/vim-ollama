@@ -23,7 +23,7 @@ let s:prop_id = -1
 let s:ignore_schedule = 0
 
 let s:vim_minimum_version = '9.0.0185'
-let s:has_vim_ghost_text = has('patch-' . s:vim_minimum_version) && has('textprop')
+let s:has_vim_ghost_text = has('patch-' .. s:vim_minimum_version) && has('textprop')
 
 let s:hlgroup = 'OllamaSuggestion'
 let s:annot_hlgroup = 'OllamaAnnotation'
@@ -36,7 +36,8 @@ if s:has_vim_ghost_text
         call prop_type_add(s:annot_hlgroup, {'highlight': s:annot_hlgroup})
     endif
 else
-    echom "warning: Vim " . s:vim_minimum_version . " or newer is required to support ghost text (textprop)"
+    echom "warning: Vim " .. s:vim_minimum_version
+          \ .. " or newer is required to support ghost text (textprop)"
 endif
 
 function! ollama#TriggerCompletion()
@@ -76,7 +77,7 @@ endfunction
 
 " handle output on stdout
 function! s:HandleCompletion(job, data)
-    call ollama#logger#Debug("Received completion: ". json_encode(a:data))
+    call ollama#logger#Debug("Received completion: " .. json_encode(a:data))
     if !empty(a:data)
         "let l:suggestion = join(a:data, "\n")
         let s:suggestion = substitute(a:data, "\r\n", "\n", "g")
@@ -86,22 +87,22 @@ endfunction
 
 " handle output on stderr
 function! s:HandleError(job, data)
-    call ollama#logger#Debug("Received stderr: ".a:data)
+    call ollama#logger#Debug("Received stderr: " .. a:data)
     if !empty(a:data)
         echohl ErrorMsg
-        echom "Error: " . a:data
+        echom "Error: " .. a:data
         echohl None
     endif
 endfunction
 
 function! s:HandleExit(job, exit_code)
-    call ollama#logger#Debug("Process exited: ".a:exit_code)
+    call ollama#logger#Debug("Process exited: " .. a:exit_code)
     if a:exit_code != 0
         " Don't log errors if we killed the job, this is expected
         if a:job isnot s:kill_job
             echohl ErrorMsg
-            echom "Process exited with code: ".a:exit_code
-            echom "Check if g:ollama_host=".g:ollama_host." is correct."
+            echom "Process exited with code: " .. a:exit_code
+            echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
             echohl None
         else
             let s:kill_job = v:null
@@ -131,32 +132,33 @@ function! ollama#GetSuggestion(timer)
     " Combine prefix lines and current line's prefix part
     let l:prefix = join(l:prefix_lines, "\n")
     if !empty(l:prefix)
-        let l:prefix .= "\n"
+        let l:prefix ..= "\n"
     endif
-    let l:prefix .= strpart(getline('.'), 0, l:current_col - 1)
+    let l:prefix ..= strpart(getline('.'), 0, l:current_col - 1)
     " Combine suffix lines and current line's suffix part
     let l:suffix = strpart(getline('.'), l:current_col - 1)
     if !empty(l:suffix)
-        let l:suffix .= "\n"
+        let l:suffix ..= "\n"
     endif
-    let l:suffix .= join(l:suffix_lines, "\n")
+    let l:suffix ..= join(l:suffix_lines, "\n")
 
-    let l:prompt = l:prefix . '<FILL_IN_HERE>' . l:suffix
+    let l:prompt = l:prefix .. '<FILL_IN_HERE>' .. l:suffix
 
     let l:model_options = substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
-    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
-    call ollama#logger#Debug("model_options=".l:model_options)
+    call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host
+          \ .. " using model " .. g:ollama_model)
+    call ollama#logger#Debug("model_options=" .. l:model_options)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
-        \ g:ollama_plugin_dir . "/python/complete.py",
+        \ g:ollama_plugin_dir .. "/python/complete.py",
         \ "-m", g:ollama_model,
         \ "-u", g:ollama_host,
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]
-    call ollama#logger#Debug("command=". join(l:command, " "))
+    call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',
         \ 'out_cb': function('s:HandleCompletion'),
@@ -165,7 +167,8 @@ function! ollama#GetSuggestion(timer)
         \ }
 
     if (s:prompt == l:prompt)
-        call ollama#logger#Debug("Ignoring search for '".l:prompt."'. Already running.")
+        call ollama#logger#Debug("Ignoring search for '" .. l:prompt .. "'."
+              \ .. " Already running.")
         return
     endif
     " save current search
@@ -177,7 +180,7 @@ function! ollama#GetSuggestion(timer)
         call s:KillJob()
     endif
 
-    call ollama#logger#Debug("Starting job for '".l:prompt."'...")
+    call ollama#logger#Debug("Starting job for '" .. l:prompt .. "'...")
     " create job object and hold reference to avoid closing channels
     let s:job = job_start(l:command, l:job_options)
     let channel = job_getchannel(s:job)
@@ -186,7 +189,7 @@ function! ollama#GetSuggestion(timer)
 endfunction
 
 function! ollama#UpdatePreview(suggestion)
-    call ollama#logger#Debug("UpdatePreview: suggestion='".json_encode(a:suggestion)."'")
+    call ollama#logger#Debug("UpdatePreview: suggestion='" .. json_encode(a:suggestion) .. "'")
     if !empty(a:suggestion)
         let s:suggestion = a:suggestion
         let text = split(s:suggestion, "\r\n\\=\\|\n", 1)
@@ -200,10 +203,12 @@ function! ollama#UpdatePreview(suggestion)
         call ollama#ClearPreview()
         call prop_add(line('.'), col('.'), {'type': s:hlgroup, 'text': text[0]})
         for line in text[1:]
-            call prop_add(line('.'), 0, {'type': s:hlgroup, 'text_align': 'below', 'text': line})
+            call prop_add(line('.'), 0,
+                  \ {'type': s:hlgroup, 'text_align': 'below', 'text': line})
         endfor
         if !empty(annot)
-            call prop_add(line('.'), col('$'), {'type': s:annot_hlgroup, 'text': ' ' . annot})
+            call prop_add(line('.'), col('$'),
+                  \ {'type': s:annot_hlgroup, 'text': ' ' .. annot})
         endif
     else
         call ollama#ClearPreview()
@@ -267,7 +272,7 @@ function! ollama#InsertStringWithNewlines(text, morelines)
     let l:before_cursor = strpart(l:line, 0, l:current_col - 1)
     let l:after_cursor = strpart(l:line, l:current_col - 1)
     " build new line
-    let l:new_line = l:before_cursor . l:lines[0]
+    let l:new_line = l:before_cursor .. l:lines[0]
     call setline('.', l:new_line)
     let l:new_cursor_col = strlen(l:before_cursor) + strlen(l:lines[0])
 
@@ -278,7 +283,7 @@ function! ollama#InsertStringWithNewlines(text, morelines)
     " Get the current indentation level
     let l:indent = indent(line('.'))
     let l:indent = 0 " don't add indent, it's included in AI suggestion already
-"    echom "indent=" . indent('.')
+"    echom "indent=" .. indent('.')
 
     " Append each line of the multi-line string
     for l:line in l:lines[1:]
@@ -326,15 +331,15 @@ function! ollama#InsertNextLine()
         return
     endif
 
-    call ollama#logger#Debug("current suggestion=".json_encode(s:suggestion))
+    call ollama#logger#Debug("current suggestion=" .. json_encode(s:suggestion))
 
     " matchstr({expr}, {pat} [, {start} [, {count}]]): returns matched string
     " substitute({string}, {pat}, {sub}, {flags}): return new string or '' on error
     let l:text = matchstr(s:suggestion, "\n*\\%([^\n]\\+\\)") " get line until \n
     let l:firstline = substitute(l:text, "\n*$", '', '') " remove trailing newline
     let s:suggestion = strpart(s:suggestion, strlen(l:text) + 1) " remove line from suggestion
-    call ollama#logger#Debug("firstline=".json_encode(l:firstline))
-    call ollama#logger#Debug("new suggestion=".json_encode(s:suggestion))
+    call ollama#logger#Debug("firstline=" .. json_encode(l:firstline))
+    call ollama#logger#Debug("new suggestion=" .. json_encode(s:suggestion))
 
     " check if remaingin suggestion contains more non-white space charaters
     if (matchstr(s:suggestion, '\S') == "")
@@ -359,15 +364,15 @@ function! ollama#InsertNextWord()
         return
     endif
 
-    call ollama#logger#Debug("current suggestion=".json_encode(s:suggestion))
+    call ollama#logger#Debug("current suggestion=" .. json_encode(s:suggestion))
 
     " matchstr({expr}, {pat} [, {start} [, {count}]]): returns matched string
     " substitute({string}, {pat}, {sub}, {flags}): return new string or '' on error
     let l:text = matchstr(s:suggestion, '\%(\S\+\s*\)') " get first word with trailing spaces
     let l:firstword = substitute(l:text, "\n*$", '', '') " remove trailing newlines
     let s:suggestion = strpart(s:suggestion, strlen(l:text)) " remove word from suggestion
-    call ollama#logger#Debug("firstword=".json_encode(l:firstword))
-    call ollama#logger#Debug("new suggestion=".json_encode(s:suggestion))
+    call ollama#logger#Debug("firstword=" .. json_encode(l:firstword))
+    call ollama#logger#Debug("new suggestion=" .. json_encode(s:suggestion))
 
     let s:ignore_schedule = 1
     call ollama#InsertStringWithNewlines(l:firstword, 0)
