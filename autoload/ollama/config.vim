@@ -66,7 +66,7 @@ endfunction
 " Handles errors from the async job
 function! ollama#config#HandleJobError(channel, msg) abort
     if !empty(a:msg)
-        echoerr "Error: " . a:msg
+        echoerr "Error: " .. a:msg
     endif
 endfunction
 

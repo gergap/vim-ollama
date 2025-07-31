@@ -4,7 +4,7 @@
 " This file is based on the code of copilot.vim, but was modified to fit
 " vim-ollams's needs.
 if !exists('g:ollama_logfile')
-    let g:ollama_logfile = tempname() . '-ollama.log'
+    let g:ollama_logfile = tempname() .. '-ollama.log'
 endif
 if !exists('g:ollama_debug')
     let g:ollama_debug = 0
@@ -30,7 +30,7 @@ endfunction
 
 function! ollama#logger#CreateFile() abort
   try
-    "echom 'created log file '.g:ollama_logfile
+    "echom 'created log file ' .. g:ollama_logfile
     call writefile([], g:ollama_logfile)
   catch
   endtry
@@ -55,7 +55,7 @@ function! ollama#logger#Raw(level, message) abort
      return
   endif
   let lines = type(a:message) == v:t_list ? copy(a:message) : split(a:message, "\n", 1)
-  let lines[0] = strftime('[%Y-%m-%d %H:%M:%S] ') . get(s:level_prefixes, a:level, '[UNKNOWN] ') . get(lines, 0, '')
+  let lines[0] = strftime('[%Y-%m-%d %H:%M:%S] ') .. get(s:level_prefixes, a:level, '[UNKNOWN] ') .. get(lines, 0, '')
   try
     if filewritable(g:ollama_logfile)
       call writefile(lines, g:ollama_logfile, 'a')
