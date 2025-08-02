@@ -50,7 +50,7 @@ function! ollama#edit#UpdateProgress(popup)
     " Cycle through progress states
     let g:progress_indicator = (g:progress_indicator + 1) % 4
     let l:states = ['|', '/', '-', '\']
-    call popup_settext(a:popup, 'Processing ' . l:states[g:progress_indicator])
+    call popup_settext(a:popup, 'Processing ' .. l:states[g:progress_indicator])
 
     " Poll the job status, because Vim calls from worker threads produce
     " segfaults
