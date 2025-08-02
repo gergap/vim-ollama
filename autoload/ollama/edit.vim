@@ -5,6 +5,31 @@ let s:buf = -1
 " avoid starting a 2nd edit job while one is in progress
 let g:edit_in_progress = 0
 
+if !exists('g:ollama_embedded_python') || g:ollama_embedded_python == 0
+  function! ollama#edit#EditCodeDone(status) abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#DialogCallback(id, result) abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#UpdateProgress(popup) abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#EditCode(request) abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#EditPrompt() abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#AcceptAll() abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  function! ollama#edit#RejectAll() abort
+    echoerr "OllamaEdit features require Vim compiled with +python3 support."
+  endfunction
+  finish
+endif
+
 " Define the VimScript callback function
 " This will be called from python when to operations is 'done'
 " or aborted with 'error'
@@ -212,4 +237,3 @@ finally:
     pass
 EOF
 endfunction
-

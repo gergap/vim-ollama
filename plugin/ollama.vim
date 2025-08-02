@@ -19,13 +19,12 @@ if has('nvim')
 endif
 
 if has('python3') || has('python3_dynamic')
-    " Use system's python3 by default (can be changed by venv)
-    let g:ollama_python_interpreter = 'python3'
+    let g:ollama_embedded_python = 1
 else
-    let g:ollama_enabled = 0
-    echom "warning: your Vim version does not support python3. Vim-ollama is disabled."
-    finish
+    let g:ollama_embedded_python = 0
 endif
+" Use system's python3 by default (can be changed by venv)
+let g:ollama_python_interpreter = 'python3'
 
 " Default settings
 if !exists('g:ollama_enabled')
