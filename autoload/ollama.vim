@@ -379,15 +379,29 @@ endfunction
 
 function ollama#IsEnabled() abort
     " Check if the global setting is enabled
-    if exists('g:ollama_enabled') && g:ollama_enabled == 1
-        " Check if the buffer-local variable is set and disables completion
-        if exists('b:ollama_enabled') && b:ollama_enabled == 0
-            return 0
-        endif
-        return 1
-    else
+    if exists('g:ollama_enabled') && g:ollama_enabled == 0
         return 0
     endif
+
+    " Check if the buffer-local variable is set and disables completion
+    if exists('b:ollama_enabled') && b:ollama_enabled == 0
+        return 0
+    endif
+
+    " If whitelist is set, it limits the types of files that are covered.
+    if exists('g:ollama_completion_allowlist_filetype')
+                \ && len(g:ollama_completion_allowlist_filetype) > 0
+                \ && index(g:ollama_completion_allowlist_filetype, &filetype) < 0
+        return 0
+    endif
+
+    if exists('g:ollama_completion_denylist_filetype')
+                \ && len(g:ollama_completion_denylist_filetype) > 0
+                \ && index(g:ollama_completion_denylist_filetype, &filetype) >= 0
+        return 0
+    endif
+
+    return 1
 endfunction
 
 " Enables the plugin. If it is already enabled, does nothing.

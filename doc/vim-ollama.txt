@@ -296,6 +296,45 @@ g:ollama_debounce_time
 >
         let g:ollama_debounce_time = 300
 <
+                                      *g:ollama_completion_allowlist_filetype*
+g:ollama_completion_allowlist_filetype
+    - Description: If non-empty, then completion will only be triggered for
+      buffers with these file types (See 'filetype').
+
+      You should set this, if you prefer completion to be disabled for any
+      file type, except the ones that you listed. You can still trigger
+      completion with the `<Plug>(ollama-trigger-completion)` mapping.
+
+      File type is checked first against this list, then checked against the
+      `g:ollama_completion_denylist_filetype`.  So if both match, completion
+      will be disabled for this buffer.
+
+    - Default: []
+    - Example:
+>
+        let g:ollama_completion_allowlist_filetype = ['cpp', 'haskell']
+<
+                                        *g:ollama_completion_denylist_filetype*
+g:ollama_completion_denylist_filetype
+    - Description: If non-empty, then completion will not be triggered for
+      buffers with these file types (See 'filetype').
+
+      This only affects the automatic completion suggestion, triggered by
+      `g:ollama_debounce_time`. You can always trigger completion manually
+      with the `<Plug>(ollama-trigger-completion)` mapping.
+
+      It probably makes sense to disable completion, for example, in the
+      fuzzyfinder plugin window.  But depending on the other plugins you have
+      available, you may want to add other filetypes as well.
+
+      This list is checked after `g:ollama_completion_allowlist_filetype`.  So
+      if both match, completion will be disabled for this buffer.
+
+    - Default: []
+    - Example:
+>
+        let g:ollama_completion_denylist_filetype = ['fuf']
+<
                                                       *g:ollama_chat_model*
 g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.

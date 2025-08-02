@@ -49,6 +49,12 @@ endif
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
 endif
+if !exists('g:ollama_completion_allowlist_filetype')
+  let g:ollama_completion_allowlist_filetype = []
+endif
+if !exists('g:ollama_completion_denylist_filetype')
+  let g:ollama_completion_denylist_filetype = []
+endif
 if !exists('g:ollama_context_lines')
     let g:ollama_context_lines = 30
 endif
