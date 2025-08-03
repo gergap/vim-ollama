@@ -239,6 +239,8 @@ command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 
+command! -nargs=? OllamaDebug call ollama#logger#ShowLogBuffer(<q-mods>, <f-args>)
+
 " Define new signs for diffs
 sign define NewLine text=+ texthl=DiffAdd
 sign define ChangedLine text=~ texthl=DiffChange

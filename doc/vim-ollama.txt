@@ -161,6 +161,42 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaPull qwen2.5-coder:1.5b
 <
+:OllamaDebug
+    - Description: Opens a buffer that will show the last
+    `g:ollama_log_history` lines of the plugin log.
+
+    Optionally accepts a log level, which is also specified in the
+    `g:ollama_debug` variable.
+
+    The log level can be either a number between 0 and 4 inclusive, or it can
+    be a name of the log level.  Log level names are, case insensitive:
+    "bare", "error", "warn" (or "warning"), "info", "debug".   Names match
+    levels 0 to 4, respectively.
+
+    The command will create a buffer with no actual file backing it, called
+    `ollama:///log`, unless it already exist.  As long as this buffer will
+    exist, its content will contain the last `g:ollama_log_history` lines in
+    the plugin log.  If the cursor is on the last line in a window showing
+    this buffer, the cusor position will be automatically updated to always
+    show the last line.
+
+    If you pass "stop" as the log level, then the log buffer is destroyed and
+    the log level is set to "error".
+
+    You can also just `:bw` the debug buffer when you no longer need it.
+
+    Notice that the log messages are preserved regardless of if the log buffer
+    is visible or not.  But only messages that match the currently set log
+    level are stored.
+
+    - Usage:
+>
+      :OllamaDebug [log-level | "stop"]
+<
+    - Example:
+>
+      :vert OllamaDebug debug
+<
 
 ==============================================================================
 5. Maps                                               *vim-ollama-maps*
