@@ -331,16 +331,17 @@ endfunction
 function! CleanEscapes(s)
     let s = substitute(a:s, '\\u003c', '<', 'g')
     let s = substitute(s, '\\u003e', '>', 'g')
+    let s = substitute(s, '\\n', "\n", 'g')
     return s
 endfunction
 
 " Process JSON response intended for the plugin.
 function! ollama#review#ProcessResponse()
-    " Get all lines from the chat buffer
+    " Get last chat response
     let lines = s:ollama_response
-    call ollama#logger#Debug("ProcessResponse:\n"  ..  join(lines, "\n"))
+    call ollama#logger#Debug("ProcessResponse:\n" .. join(lines, "\n"))
 
-    " Extract JSON lines: find the first line starting with [ and last line ending with ]
+    " Find JSON array boundaries
     let start_idx = -1
     let end_idx = -1
     for i in range(len(lines))
@@ -361,7 +362,6 @@ function! ollama#review#ProcessResponse()
         return
     endif
 
-    " Extract the JSON text lines and join them
     let json_lines = lines[start_idx : end_idx]
     let json_text = join(json_lines, "\n")
 
@@ -386,19 +386,33 @@ function! ollama#review#ProcessResponse()
             continue
         endif
 
-        let filepath = file['path']
-        let content = CleanEscapes(file['content'])
+        " Sanitize path: remove leading /, disallow .. to prevent directory escape
+        let filepath = substitute(file['path'], '^/*', '', '')
+        if filepath =~# '\.\.'
+            echoerr 'Unsafe path detected, skipping: ' . filepath
+            continue
+        endif
 
-        " Write content to file
+        " Create directories if needed
+        let dir = fnamemodify(filepath, ':h')
+        if dir !=# '' && !isdirectory(dir)
+            call mkdir(dir, 'p')
+        endif
+
+        " Clean and write content
+        let content = CleanEscapes(file['content'])
         try
             call writefile(split(content, "\n"), filepath)
             echom 'Wrote file: ' . filepath
         catch
             echoerr 'Failed to write file: ' . filepath
+            continue
         endtry
-        " Close Chat window
-        execute ':q!'
-        " open file
+
+        " Close chat window, open new file buffer
+        if winnr('$') > 1
+            execute ':q!'
+        endif
         execute ':edit! ' . filepath
     endfor
     " Open NERDTree to show he new files if this plugin is loaded
