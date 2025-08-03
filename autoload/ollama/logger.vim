@@ -50,6 +50,55 @@ endfunction
 
 let s:level_prefixes = ['', '[ERROR] ', '[WARN] ', '[INFO] ', '[DEBUG] ', '[DEBUG] ']
 
+function! OllamaOpenLogBuffer() abort
+  " Check if the buffer already exists
+  let l:bufnr = bufnr('ollama:///log')
+
+  if l:bufnr <= 0
+    " Create a new buffer with that name and setup BufReadCmd autocommand
+    execute 'edit ollama:///log'
+  else
+    " Just switch to it
+    execute 'buffer' l:bufnr
+  endif
+
+  " Mark it as special (readonly, unlisted, etc.) if not already
+  setlocal buftype=nofile bufhidden=wipe nobuflisted nomodifiable
+endfunction
+
+command! OllamaLog call OllamaOpenLogBuffer()
+
+" Fallback function to log to a Vim buffer if writing to file fails.
+function! ollama#logger#ToBuffer(lines) abort
+  " Evaluate deferred log lines (functions)
+  call map(a:lines, { k, L -> type(L) == v:t_func ? call(L, []) : L })
+
+  " Extend log history
+  call extend(s:logs, a:lines)
+
+  " Enforce log history limit
+  let l:overflow = len(s:logs) - get(g:, 'ollama_log_history', 10000)
+  if l:overflow > 0
+    call remove(s:logs, 0, l:overflow - 1)
+  endif
+
+  " If log buffer is open and loaded, update it
+  let l:bufnr = bufnr('ollama:///log')
+  if l:bufnr > 0 && bufloaded(l:bufnr)
+    call setbufvar(l:bufnr, '&modifiable', 1)
+    call setbufline(l:bufnr, 1, s:logs)
+    call setbufvar(l:bufnr, '&modifiable', 0)
+
+    " Scroll other windows showing the log buffer
+    for l:winid in win_findbuf(l:bufnr)
+      if has('nvim') && l:winid != win_getid()
+        call nvim_win_set_cursor(l:winid, [len(s:logs), 0])
+      endif
+    endfor
+  endif
+endfunction
+
+" Raw logging function used by all log levels
 function! ollama#logger#Raw(level, messages) abort
   if a:level > g:ollama_debug
      return
@@ -72,33 +121,22 @@ function! ollama#logger#Raw(level, messages) abort
     endif
   endfor
 
+  " Add logging prefix with timestamp and log level
   let l:lines[0] = strftime('[%Y-%m-%d %H:%M:%S] ')
         \ .. get(s:level_prefixes, a:level, '[UNKNOWN] ')
         \ .. get(l:lines, 0, '')
 
   try
+    " write to file
     if filewritable(g:ollama_logfile)
       call writefile(l:lines, g:ollama_logfile, 'a')
       return
     endif
-    call map(l:lines, { k, L -> type(L) == v:t_func ? call(L, []) : L })
-    call extend(s:logs, l:lines)
-    let overflow = len(s:logs) - get(g:, 'ollama_log_history', 10000)
-    if overflow > 0
-      call remove(s:logs, 0, overflow - 1)
-    endif
-    let bufnr = bufnr('ollama:///log')
-    if bufnr > 0 && bufloaded(bufnr)
-      call setbufvar(bufnr, '&modifiable', 1)
-      call setbufline(bufnr, 1, s:logs)
-      call setbufvar(bufnr, '&modifiable', 0)
-      for winid in win_findbuf(bufnr)
-        if has('nvim') && winid != win_getid()
-          call nvim_win_set_cursor(winid, [len(s:logs), 0])
-        endif
-      endfor
-    endif
+
+    " of fall back to logging to a Vim buffer
+    call ollama#logger#ToBuffer(l:lines)
   catch
+    " there is nothing we could do here
   endtry
 endfunction
 
