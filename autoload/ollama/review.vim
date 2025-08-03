@@ -3,6 +3,8 @@
 let s:job = v:null
 let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
+" this variable holds the last response of Ollama
+let s:ollama_response = []
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -63,7 +65,10 @@ function! s:StartChat(lines) abort
             " don't send empty messages
             return
         endif
+        " Reset last response
+        let s:ollama_response = []
         " Send the text to a shell with Enter appended.
+        call ollama#logger#Debug("ch_sendraw... (TextEntered)")
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
 
@@ -77,8 +82,14 @@ function! s:StartChat(lines) abort
             " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
             if l:idx != -1
-                call ollama#logger#Debug("idx=" .. l:idx)
+                call ollama#logger#Debug("Stripping <EOT> at idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
+                " append last line
+                call add(s:ollama_response, l:line)
+                call ollama#review#ProcessResponse()
+            else
+                " append lines to ollama_response
+                call add(s:ollama_response, l:line)
             endif
             call appendbufline(s:buf, "$", l:line)
             if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
@@ -136,6 +147,7 @@ function! s:StartChat(lines) abort
     let l:model_options = json_encode(g:ollama_chat_options)
     call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
+    let s:ollama_response = []
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
@@ -226,6 +238,7 @@ function! s:StartChat(lines) abort
     call append(2, "(type 'quit' to exit, press CTRL-C to interrupt output)")
     if a:lines isnot v:null
         call append(3, a:lines)
+        call ollama#logger#Debug("Sending text... (StartChat)")
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
 
@@ -282,4 +295,114 @@ endfunction
 
 function ollama#review#Chat()
     call s:StartChat(v:null)
+endfunction
+
+" Create chat window with custom prompt
+function! ollama#review#CreateProject(prompt) range
+    " Prompt template as a list of lines
+    let l:prompt_lines = [
+                \ "\"\"\"",
+                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
+                \ "Your task is to generate a list of files with full content in response to the instruction below.",
+                \ "",
+                \ "Instruction:",
+                \ a:prompt,
+                \ "",
+                \ "Respond only in the following JSON format. Do not include any extra explanation:",
+                \ "[",
+                \ "  {",
+                \ "    \"path\": \"example.txt\",",
+                \ "    \"content\": \"Example file content here.\"",
+                \ "  },",
+                \ "  {",
+                \ "    \"path\": \"another.txt\",",
+                \ "    \"content\": \"Another file...\"",
+                \ "  }",
+                \ "]",
+                \ "\"\"\""
+                \ ]
+
+    " Start the chat
+    call s:StartChat(l:prompt_lines)
+endfunction
+
+" Quick hack for decoding some escaped characters, because json_decode doesn't
+" do it. TODO: add better solution which works more generic.
+function! CleanEscapes(s)
+    let s = substitute(a:s, '\\u003c', '<', 'g')
+    let s = substitute(s, '\\u003e', '>', 'g')
+    return s
+endfunction
+
+" Process JSON response intended for the plugin.
+function! ollama#review#ProcessResponse()
+    " Get all lines from the chat buffer
+    let lines = s:ollama_response
+    call ollama#logger#Debug("ProcessResponse:\n"  ..  join(lines, "\n"))
+
+    " Extract JSON lines: find the first line starting with [ and last line ending with ]
+    let start_idx = -1
+    let end_idx = -1
+    for i in range(len(lines))
+        if lines[i] =~ '^\s*\['
+            let start_idx = i
+            break
+        endif
+    endfor
+    for i in range(len(lines)-1, -1, -1)
+        if lines[i] =~ '\]\s*$'
+            let end_idx = i
+            break
+        endif
+    endfor
+
+    if start_idx == -1 || end_idx == -1 || end_idx < start_idx
+        echoerr 'Could not find JSON array in buffer'
+        return
+    endif
+
+    " Extract the JSON text lines and join them
+    let json_lines = lines[start_idx : end_idx]
+    let json_text = join(json_lines, "\n")
+
+    " Decode JSON
+    try
+        let files = json_decode(json_text)
+    catch /^Vim\%((\a\+)\)\=:E\%(\d\+\)/
+        echoerr 'Failed to decode JSON'
+        return
+    endtry
+
+    " Check that files is a list
+    if type(files) != type([])
+        echoerr 'Decoded JSON is not a list'
+        return
+    endif
+
+    " Write each file
+    for file in files
+        if !has_key(file, 'path') || !has_key(file, 'content')
+            echoerr 'Invalid file object in JSON'
+            continue
+        endif
+
+        let filepath = file['path']
+        let content = CleanEscapes(file['content'])
+
+        " Write content to file
+        try
+            call writefile(split(content, "\n"), filepath)
+            echom 'Wrote file: ' . filepath
+        catch
+            echoerr 'Failed to write file: ' . filepath
+        endtry
+        " Close Chat window
+        execute ':q!'
+        " open file
+        execute ':edit! ' . filepath
+    endfor
+    " Open NERDTree to show he new files if this plugin is loaded
+    if exists('g:NERDTree')
+        execute ':NERDTreeCWD'
+    endif
 endfunction
