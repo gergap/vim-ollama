@@ -21,65 +21,63 @@ DEFAULT_TIMEOUT = 10
 # create logger
 log = None
 
-async def stream_chat_message(messages, endpoint, model, options, timeout):
-
-    # OpenAI provider: use ChatCompletion API
-    if g_provider == 'openai':
-        try:
-            import openai
-        except ImportError:
-            log.error("openai package not installed. Install with `pip install openai`.")
-            print("openai package not installed. Install with `pip install openai`.")
-            return
-        # set API key
-        if g_api_key:
-            openai.api_key = g_api_key
-        else:
-            key = os.getenv('OPENAI_API_KEY')
-            if not key:
-                log.error("OpenAI API key not provided. Use --api-key or set OPENAI_API_KEY.")
-                print("OpenAI API key not provided. Use --api-key or set OPENAI_API_KEY.")
-                return
-            openai.api_key = key
-        # stream chat completions
-        assistant_message = ''
-        try:
-            # support both pre-1.0 and >=1.0 openai packages
-            if hasattr(openai, 'OpenAI'):
-                client = openai.OpenAI()
-                stream = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=options.get('temperature', 0),
-                    top_p=options.get('top_p', 1),
-                    stream=True
-                )
-            else:
-                stream = openai.ChatCompletion.create(
-                    model=model,
-                    messages=messages,
-                    temperature=options.get('temperature', 0),
-                    top_p=options.get('top_p', 1),
-                    stream=True
-                )
-            for chunk in stream:
-                # delta may be a dict (old SDK) or ChoiceDelta object (new SDK)
-                d = chunk.choices[0].delta
-                if isinstance(d, dict):
-                    delta = d.get('content', '')
-                else:
-                    delta = getattr(d, 'content', '') or ''
-                assistant_message += delta
-                print(delta, end='', flush=True)
-            print('<EOT>', flush=True)
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            log.error(f"An error occurred: {e}")
-        # append to history
-        if assistant_message:
-            messages.append({'role': 'assistant', 'content': assistant_message.strip()})
+async def stream_chat_message_openai(messages, endpoint, model, options, timeout):
+    try:
+        import openai
+    except ImportError:
+        log.error("openai package not installed. Install with `pip install openai`.")
+        print("openai package not installed. Install with `pip install openai`.")
         return
+    # set API key
+    if g_api_key:
+        openai.api_key = g_api_key
+    else:
+        key = os.getenv('OPENAI_API_KEY')
+        if not key:
+            log.error("OpenAI API key not provided. Use --api-key or set OPENAI_API_KEY.")
+            print("OpenAI API key not provided. Use --api-key or set OPENAI_API_KEY.")
+            return
+        openai.api_key = key
+    # stream chat completions
+    assistant_message = ''
+    try:
+        # support both pre-1.0 and >=1.0 openai packages
+        if hasattr(openai, 'OpenAI'):
+            client = openai.OpenAI()
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=options.get('temperature', 0),
+                top_p=options.get('top_p', 1),
+                stream=True
+            )
+        else:
+            stream = openai.ChatCompletion.create(
+                model=model,
+                messages=messages,
+                temperature=options.get('temperature', 0),
+                top_p=options.get('top_p', 1),
+                stream=True
+            )
+        for chunk in stream:
+            # delta may be a dict (old SDK) or ChoiceDelta object (new SDK)
+            d = chunk.choices[0].delta
+            if isinstance(d, dict):
+                delta = d.get('content', '')
+            else:
+                delta = getattr(d, 'content', '') or ''
+            assistant_message += delta
+            print(delta, end='', flush=True)
+        print('<EOT>', flush=True)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        log.error(f"An error occurred: {e}")
+    # append to history
+    if assistant_message:
+        messages.append({'role': 'assistant', 'content': assistant_message.strip()})
+    return
 
+async def stream_chat_message_ollama(messages, endpoint, model, options, timeout):
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -131,6 +129,13 @@ async def stream_chat_message(messages, endpoint, model, options, timeout):
     # Add the assistant's message to the conversation history
     if assistant_message:
         messages.append({"role": "assistant", "content": assistant_message.strip()})
+
+async def stream_chat_message(messages, endpoint, model, options, timeout):
+    if g_provider == 'openai':
+        # OpenAI provider: use ChatCompletion API
+        await stream_chat_message_openai(messages, endpoint, model, options, timeout)
+    else:
+        await stream_chat_message_ollama(messages, endpoint, model, options, timeout)
 
 async def main(provider, baseurl, model, options, systemprompt, timeout, api_key):
     conversation_history = []
