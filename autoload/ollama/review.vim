@@ -5,7 +5,11 @@ let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
 " this variable holds the last response of Ollama
 let s:ollama_response = []
+" list of AI projct files
 let g:ollama_project_files = []
+" buffer for displaying new AI generated code, instead of creating new splits
+" all the time, which clutters the IDE
+let g:ollama_ai_bufnr = -1
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -24,6 +28,23 @@ func! ollama#review#KillChatBot()
         let s:buf = -1
     else
         call ollama#logger#Debug("No job to kill")
+    endif
+endfunc
+
+func! s:CloseWindowByBufNr(bufnr)
+    for win in range(1, winnr('$'))
+        if winbufnr(win) == a:bufnr
+            execute win . 'close!'
+            return
+        endif
+    endfor
+endfunc
+
+func! s:CloseChat()
+    " call s:CloseWindowByBufNr(s:buf)
+    if s:buf != -1
+        call s:SwitchToBuffer(s:buf)
+        execute "q!"
     endif
 endfunc
 
@@ -56,6 +77,16 @@ function! s:FindBufferWindow(bufnr)
         endif
     endfor
     return -1
+endfunction
+
+function! s:SwitchToBuffer(bufnr)
+    let l:win = s:FindBufferWindow(a:bufnr)
+    " switch to existing buffer
+    if l:win != -1
+        execute l:win  ..  'wincmd w'
+    else
+        execute 'buffer' a:bufnr
+    endif
 endfunction
 
 function! s:StartChat(lines) abort
@@ -307,6 +338,20 @@ function! CleanEscapes(s)
     return s
 endfunction
 
+" When starting Vim, we have an initial empty buffer.
+" We should use it to generate code instead of creating unnecessary splits.
+function! FindInitialEmptyBuffer()
+    for buf in getbufinfo({'buflisted': 1})
+        if buf.name ==# '' && !buf.changed
+            let lines = getbufline(buf.bufnr, 1, '$')
+            if len(lines) == 1 && lines[0] ==# ''
+                return buf.bufnr
+            endif
+        endif
+    endfor
+    return -1
+endfunction
+
 " Process JSON response intended for the plugin.
 function! ollama#review#ProcessResponse()
     " Get last chat response
@@ -385,21 +430,43 @@ function! ollama#review#ProcessResponse()
             continue
         endtry
 
-        " Close chat window, open new file buffer
-"        if winnr('$') > 1
-"            execute ':q!'
-"        endif
-
-        " Open existing buffer if already loaded, else edit the file
+        let empty_buf = FindInitialEmptyBuffer()
+        " Open or switch buffer smartly
         let bufnr = bufnr(filepath)
-        if bufnr != -1
-            execute 'buffer ' . bufnr
-            " reload buffer from file
-            execute 'edit!'
+        if bufnr == -1
+            echom "buffer does not exist yet"
+            if empty_buf != -1 && bufexists(empty_buf)
+                echom "Use initial empty buffer"
+                " Use initial empty buffer if it exists
+                call s:SwitchToBuffer(empty_buf)
+                execute 'edit! ' . filepath
+                execute 'set autoread'
+            elseif bufexists(g:ollama_ai_bufnr)
+                echom "Use AI buffer"
+                " Reuse existing AI view buffer window
+                call s:SwitchToBuffer(g:ollama_ai_bufnr)
+                execute 'edit! ' . filepath
+                execute 'set autoread'
+            else
+                echom "Use split"
+                " Open in a new vertical split
+                vertical leftabove split
+                execute 'edit! ' . filepath
+                execute 'set autoread'
+            endif
         else
-            execute 'edit! ' . filepath
+            echom "Switch to existing buffer"
+            " File is already loaded, switch to it
+            call s:SwitchToBuffer(bufnr)
+            " Ensure reload
+            execute 'edit'
         endif
+
+        " Remember the buffer for future reuse
+        let g:ollama_ai_bufnr = bufnr('%')
     endfor
+    call s:CloseChat()
+
     " Open NERDTree to show he new files if this plugin is loaded
 "    if exists('g:NERDTree')
 "        execute ':NERDTreeCWD'
@@ -569,8 +636,8 @@ function! ollama#review#ShowProjectView()
         return
     endif
 
-    " Open a vertical split with fixed width (e.g., 30 columns)
-    execute 'vertical ' . 30 . 'vsplit OllamaProjectView'
+    " Open a vertical split with fixed width (e.g., 60 columns)
+    execute 'vertical ' . 60 . 'vsplit OllamaProjectView'
     enew
     setlocal buftype=nofile
     setlocal bufhidden=wipe
