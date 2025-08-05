@@ -383,15 +383,16 @@ function! ollama#review#ProcessResponse()
         endtry
 
         " Close chat window, open new file buffer
-        if winnr('$') > 1
-            execute ':q!'
-        endif
+"        if winnr('$') > 1
+"            execute ':q!'
+"        endif
         execute ':edit! ' . filepath
     endfor
     " Open NERDTree to show he new files if this plugin is loaded
-    if exists('g:NERDTree')
-        execute ':NERDTreeCWD'
-    endif
+"    if exists('g:NERDTree')
+"        execute ':NERDTreeCWD'
+"    endif
+    call s:RefreshProjectView()
 endfunction
 
 function! s:BuildContextForFiles(files) abort
@@ -414,8 +415,8 @@ function! s:BuildContextForFiles(files) abort
 
             " Format as markdown code block
             call extend(l:context, [
-                        \ '```' . ft,
                         \ '# ' . filepath,
+                        \ '```' . ft,
                         \ ] + lines + ['```', ''])
         endif
     endfor
@@ -452,6 +453,7 @@ function! ollama#review#CreateCode(prompt) range
     call s:StartChat(l:prompt_lines)
 endfunction
 
+" A function for modifying tracked (AI generated) files
 function! ollama#review#ModifyCode(prompt)
     if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
         echoerr "No project files tracked. Run OllamaCreate first."
@@ -478,4 +480,159 @@ function! ollama#review#ModifyCode(prompt)
     let l:prompt_lines += ["\"\"\""]
 
     call s:StartChat(l:prompt_lines)
+endfunction
+
+" This function adds all open buffers to the list of tracked files,
+" which are used as file context in ModifyCode
+function! ollama#review#TrackOpenBuffers()
+    if !exists('g:ollama_project_files')
+        let g:ollama_project_files = []
+    endif
+
+    for bufnr in range(1, bufnr('$'))
+        if bufexists(bufnr) && buflisted(bufnr)
+            let filepath = bufname(bufnr)
+
+            " Skip unnamed or non-file buffers
+            if filepath ==# '' || !filereadable(filepath)
+                continue
+            endif
+
+            " Normalize path
+            let filepath = fnamemodify(filepath, ':.')
+
+            " Avoid duplicates
+            if index(g:ollama_project_files, filepath) == -1
+                call add(g:ollama_project_files, filepath)
+                echom "Tracked: " . filepath
+            endif
+        endif
+    endfor
+    call ollama#review#ShowProjectView()
+endfunction
+
+" Adds the current buffer to the project file list
+function! ollama#review#TrackCurrentBuf()
+    let filepath = expand('%:p')
+    if filepath ==# '' || !filereadable(filepath)
+        echoerr "No valid file in current buffer."
+        return
+    endif
+
+    let relpath = fnamemodify(filepath, ':.')
+    if !exists('g:ollama_project_files')
+        let g:ollama_project_files = []
+    endif
+
+    if index(g:ollama_project_files, relpath) == -1
+        call add(g:ollama_project_files, relpath)
+        echom "Tracked: " . relpath
+        call ollama#review#ShowProjectView()
+    else
+        echom "Already tracked: " . relpath
+    endif
+endfunction
+
+" Removes the current buffer from the project file list
+function! ollama#review#UntrackCurrentBuf()
+    let filepath = expand('%:p')
+    if filepath ==# ''
+        echoerr "No valid file in current buffer."
+        return
+    endif
+
+    let relpath = fnamemodify(filepath, ':.')
+    if exists('g:ollama_project_files')
+        let g:ollama_project_files = filter(g:ollama_project_files, { _, val -> val !=# relpath })
+        echom "Untracked: " . relpath
+    else
+        echo "No files are currently tracked."
+    endif
+endfunction
+
+" Opens a NERDTree like project view of tracked files
+function! ollama#review#ShowProjectView()
+    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
+        echo "No files tracked yet."
+        return
+    endif
+
+    " Open a vertical split with fixed width (e.g., 30 columns)
+    execute 'vertical ' . 30 . 'vsplit OllamaProjectView'
+    enew
+    setlocal buftype=nofile
+    setlocal bufhidden=wipe
+    setlocal noswapfile
+    setlocal nobuflisted
+    setlocal filetype=ollama_project
+    setlocal modifiable
+    syntax match OllamaProjectHeader /^# AI context/
+    highlight link OllamaProjectHeader String
+
+    let l:header = ['# AI context']  " Use '#' as comment style
+    let l:lines = l:header + g:ollama_project_files
+    call setline(1, l:lines)
+    setlocal nomodifiable
+
+    nnoremap <buffer> <CR> :call ollama#review#OpenTrackedFile()<CR>
+endfunction
+
+" Refresh the project file list after changing it
+function! s:RefreshProjectView()
+    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
+        echo "No files tracked yet."
+        return
+    endif
+
+    let l:header = ['# AI context']  " Use '#' as comment style
+    " Find the existing project view buffer
+    for buf in range(1, bufnr('$'))
+        if bufloaded(buf) && getbufvar(buf, '&filetype') ==# 'ollama_project'
+            " Make the buffer modifiable to update content
+            call setbufvar(buf, '&modifiable', 1)
+
+            " Replace buffer lines with tracked files
+            let l:lines = l:header + g:ollama_project_files
+            call setbufline(buf, 1, l:lines)
+
+            " Delete any extra lines beyond tracked files
+            let l:num_tracked = len(g:ollama_project_files)
+            let l:num_lines = line('$', buf)
+            if l:num_lines > l:num_tracked
+                call deletebufline(buf, l:num_tracked + 1, l:num_lines)
+            endif
+
+            " Set buffer back to nomodifiable
+            call setbufvar(buf, '&modifiable', 0)
+
+            " Optionally, you could redraw or refresh the window here if needed
+            return
+        endif
+    endfor
+
+    " If no project view buffer found, open it anew
+    call ollama#review#ShowProjectView()
+endfunction
+
+" Opens the selected file in project view
+function! ollama#review#OpenTrackedFile()
+    let relpath = getline('.')
+    let abspath = fnamemodify(relpath, ':p')
+
+    if !filereadable(abspath)
+        echoerr "File does not exist: " . relpath
+        return
+    endif
+
+    " Check if buffer is already open in a window
+    for winnr in range(1, winnr('$'))
+        let bufnr = winbufnr(winnr)
+        if fnamemodify(bufname(bufnr), ':p') ==# abspath
+            execute winnr . 'wincmd w'
+            return
+        endif
+    endfor
+
+    " Open in split
+    execute 'vsplit ' . fnameescape(abspath)
 endfunction

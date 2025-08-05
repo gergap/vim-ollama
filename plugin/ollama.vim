@@ -206,6 +206,9 @@ function! s:MapTab() abort
     nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
     nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
+    nnoremap <Plug>(ollama-project-view)   <Cmd>call ollama#review#ShowProjectView()<CR>
+    nnoremap <Plug>(ollama-track-file)     <Cmd>call ollama#review#TrackCurrentBuf()<CR>
+    nnoremap <Plug>(ollama-untrack-file)   <Cmd>call ollama#review#UntrackCurrentBuf()<CR>
 
     if !exists('g:ollama_no_tab_map')
         " Save the existing <Tab> mapping in insert mode
@@ -266,9 +269,14 @@ command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-
 command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
 command! -nargs=1 OllamaCreate call ollama#review#CreateCode(<f-args>)
 command! -nargs=1 OllamaModify call ollama#review#ModifyCode(<f-args>)
+command! OllamaTrackOpenBuffers call ollama#review#TrackOpenBuffers()
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
+
+command! OllamaProjectView call ollama#review#ShowProjectView()
+command! OllamaTrackCurrent call ollama#review#TrackCurrentBuf()
+command! OllamaUntrackCurrent call ollama#review#UntrackCurrentBuf()
 
 " Define new signs for diffs
 sign define NewLine text=+ texthl=DiffAdd
@@ -304,6 +312,15 @@ function! PluginInit() abort
         endif
         if empty(mapcheck('<leader>e', 'v'))
             vmap <leader>e <Plug>(ollama-edit)
+        endif
+        if empty(mapcheck('<leader>ap', 'n'))
+            nmap <leader>ap <Plug>(ollama-project-view)
+        endif
+        if empty(mapcheck('<leader>at', 'n'))
+            nmap <leader>at <Plug>(ollama-track-file)
+        endif
+        if empty(mapcheck('<leader>au', 'n'))
+            nmap <leader>au <Plug>(ollama-untrack-file)
         endif
 
 "       These mappings are currently not used
