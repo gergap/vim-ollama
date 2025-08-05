@@ -468,12 +468,14 @@ function! ollama#review#ModifyCode(prompt)
                 \ "[",
                 \ "  { \"path\": \"file.ext\", \"content\": \"New content\" }",
                 \ "]",
-                \ "\"\"\"",
                 \ "Below is the current project state:"
                 \ ]
 
     let l:file_context = s:BuildContextForFiles(g:ollama_project_files)
+    " add file context to prompt
     let l:prompt_lines = l:header + l:file_context
+    " close multiline prompt
+    let l:prompt_lines += ["\"\"\""]
 
     call s:StartChat(l:prompt_lines)
 endfunction
