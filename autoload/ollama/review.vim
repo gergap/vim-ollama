@@ -376,7 +376,10 @@ function! ollama#review#ProcessResponse()
         try
             call writefile(split(content, "\n"), filepath)
             echom 'Wrote file: ' . filepath
-            call extend(g:ollama_project_files, [filepath])
+            " Avoid duplicate entries in tracked files
+            if index(g:ollama_project_files, filepath) < 0
+                call add(g:ollama_project_files, filepath)
+            endif
         catch
             echoerr 'Failed to write file: ' . filepath
             continue
