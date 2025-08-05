@@ -5,6 +5,7 @@ let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
 " this variable holds the last response of Ollama
 let s:ollama_response = []
+let g:ollama_project_files = []
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -297,35 +298,6 @@ function ollama#review#Chat()
     call s:StartChat(v:null)
 endfunction
 
-" Create chat window with custom prompt
-function! ollama#review#CreateProject(prompt) range
-    " Prompt template as a list of lines
-    let l:prompt_lines = [
-                \ "\"\"\"",
-                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
-                \ "Your task is to generate a list of files with full content in response to the instruction below.",
-                \ "",
-                \ "Instruction:",
-                \ a:prompt,
-                \ "",
-                \ "Respond only in the following JSON format. Do not include any extra explanation:",
-                \ "[",
-                \ "  {",
-                \ "    \"path\": \"example.txt\",",
-                \ "    \"content\": \"Example file content here.\"",
-                \ "  },",
-                \ "  {",
-                \ "    \"path\": \"another.txt\",",
-                \ "    \"content\": \"Another file...\"",
-                \ "  }",
-                \ "]",
-                \ "\"\"\""
-                \ ]
-
-    " Start the chat
-    call s:StartChat(l:prompt_lines)
-endfunction
-
 " Quick hack for decoding some escaped characters, because json_decode doesn't
 " do it. TODO: add better solution which works more generic.
 function! CleanEscapes(s)
@@ -404,6 +376,7 @@ function! ollama#review#ProcessResponse()
         try
             call writefile(split(content, "\n"), filepath)
             echom 'Wrote file: ' . filepath
+            call extend(g:ollama_project_files, [filepath])
         catch
             echoerr 'Failed to write file: ' . filepath
             continue
@@ -419,4 +392,88 @@ function! ollama#review#ProcessResponse()
     if exists('g:NERDTree')
         execute ':NERDTreeCWD'
     endif
+endfunction
+
+function! s:BuildContextForFiles(files) abort
+    let l:context = []
+
+    for filepath in a:files
+        " Only add if the file still exists
+        if filereadable(filepath)
+            " Read from buffer if loaded, else from disk
+            if bufloaded(filepath)
+                let bufnr = bufnr(filepath)
+                let lines = getbufline(bufnr, 1, '$')
+            else
+                let lines = readfile(filepath)
+            endif
+
+            " Get filetype
+            let ext = fnamemodify(filepath, ':e')
+            let ft = ext != '' ? ext : 'text'
+
+            " Format as markdown code block
+            call extend(l:context, [
+                        \ '```' . ft,
+                        \ '# ' . filepath,
+                        \ ] + lines + ['```', ''])
+        endif
+    endfor
+
+    return l:context
+endfunction
+
+" Create chat window with custom prompt
+function! ollama#review#CreateCode(prompt) range
+    " Prompt template as a list of lines
+    let l:prompt_lines = [
+                \ "\"\"\"",
+                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
+                \ "Your task is to generate a list of files with full content in response to the instruction below.",
+                \ "",
+                \ "Instruction:",
+                \ a:prompt,
+                \ "",
+                \ "Respond only in the following JSON format. Do not include any extra explanation:",
+                \ "[",
+                \ "  {",
+                \ "    \"path\": \"example.txt\",",
+                \ "    \"content\": \"Example file content here.\"",
+                \ "  },",
+                \ "  {",
+                \ "    \"path\": \"another.txt\",",
+                \ "    \"content\": \"Another file...\"",
+                \ "  }",
+                \ "]",
+                \ "\"\"\""
+                \ ]
+
+    " Start the chat
+    call s:StartChat(l:prompt_lines)
+endfunction
+
+function! ollama#review#ModifyCode(prompt)
+    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
+        echoerr "No project files tracked. Run OllamaCreate first."
+        return
+    endif
+
+    " Build the full prompt
+    let l:header = [
+                \ "\"\"\"",
+                \ "You are modifying an existing codebase inside a Vim plugin.",
+                \ "Instruction: " . a:prompt,
+                \ "",
+                \ "The current files are provided below. Respond ONLY with modified files using the exact JSON format:",
+                \ "[",
+                \ "  { \"path\": \"file.ext\", \"content\": \"New content\" }",
+                \ "]",
+                \ "\"\"\"",
+                \ "Below is the current project state:"
+                \ ]
+
+    let l:file_context = s:BuildContextForFiles(g:ollama_project_files)
+    let l:prompt_lines = l:header + l:file_context
+
+    call s:StartChat(l:prompt_lines)
 endfunction

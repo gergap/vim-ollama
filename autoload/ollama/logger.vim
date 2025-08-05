@@ -128,10 +128,10 @@ function! ollama#logger#Raw(level, messages) abort
 
   try
     " write to file
-    if filewritable(g:ollama_logfile)
-      call writefile(l:lines, g:ollama_logfile, 'a')
-      return
-    endif
+    "if filewritable(g:ollama_logfile)
+    "  call writefile(l:lines, g:ollama_logfile, 'a')
+    "  return
+    "endif
 
     " of fall back to logging to a Vim buffer
     call ollama#logger#ToBuffer(l:lines)
@@ -157,6 +157,9 @@ endfunction
 
 function! ollama#logger#Error(...) abort
   call ollama#logger#Raw(1, a:000)
+  if get(g:, 'ollama_autoshow_log', 0)
+      call OllamaOpenLogBuffer()
+  endif
 endfunction
 
 function! ollama#logger#Bare(...) abort
