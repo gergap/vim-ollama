@@ -389,7 +389,16 @@ function! ollama#review#ProcessResponse()
 "        if winnr('$') > 1
 "            execute ':q!'
 "        endif
-        execute ':edit! ' . filepath
+
+        " Open existing buffer if already loaded, else edit the file
+        let bufnr = bufnr(filepath)
+        if bufnr != -1
+            execute 'buffer ' . bufnr
+            " reload buffer from file
+            execute 'edit!'
+        else
+            execute 'edit! ' . filepath
+        endif
     endfor
     " Open NERDTree to show he new files if this plugin is loaded
 "    if exists('g:NERDTree')
