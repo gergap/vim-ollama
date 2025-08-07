@@ -334,7 +334,7 @@ endfunction
 function! CleanEscapes(s)
     let s = substitute(a:s, '\\u003c', '<', 'g')
     let s = substitute(s, '\\u003e', '>', 'g')
-    let s = substitute(s, '\\n', "\n", 'g')
+"    let s = substitute(s, '\\n', "\n", 'g')
     return s
 endfunction
 
