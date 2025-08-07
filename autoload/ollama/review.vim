@@ -693,6 +693,27 @@ function! s:RefreshProjectView()
     call ollama#review#ShowProjectView()
 endfunction
 
+function! s:IsWindowUsable(winnr)
+    " Temporarily switch to the window
+    execute a:winnr . 'wincmd w'
+
+    " Get window and buffer properties
+    let buftype = &buftype
+    let preview = &previewwindow
+    let modified = &modified
+
+    " Return to previous window
+    wincmd p
+
+    " Special buffers like quickfix, help, or preview are not usable
+    if buftype !=# '' || preview
+        return 0
+    endif
+
+    " If buffer is not modified or hidden buffers are allowed, reuse it
+    return !modified || &hidden
+endfunction
+
 " Opens the selected file in project view
 function! ollama#review#OpenTrackedFile()
     let relpath = getline('.')
@@ -703,7 +724,7 @@ function! ollama#review#OpenTrackedFile()
         return
     endif
 
-    " Check if buffer is already open in a window
+    " Check if buffer is already visible in a window
     for winnr in range(1, winnr('$'))
         let bufnr = winbufnr(winnr)
         if fnamemodify(bufname(bufnr), ':p') ==# abspath
@@ -712,6 +733,24 @@ function! ollama#review#OpenTrackedFile()
         endif
     endfor
 
-    " Open in split
-    execute 'vsplit ' . fnameescape(abspath)
+    " Try to find a usable window
+    let usable_win = -1
+    for winnr in range(1, winnr('$'))
+        if s:IsWindowUsable(winnr)
+            let usable_win = winnr
+            break
+        endif
+    endfor
+
+    let filepath = fnameescape(abspath)
+
+    if usable_win != -1
+        execute usable_win . 'wincmd w'
+        execute 'edit! ' . filepath
+    else
+        vertical leftabove split
+        execute 'edit! ' . filepath
+    endif
+
+    setlocal autoread
 endfunction
