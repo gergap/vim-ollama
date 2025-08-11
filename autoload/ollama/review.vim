@@ -286,6 +286,186 @@ function! s:StartChat(lines) abort
     startinsert
 endfunction
 
+function! s:StartChat2(lines) abort
+    " Function handling a line of text that has been typed.
+    func! TextEntered(text)
+        call ollama#logger#Debug("TextEntered: " .. a:text)
+        if a:text == ''
+            " don't send empty messages
+            return
+        endif
+        " Reset last response
+        let s:ollama_response = []
+        " Send the text to a shell with Enter appended.
+        call ollama#logger#Debug("ch_sendraw... (TextEntered)")
+        call ch_sendraw(s:job, a:text .. "\n")
+    endfunc
+
+    " Function handling output from the shell: Add it above the prompt.
+    func! GotOutput(channel, msg)
+        call ollama#logger#Debug("GotOutput: " .. a:msg)
+
+        " append lines
+        let l:lines = split(a:msg, "\n")
+        for l:line in l:lines
+            " when we received <EOT> start insert mode again
+            let l:idx = stridx(l:line, "<EOT>")
+            if l:idx != -1
+                call ollama#logger#Debug("Stripping <EOT> at idx=" .. l:idx)
+                let l:line = strpart(l:line, 0, l:idx)
+                " append last line
+                call add(s:ollama_response, l:line)
+                call ollama#review#ProcessResponse()
+            else
+                " append lines to ollama_response
+                call add(s:ollama_response, l:line)
+            endif
+            call appendbufline(s:buf, "$", l:line)
+            if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
+                " check if in insert mode
+                if mode() == 'i'
+                    " start insert mode again
+                    call feedkeys("\<Esc>")
+                endif
+                call feedkeys("G") "jump to end
+                if l:idx != -1
+                    " start insert mode
+                    call feedkeys("a")
+                endif
+            endif
+        endfor
+    endfunc
+
+    " Function handling output from the shell: Add it above the prompt.
+    func! GotErrors(channel, msg)
+        call ollama#logger#Debug("GotErrors: " .. a:msg)
+
+        let l:bufname = 'stderr'
+        let l:bufnr = bufnr(l:bufname)
+        if (l:bufnr != -1)
+            " buffer already exists
+            execute 'buffer' l:bufnr
+        else
+            " create new error buffer
+            execute 'new' l:bufname
+        endif
+
+        " Simply append to current buffer
+        call append(line("$"), a:msg)
+    endfunc
+
+    " Function handling the shell exits: close the window.
+    func! JobExit(job, status)
+        call ollama#logger#Debug("JobExit: " .. a:status)
+        " Switch to the chat buffer
+        execute 'buffer' s:buf
+        " Turn off prompt functionality and make the buffer modifiable
+        call prompt_setprompt(s:buf, '')
+        setlocal buftype=
+        setlocal modifiable
+        " output info message
+        call append(line("$") - 1, "Chat process terminated with exit code " .. a:status)
+        call append(line("$") - 1, "Use ':q' or ':bd' to delete this buffer and run ':OllamaChat' again to create a new session.")
+        stopinsert
+        let s:buf = -1
+        " avoid saving and make :q just work
+        setlocal nomodified
+    endfunc
+
+    let l:model_options = json_encode(g:ollama_chat_options)
+    call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
+    call ollama#logger#Debug("model_options=" .. l:model_options)
+    let s:ollama_response = []
+
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+
+    let l:script_path = printf('%s/python/chat.py', g:ollama_plugin_dir)
+    " Create the Python command
+    let l:command = [ g:ollama_python_interpreter,
+                \ l:script_path,
+                \ '-m', g:ollama_chat_model,
+                \ '-u', g:ollama_host,
+                \ '-o', l:model_options,
+                \ '-t', g:ollama_chat_timeout,
+                \ '-l', l:log_level ]
+    " Check if a system prompt was configured
+    if g:ollama_chat_systemprompt != ''
+         " add system prompt option
+        let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
+
+    " Redirect job's IO to buffer
+    let job_options = {
+        \ 'out_cb': function('GotOutput'),
+        \ 'err_cb': function('GotErrors'),
+        \ 'exit_cb': function('JobExit'),
+        \ }
+
+    " Start a shell in the background.
+    let s:job = job_start(l:command, l:job_options)
+
+    " Create chat buffer
+    let l:bufname = s:ollama_bufname
+    if (s:buf != -1)
+        " buffer already exists
+        let l:chat_win = s:FindBufferWindow(s:buf)
+        " switch to existing buffer
+        if l:chat_win != -1
+            execute l:chat_win  ..  'wincmd w'
+        else
+            execute 'buffer' s:buf
+        endif
+        " send lines
+        if a:lines isnot v:null
+            call append(line("$") - 1, a:lines)
+            let l:prompt = join(a:lines, "\n")
+            call ollama#logger#Debug("Sending prompt '" .. l:prompt .. "'...")
+            call ch_sendraw(s:job, l:prompt .. "\n")
+        endif
+        return
+    endif
+
+    " Create new chat buffer
+    execute 'botright new' l:bufname
+    " Set the filetype to ollama-chat
+"    setlocal filetype=ollama-chat
+    setlocal filetype=markdown
+    setlocal buftype=prompt
+    " enable BufDelete event when closing buffer usig :q!
+    setlocal bufhidden=delete
+    setlocal noswapfile
+    setlocal modifiable
+    setlocal wrap
+    let l:buf = bufnr('')
+    let s:buf = l:buf
+    let b:coc_enabled = 0 " disable CoC in chat buffer
+    " Create a channel log so we can see what happens.
+    if g:ollama_debug >= 4
+        call ch_logfile(g:ollama_review_logfile, 'w')
+    endif
+
+    " Add a title to the chat buffer
+    call append(0, "AI context (type 'quit' to exit, press CTRL-C to interrupt output)")
+    call append(1, "-------------")
+    if a:lines isnot v:null
+        call append(2, a:lines)
+        call ollama#logger#Debug("Sending text... (StartChat)")
+        call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
+    endif
+
+    " connect buffer with job
+    call prompt_setcallback(buf, function("TextEntered"))
+    eval prompt_setprompt(buf, ">>> ")
+
+    " add key mapping for CTRL-C to terminate the chat script
+    execute 'nnoremap <buffer> <C-C> :call ollama#review#KillChatBot()<CR>'
+    execute 'inoremap <buffer> <C-C> <esc>:call ollama#review#KillChatBot()<CR>'
+
+    " start accepting shell commands
+    startinsert
+endfunction
+
 " Creates a chat window with the given prompt and copies the current selection
 " into a multiline prompt. The code is formatted using backticks and the
 " current filetype.
@@ -331,11 +511,46 @@ endfunction
 
 " Quick hack for decoding some escaped characters, because json_decode doesn't
 " do it. TODO: add better solution which works more generic.
-function! CleanEscapes(s)
+" Clean and escape JSON/LLM string for C code
+function! CleanEscapes(s) abort
     let s = substitute(a:s, '\\u003c', '<', 'g')
     let s = substitute(s, '\\u003e', '>', 'g')
-"    let s = substitute(s, '\\n', "\n", 'g')
-    return s
+
+    let result = ''
+    let rest = s
+    let pattern = '\v"([^"\\]|\\.)*"'
+
+    while len(rest) > 0
+        let match = matchstr(rest, pattern)
+
+        if match ==# ''
+            let result .= rest
+            break
+        endif
+
+        let start = match(rest, pattern)
+        let end = start + len(match)
+
+        " Append non-matching prefix
+        let result .= strpart(rest, 0, start)
+
+        " Extract content inside quotes
+        let inner = strpart(match, 1, len(match) - 2)
+
+        " First, escape single backslashes not followed by 'n'
+        let escaped = substitute(inner, '\\\(.\)', '\=submatch(1) ==# "n" ? "\\n" : "\\\\" . submatch(1)', 'g')
+
+        " Then, replace real newlines with \n (but not already escaped ones)
+        let escaped = substitute(escaped, '\([^\]\)\n', '\1\\n', 'g')
+
+        " Reassemble string literal
+        let result .= '"' . escaped . '"'
+
+        " Advance rest
+        let rest = strpart(rest, end)
+    endwhile
+
+    return result
 endfunction
 
 " When starting Vim, we have an initial empty buffer.
@@ -529,7 +744,7 @@ function! ollama#review#CreateCode(prompt) range
                 \ ]
 
     " Start the chat
-    call s:StartChat(l:prompt_lines)
+    call s:StartChat2(l:prompt_lines)
 endfunction
 
 " A function for modifying tracked (AI generated) files
@@ -558,7 +773,7 @@ function! ollama#review#ModifyCode(prompt)
     " close multiline prompt
     let l:prompt_lines += ["\"\"\""]
 
-    call s:StartChat(l:prompt_lines)
+    call s:StartChat2(l:prompt_lines)
 endfunction
 
 " This function adds all open buffers to the list of tracked files,
