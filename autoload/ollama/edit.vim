@@ -5,35 +5,19 @@ let s:buf = -1
 " avoid starting a 2nd edit job while one is in progress
 let g:edit_in_progress = 0
 
-if !exists('g:ollama_embedded_python') || g:ollama_embedded_python == 0
-  function! ollama#edit#EditCodeDone(status) abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#DialogCallback(id, result) abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#UpdateProgress(popup) abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#EditCode(request) abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#EditPrompt() abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#AcceptAll() abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  function! ollama#edit#RejectAll() abort
-    echoerr "OllamaEdit features require Vim compiled with +python3 support."
-  endfunction
-  finish
-endif
+" Function to check if embedded Python is available
+function! ollama#edit#HasEmbeddedPython() abort
+    return exists('g:ollama_embedded_python') && g:ollama_embedded_python != 0
+endfunction
 
 " Define the VimScript callback function
 " This will be called from python when to operations is 'done'
 " or aborted with 'error'
 function! ollama#edit#EditCodeDone(status)
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     if a:status == "done"
         echom "Code editing completed!"
     elseif a:status == "error"
@@ -52,6 +36,10 @@ endfunction
 
 " Callback wrapper which delegates the call to Python
 function! ollama#edit#DialogCallback(id, result)
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     python3 << EOF
 import vim
 try:
@@ -72,6 +60,10 @@ endfunction
 
 " Give user visual feedback about job that is in progress
 function! ollama#edit#UpdateProgress(popup)
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     " Cycle through progress states
     let g:progress_indicator = (g:progress_indicator + 1) % 4
     let l:states = ['|', '/', '-', '\']
@@ -116,6 +108,10 @@ endfunction
 " Internal Helper function for offloading logic to Python
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! s:EditCodeInternal(request, first_line, last_line) abort
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     if exists('g:edit_in_progress') && g:edit_in_progress
         return
     endif
@@ -167,6 +163,10 @@ endfunction
 " Start the Python function and return immediately (Range command)
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#EditCode(request)
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     call s:EditCodeInternal(a:request, a:firstline, a:lastline)
 endfunction
 
@@ -174,6 +174,10 @@ endfunction
 " Popup edit prompt, instead of Edit command
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#EditPrompt()
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     " Initialize line numbers
     let l:firstline = 0
     let l:lastline = 0
@@ -206,6 +210,10 @@ endfunction
 " Accept All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#AcceptAll()
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     python3 << EOF
 import vim
 try:
@@ -224,6 +232,10 @@ endfunction
 " Reject All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#RejectAll()
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "OllamaEdit features require Vim compiled with +python3 support."
+        return
+    endif
     python3 << EOF
 import vim
 try:

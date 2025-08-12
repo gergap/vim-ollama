@@ -380,8 +380,11 @@ endfunction
 
 " Loads the plugin's python modules
 
-if g:ollama_embedded_python
 function! s:LoadPluginPyModules() abort
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "LoadPluginPyModules requires Vim compiled with +python3 support."
+        return
+    endif
     python3 << EOF
 import os
 import sys
@@ -400,13 +403,15 @@ except ImportError as e:
     print(f'Error importing CodeEditor module:\n{e}')
 EOF
 endfunction
-endif
 
 " Initializes venv for python.
 " This must be done before loading the plugin's py modules,
 " to ensure the plugin's python requirements are available.
-if g:ollama_embedded_python
 function! s:SetupPyVEnv() abort
+    if !ollama#edit#HasEmbeddedPython()
+        echoerr "SetupPyVenv requires Vim compiled with +python3 support."
+        return
+    endif
     python3 << EOF
 import os
 import sys
@@ -432,7 +437,6 @@ else:
     print('Venv disabled')
 EOF
 endfunction
-endif
 
 function! ollama#setup#Init() abort
     let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
