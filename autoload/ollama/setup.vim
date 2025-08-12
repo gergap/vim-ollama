@@ -469,7 +469,7 @@ function! ollama#setup#Init() abort
     else
         " load the config file
         execute 'source' l:ollama_config
-        if g:ollama_use_venv && g:ollama_embedded_python
+        if g:ollama_use_venv
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
             if g:ollama_embedded_python
