@@ -30,18 +30,28 @@ USE_CUSTOM_TEMPLATE = True
 # create logger
 log = None
 
-def load_config(modelname):
+def load_config(*names):
     # Get the directory where the Python script resides
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the full path to the config file relative to the script directory
-    config_path = os.path.join(script_dir, "configs", f"{modelname}.json")
-    try:
-        with open(config_path, 'r') as file:
-            config = json.load(file)
-            return config
-    except FileNotFoundError:
-        log.error(f"Config file {config_path} not found.")
-        sys.exit(1)
+    
+    for name in names:
+        # Construct the full path to the config file relative to the script directory
+        config_path = os.path.join(script_dir, "configs", f"{name}.json")
+        
+        try:
+            with open(config_path, 'r') as file:
+                return json.load(file)
+        except FileNotFoundError:
+            continue
+        except Exception as e:
+            log.error(f"Failed while reading model config file {config_path}: {e}")
+            sys.exit(1)
+    
+    log.error("Failed to find a configuration for the model. Tried paths:")
+    for name in names:
+        config_path = os.path.join(script_dir, "configs", f"{name}.json")
+        log.error(f"  {config_path}")
+    sys.exit(1)
 
 # config.json example:
 # {
@@ -215,14 +225,15 @@ if __name__ == "__main__":
     # strip suffix (e.g ':7b-code') for config lookup
     modelname = args.model.rsplit(':', 1)[0]
     config = None
-    if USE_CUSTOM_TEMPLATE and args.provider == 'ollama':
-        config = load_config(modelname)
-    elif USE_CUSTOM_TEMPLATE and args.provider == 'openai':
-        # use default OpenAI FIM config if no model-specific file
-        try:
-            config = load_config(modelname)
-        except SystemExit:
-            config = OPENAI_FIM_CONFIG
+    match args.provider:
+        case 'ollama':
+            if USE_CUSTOM_TEMPLATE:
+                config = load_config(modelname)
+        case 'openai':
+            config = load_config(f"openai/{modelname}", 'openai/default')
+        case _:
+            log.error(f"Unsupported provider: {args.provider}")
+            sys.exit(1)
 
     prompt = sys.stdin.read()
     if args.provider == 'openai':
