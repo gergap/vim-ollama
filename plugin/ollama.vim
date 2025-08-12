@@ -41,10 +41,19 @@ if !exists('g:ollama_use_venv')
 endif
 if !exists('g:ollama_host')
     let g:ollama_host = 'http://localhost:11434'
+else
+    " strip any trailing slash from the URL
+    let g:ollama_host = substitute(g:ollama_host, '/$', '', '')
 endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
+endif
+if !exists('g:ollama_completion_allowlist_filetype')
+  let g:ollama_completion_allowlist_filetype = []
+endif
+if !exists('g:ollama_completion_denylist_filetype')
+  let g:ollama_completion_denylist_filetype = []
 endif
 if !exists('g:ollama_context_lines')
     let g:ollama_context_lines = 30
@@ -142,20 +151,20 @@ function! s:HandleTabCompletion() abort
         " AI suggestion was inserted
         return ''
     endif
-    call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
 
     " fallback to default tab completion if no suggestion was inserted
     if exists('g:ollama_original_tab_mapping') && !empty(g:ollama_original_tab_mapping)
+        call ollama#logger#Info("Forward <tab> to original mapping: ". string(g:ollama_original_tab_mapping))
         if g:ollama_original_tab_mapping.rhs =~# '^<Plug>'
             call ollama#logger#Info("<tab> feedkeys")
-            call feedkeys("\<Plug>" . matchstr(g:ollama_original_tab_mapping.rhs, '^<Plug>\zs.*'), 'm')
+            call feedkeys("\<Plug>" .. matchstr(g:ollama_original_tab_mapping.rhs, '^<Plug>\zs.*'), 'm')
             return ''
         endif
         " If no completion and there is an original <Tab> mapping, execute it
         if g:ollama_original_tab_mapping.expr
             " rhs is an expression
             call ollama#logger#Info("<tab> expression")
-            return "\<C-R>=" . g:ollama_original_tab_mapping.rhs . "\<CR>"
+            return "\<C-R>=" .. g:ollama_original_tab_mapping.rhs .. "\<CR>"
         else
             " rhs is a string
             call ollama#logger#Info("<tab> string")
@@ -191,7 +200,7 @@ function! s:MapTab() abort
         if !exists('g:ollama_original_tab_mapping') || empty(g:ollama_original_tab_mapping)
             call ollama#logger#Info("Mapping <tab> to vim-ollama")
             let g:ollama_original_tab_mapping = maparg('<Tab>', 'i', 0, 1)
-            call ollama#logger#Info("Original Mapping: " . string(g:ollama_original_tab_mapping))
+            call ollama#logger#Info("Original Mapping: " .. string(g:ollama_original_tab_mapping))
         else
             call ollama#logger#Info("Not mapping <tab> to vim-ollama, because mapping already exists")
         endif
@@ -257,9 +266,11 @@ call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
+" expand does funky stuff inside of a function need to set it here
+let s:ollama_plugin_dir=expand('<sfile>:p:h:h')
 function! PluginInit() abort
     " Store plugin path in helper variable to simplify other code
-    let g:ollama_plugin_dir=expand('<sfile>:p:h:h')
+    let g:ollama_plugin_dir=s:ollama_plugin_dir
     if g:ollama_no_maps != 1
         " Setup default mappings
         if empty(mapcheck('<C-]>', 'i'))

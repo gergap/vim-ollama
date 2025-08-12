@@ -60,7 +60,8 @@ for adding comments, translating text, refactoring code and much more.
 
 The vim-ollama plugin provides the following commands:
 
-1. :Ollama
+                                                      *:Ollama*
+:Ollama
     - Description: Sends commands to the plugin to change its state.
     Available commands are:
       - `setup`: Starts the Vim-Ollama setup wizard.
@@ -81,12 +82,14 @@ The vim-ollama plugin provides the following commands:
 >
         :Ollama disable
 <
-2. :OllamaChat
+                                                      *:OllamaChat*
+:OllamaChat
     - Description: Creates a split windows for interactive conversations with
     the configured chat model. Use `:bd` to delete the chat buffer when you
     don't need anymore.
 
-3. :OllamaReview
+                                                      *:OllamaReview*
+:OllamaReview
     - Description: Reviews the selected text. It opens a chat window like
     OllamaChat, but with a predefined prompt that asks for a code review of
     the selected text. The selection may be a few lines, a function or the
@@ -96,7 +99,8 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaReview
 <
-4. :OllamaSpellCheck
+                                                      *:OllamaSpellCheck*
+:OllamaSpellCheck
     - Description: Checks the selected text for spelling errors.
     Like OllamaReview this command using the OllamaChat window but with a
     predefined prompt for spell checking. The selection may be a few lines, a
@@ -106,7 +110,8 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaSpellCheck
 <
-5. :OllamaTask
+                                                      *:OllamaTask*
+:OllamaTask
     - Description: Creates a chat window with a custom prompt. This command
     also works on a range like `:OllamaReview` but takes an additional
     argument for the prompt. The selected range will automatically pasted
@@ -119,7 +124,8 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaTask "check spelling of this text"
 <
-6. :OllamaEdit
+                                                      *:OllamaEdit*
+:OllamaEdit
     - Description: Allows editing a selected text using the AI. This command
     works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
     a visual selection. Alternatively, you can use the mapping `<leader>e` to
@@ -140,7 +146,8 @@ The vim-ollama plugin provides the following commands:
     using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
     works like pressing 'n'. `
 
-7. :OllamaPull
+                                                      *:OllamaPull*
+:OllamaPull
     - Description: Pulls a new model. This works like `ollama pull` command
     but via the REST API and the configured `g:ollama_host` URL, so you can use
     this to pull new models on remote machines, without needing to SSH in to
@@ -193,21 +200,67 @@ Other Maps ~
 
 You can configure vim-ollama using the following variables in your .vimrc:
 
-1. g:ollama_host
+                                                      *g:ollama_enabled*
+g:ollama_enabled
+    - Description: When set to `1` (or 'v:true') enables vim-ollama
+      autocompletion for all buffers, by default.  But also see
+      `b:ollama_enabled`.  If set to any other value, vim-ollama
+      autocompletion will be disabled by default for all buffers.
+
+      Can be modified either directly, or via the `:Ollama enable`,
+      `:Ollama disable`, and `:Ollama toggle` commands.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enabled = 0
+<
+                                                      *b:ollama_enabled*
+b:ollama_enabled
+    - Description: Similar to `g:ollama_enabled`, but affects a single buffer.
+      When unset, `g:ollama_enabled` is used.
+
+      If you want to disable vim-ollama autocompletion by default, but enable
+      it for individual buffers, you can set `g:ollama_enabled` to 'v:false',
+      and use an 'autocmd' to set `b:ollama_enabled` to 'v:true' for
+      individual buffers.
+
+      Or vice versa, you can set `g:ollama_enabled` to 'v:true', and use an
+      'autocmd' to set `b:ollama_enabled` to 'v:false' for individual buffers.
+
+    - Default: unset
+    - Example:
+>
+        " Disable vim-ollama autocompletion for a specific filetype
+        augroup DisableOllamaAutoCompletionForPerl
+          autocmd!
+          autocmd FileType perl let b:ollama_enabled = v:false
+        augroup END
+
+        " Enable vim-ollama autocompletion only for a specific filetype
+        let g:ollama_enabled = v:false
+        augroup EnableOllamaAutoCompletionForPerl
+          autocmd!
+          autocmd FileType perl let b:ollama_enabled = v:true
+        augroup END
+<
+                                                      *g:ollama_host*
+g:ollama_host
     - Description: Sets the Ollama host address and port.
     - Default: 'http://localhost:11434'
     - Example:
 >
         let g:ollama_host = 'http://your-server:port'
 <
-2. g:ollama_model
+                                                      *g:ollama_model*
+g:ollama_model
     - Description: Sets the default Ollama model for code completions.
     - Default: 'codellama:code'
     - Example:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
 <
-3. g:ollama_model_options
+                                                      *g:ollama_model_options*
+g:ollama_model_options
     - Description: Sets the default Ollama model options.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
@@ -218,7 +271,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'num_predict': 256
                 \ }
 <
-4. g:ollama_context_lines
+                                                      *g:ollama_context_lines*
+g:ollama_context_lines
     - Description: Sets the number of context lines before and after the
       cursor to be transmitted to the LLM for tab completion.
       When running a LLM locally on CPU (without GPU support), reduce this
@@ -228,7 +282,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_context_lines = 10
 <
-5. g:ollama_debounce_time
+                                                      *g:ollama_debounce_time*
+g:ollama_debounce_time
     - Description: Sets the delay after the last keystroke before triggering
       a new search. Using smaller values give you faster reaction times, but
       create higher load on the system. Small values make only sense on fast
@@ -241,14 +296,55 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_debounce_time = 300
 <
-6. g:ollama_chat_model
+                                      *g:ollama_completion_allowlist_filetype*
+g:ollama_completion_allowlist_filetype
+    - Description: If non-empty, then completion will only be triggered for
+      buffers with these file types (See 'filetype').
+
+      You should set this, if you prefer completion to be disabled for any
+      file type, except the ones that you listed. You can still trigger
+      completion with the `<Plug>(ollama-trigger-completion)` mapping.
+
+      File type is checked first against this list, then checked against the
+      `g:ollama_completion_denylist_filetype`.  So if both match, completion
+      will be disabled for this buffer.
+
+    - Default: []
+    - Example:
+>
+        let g:ollama_completion_allowlist_filetype = ['cpp', 'haskell']
+<
+                                        *g:ollama_completion_denylist_filetype*
+g:ollama_completion_denylist_filetype
+    - Description: If non-empty, then completion will not be triggered for
+      buffers with these file types (See 'filetype').
+
+      This only affects the automatic completion suggestion, triggered by
+      `g:ollama_debounce_time`. You can always trigger completion manually
+      with the `<Plug>(ollama-trigger-completion)` mapping.
+
+      It probably makes sense to disable completion, for example, in the
+      fuzzyfinder plugin window.  But depending on the other plugins you have
+      available, you may want to add other filetypes as well.
+
+      This list is checked after `g:ollama_completion_allowlist_filetype`.  So
+      if both match, completion will be disabled for this buffer.
+
+    - Default: []
+    - Example:
+>
+        let g:ollama_completion_denylist_filetype = ['fuf']
+<
+                                                      *g:ollama_chat_model*
+g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
     - Default: 'llama3'
     - Example:
 >
         let g:ollama_chat_model = 'gpt4-turbo'
 <
-7. g:ollama_chat_systemprompt
+                                                  *g:ollama_chat_systemprompt*
+g:ollama_chat_systemprompt
     - Description: Allows overriding the system prompt of the chat model. If
       not specified the models default system prompt will be used.
     - Default: ''
@@ -257,7 +353,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
         let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
         only code, no explanations.'
 <
-8. g:ollama_chat_options
+                                                      *g:ollama_chat_options*
+g:ollama_chat_options
     - Description: Sets the default Ollama model options for chat models.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
@@ -267,21 +364,24 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'top_p': 0.95
                 \ }
 <
-9. g:ollama_chat_timeout
+                                                      *g:ollama_chat_timeout*
+g:ollama_chat_timeout
     - Description: Sets the timeout value in chat requests.
     - Default: 10
     - Example:
 >
         let g:ollama_chat_timeout = 10
 <
-10. g:ollama_edit_model
+                                                      *g:ollama_edit_model*
+g:ollama_edit_model
     - Description: Sets the default Ollama model to use for code editing.
     - Default: 'qwen2.5-coder:7b'
     - Example:
 >
         let g:ollama_chat_model = 'qwen2.5-coder:7b'
 <
-11. g:ollama_edit_options
+                                                      *g:ollama_edit_options*
+g:ollama_edit_options
     - Description: Sets the default Ollama model options for code edit models.
     - Default: '{"temperature": 0, "top_p": 0.95}'
     - Example:
@@ -292,7 +392,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
                 \ 'num_predict': 256
                 \ }
 <
-12. g:ollama_use_inline_diff
+                                                      *g:ollama_use_inline_diff*
+g:ollama_use_inline_diff
     - Description: When true, the `OllamaEdit` changes are applied as inline
       diff which can be accepted or rejected individually in an interactive
       way. When false, the plugin will apply the changes directly without
@@ -304,7 +405,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_use_inline_diff = 0
 <
-13. g:ollama_no_maps
+                                                      *g:ollama_no_maps*
+g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts
       with other plugins and to define your own mappings for vim-ollama.
@@ -313,7 +415,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_no_maps = 1
 <
-14. g:ollama_no_tab_map
+                                                      *g:ollama_no_tab_map*
+g:ollama_no_tab_map
     - Description: If this variable is defined, the default <tab> mapping
       will not be created.
     - Default: undefined
@@ -324,7 +427,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
         inoremap ,w <Plug>(ollama-insert-word)
         inoremap ,l <Plug>(ollama-insert-line)
 <
-15. g:ollama_use_venv
+                                                      *g:ollama_use_venv*
+g:ollama_use_venv
     - Description: Enables the usage of python virtual environments for
       executing the required python scripts. If enabled it will install
       the required packages automatically in this vim-ollama specific
@@ -335,7 +439,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
 >
         let g:ollama_use_venv = 1
 <
-16. g:ollama_split_vertically
+                                                    *g:ollama_split_vertically*
+g:ollama_split_vertically
     - Description: When this variable is defined and set to 1 the OllamaChat
       command will create a vertical split, otherwise a horizontal split is
       used.
@@ -350,7 +455,8 @@ You can configure vim-ollama using the following variables in your .vimrc:
 
 You can enable logging by specifying the following variables.
 
-1. g:ollama_debug
+                                                      *g:ollama_debug*
+g:ollama_debug
     - Description: Sets the debug level of the logging infrastructure.
     - Levels: 0 (Off), 1 (Errors), 2 (Warnings), 3 (Info), 4 (Debug)
       Higher levels also include all lower levels.
@@ -358,8 +464,9 @@ You can enable logging by specifying the following variables.
     - Example:
 >
         let g:ollama_debug = 4
-
-2. g:ollama_logfile
+<
+                                                      *g:ollama_logfile*
+g:ollama_logfile
     - Description: Configure the path of the log file.
       Note that the log file path of the python code is currently hardcoded to
       '/tmp/logs'.
@@ -368,8 +475,9 @@ You can enable logging by specifying the following variables.
     - Example:
 >
         let g:ollama_logfile = '/path/to/vim-ollama.log'
-
-3. g:ollama_review_logfile
+<
+                                                      *g:ollama_review_logfile*
+g:ollama_review_logfile
     - Description: Configure the path for logging chat conversations.
       This only will be logged on _Debug_ level (4).
     - Default: A random file in your temp directory will be created using

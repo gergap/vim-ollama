@@ -5,7 +5,7 @@ let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
 
 if !exists('g:ollama_review_logfile')
-    let g:ollama_review_logfile = tempname() . '-ollama-review.log'
+    let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
 endif
 
 func! ollama#review#KillChatBot()
@@ -25,14 +25,14 @@ func! ollama#review#KillChatBot()
 endfunc
 
 func! s:BufReallyDelete(buf)
-    call ollama#logger#Debug("BufReallyDelete ".a:buf)
-    execute "bwipeout! ".a:buf
+    call ollama#logger#Debug("BufReallyDelete " .. a:buf)
+    execute "bwipeout! " .. a:buf
 endfunc
 
 func! ollama#review#BufDelete(buf)
     call ollama#logger#Debug("BufDelete")
     if a:buf == s:buf
-        call ollama#logger#Debug("Deleting buffer ".a:buf)
+        call ollama#logger#Debug("Deleting buffer " .. a:buf)
         " The buffer was closed by :quit or :q!
         call ollama#review#KillChatBot()
         " Undo 'buftype=prompt' and make buffer deletable
@@ -58,20 +58,18 @@ endfunction
 function! s:StartChat(lines) abort
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
-        call ollama#logger#Debug("TextEntered: ".a:text)
+        call ollama#logger#Debug("TextEntered: " .. a:text)
         if a:text == ''
             " don't send empty messages
             return
         endif
-        " exit insert mode
-        call feedkeys("\<Esc>")
         " Send the text to a shell with Enter appended.
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
     func! GotOutput(channel, msg)
-        call ollama#logger#Debug("GotOutput: ".a:msg)
+        call ollama#logger#Debug("GotOutput: " .. a:msg)
 
         " append lines
         let l:lines = split(a:msg, "\n")
@@ -79,7 +77,7 @@ function! s:StartChat(lines) abort
             " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
             if l:idx != -1
-                call ollama#logger#Debug("idx=".l:idx)
+                call ollama#logger#Debug("idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
             call appendbufline(s:buf, "$", l:line)
@@ -89,7 +87,7 @@ function! s:StartChat(lines) abort
                     " start insert mode again
                     call feedkeys("\<Esc>")
                 endif
-	        call feedkeys("G") "jump to end
+                call feedkeys("G") "jump to end
                 if l:idx != -1
                     " start insert mode
                     call feedkeys("a")
@@ -100,7 +98,7 @@ function! s:StartChat(lines) abort
 
     " Function handling output from the shell: Add it above the prompt.
     func! GotErrors(channel, msg)
-        call ollama#logger#Debug("GotErrors: ".a:msg)
+        call ollama#logger#Debug("GotErrors: " .. a:msg)
 
         let l:bufname = 'stderr'
         let l:bufnr = bufnr(l:bufname)
@@ -118,7 +116,7 @@ function! s:StartChat(lines) abort
 
     " Function handling the shell exits: close the window.
     func! JobExit(job, status)
-        call ollama#logger#Debug("JobExit: ".a:status)
+        call ollama#logger#Debug("JobExit: " .. a:status)
         " Switch to the chat buffer
         execute 'buffer' s:buf
         " Turn off prompt functionality and make the buffer modifiable
@@ -126,7 +124,7 @@ function! s:StartChat(lines) abort
         setlocal buftype=
         setlocal modifiable
         " output info message
-        call append(line("$") - 1, "Chat process terminated with exit code ".a:status)
+        call append(line("$") - 1, "Chat process terminated with exit code " .. a:status)
         call append(line("$") - 1, "Use ':q' or ':bd' to delete this buffer and run ':OllamaChat' again to create a new session.")
         stopinsert
         let s:buf = -1
@@ -135,8 +133,8 @@ function! s:StartChat(lines) abort
     endfunc
 
     let l:model_options = json_encode(g:ollama_chat_options)
-    call ollama#logger#Debug("Connecting to Ollama on ".g:ollama_host." using model ".g:ollama_model)
-    call ollama#logger#Debug("model_options=".l:model_options)
+    call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
+    call ollama#logger#Debug("model_options=" .. l:model_options)
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
@@ -177,7 +175,7 @@ function! s:StartChat(lines) abort
         let l:chat_win = s:FindBufferWindow(s:buf)
         " switch to existing buffer
         if l:chat_win != -1
-            execute l:chat_win . 'wincmd w'
+            execute l:chat_win  ..  'wincmd w'
         else
             execute 'buffer' s:buf
         endif
@@ -185,7 +183,7 @@ function! s:StartChat(lines) abort
         if a:lines isnot v:null
             call append(line("$") - 1, a:lines)
             let l:prompt = join(a:lines, "\n")
-            call ollama#logger#Debug("Sending prompt '".l:prompt."'...")
+            call ollama#logger#Debug("Sending prompt '" .. l:prompt .. "'...")
             call ch_sendraw(s:job, l:prompt .. "\n")
         endif
         return
@@ -249,28 +247,13 @@ function! s:StartChatWithContext(prompt, start_line, end_line) abort
     let ft = &filetype !=# '' ? &filetype : 'plaintext'
 
     " Create prompt with context of code
-    let prompt_lines = ['"""', a:prompt, "```" . ft] + lines + ["```", '"""']
+    let prompt_lines = ['"""', a:prompt, "```"  ..  ft] + lines + ["```", '"""']
 
     " Debug output for prompt
-    call ollama#logger#Debug("Prompt:\n" . join(prompt_lines, "\n"))
+    call ollama#logger#Debug("Prompt:\n"  ..  join(prompt_lines, "\n"))
 
     " Start chat (ensure this function is defined elsewhere)
     call s:StartChat(prompt_lines)
-endfunction
-
-" Create chat with code review prompt
-function! ollama#review#Review() range
-    call s:StartChatWithContext("Please review the following code:", a:firstline, a:lastline)
-endfunction
-
-" Create chat with spell checking prompt
-function! ollama#review#SpellCheck() range
-    call s:StartChatWithContext("Please review the following text for spelling errors and provide accurate corrections. Ensure that all words are spelled correctly, and make necessary adjustments to enhance the overall spelling accuracy of the text:", a:firstline, a:lastline)
-endfunction
-
-" Create chat window with custom prompt
-function! ollama#review#Task(prompt) range
-    call s:StartChatWithContext(a:prompt, a:firstline, a:lastline)
 endfunction
 
 " Create chat with code review prompt

@@ -26,8 +26,9 @@ function! ollama#setup#GetModels(url)
 
     " Check for errors during the execution
     if v:shell_error != 0
-        echom "Error: Failed to fetch models from " . a:url . ". Check if the URL is correct, Ollama is running and try again."
-        "echoerr "Output: " . l:output
+        echom "Error: Failed to fetch models from " .. a:url .. ". "
+              \ .. "Check if the URL is correct, Ollama is running and try again."
+        "echoerr "Output: " .. l:output
         return [ 'error' ]
     endif
 
@@ -38,7 +39,7 @@ endfunction
 " Process Pull Model stdout
 function! s:PullOutputCallback(job_id, data)
     if !empty(a:data)
-        call ollama#logger#Debug("Pull Output: " . a:data)
+        call ollama#logger#Debug("Pull Output: " .. a:data)
         let l:output = split(a:data, '\\n')
 
         " Update the popup with progress
@@ -52,12 +53,12 @@ endfunction
 function! s:PullErrorCallback(job_id, data)
     if !empty(a:data)
         " Log the error
-        call ollama#logger#Error("Pull Error: " . a:data)
+        call ollama#logger#Error("Pull Error: " .. a:data)
         let l:output = split(a:data, '\\n')
 
         " Display the error in the popup
         if exists('s:popup_id') && s:popup_id isnot v:null
-            call popup_settext(s:popup_id, 'Error: ' . l:output)
+            call popup_settext(s:popup_id, 'Error: ' .. l:output)
         endif
     endif
 endfunction
@@ -72,7 +73,7 @@ endfunction
 
 " Process pull process exit code
 function! s:PullExitCallback(job_id, exit_code)
-    call ollama#logger#Debug("PullExitCallback: ". a:exit_code)
+    call ollama#logger#Debug("PullExitCallback: " .. a:exit_code)
     if a:exit_code == 0
         " Log success
         call ollama#logger#Debug("Pull job completed successfully.")
@@ -83,7 +84,7 @@ function! s:PullExitCallback(job_id, exit_code)
         endif
     else
         " Log failure
-        call ollama#logger#Error("Pull job failed with exit code: " . a:exit_code)
+        call ollama#logger#Error("Pull job failed with exit code: " .. a:exit_code)
 
         " Update the popup with failure message
         if exists('s:popup_id') && s:popup_id isnot v:null
@@ -107,7 +108,7 @@ function! ollama#setup#PullModel(url, model)
     let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', a:url, '-m', a:model ]
 
     " Log the command being run
-    call ollama#logger#Debug("command=". join(l:command, " "))
+    call ollama#logger#Debug("command=" .. join(l:command, " "))
 
     " Define job options
     let l:job_options = {
@@ -126,7 +127,7 @@ function! ollama#setup#PullModel(url, model)
     endif
 
     " Create a popup window for progress
-    let s:popup_id = popup_dialog('Pulling model: ' . a:model . '\n', {
+    let s:popup_id = popup_dialog('Pulling model: ' .. a:model .. '\n', {
                 \ 'padding': [0, 1, 0, 1],
                 \ 'zindex': 1000
                 \ })
@@ -135,7 +136,7 @@ function! ollama#setup#PullModel(url, model)
     let s:popup_model = a:model
 
     " Start the new job and keep a reference to it
-    call ollama#logger#Debug("Starting pull job for model: " . a:model)
+    call ollama#logger#Debug("Starting pull job for model: " .. a:model)
     let s:pull_job = job_start(l:command, l:job_options)
 endfunction
 
@@ -164,9 +165,10 @@ function! ollama#setup#SelectModel(kind, models, default)
     " Select model
     while 1
         if l:default_idx == -1
-            let l:msg = "Choose " . a:kind . " model: "
+            let l:msg = "Choose " .. a:kind .. " model: "
         else
-            let l:msg = "Choose " . a:kind . " model (Press enter for '" . a:default . "'): "
+            let l:msg = "Choose " .. a:kind .. " model "
+                  \ .. "(Press enter for '" .. a:default .. "'): "
         endif
         let l:ans = input(l:msg)
         echon "\n"
@@ -188,7 +190,9 @@ endfunction
 function! ollama#setup#Setup()
     " setup default local URL
     "let g:ollama_host = "http://localhost:11434"
-    let l:ans = input("The default Ollama base URL is '" . g:ollama_host . "'. Do you want to change it? (y/N): ")
+    let l:ans = input(
+          \ "The default Ollama base URL is '" .. g:ollama_host .. "'. "
+          \ .. "Do you want to change it? (y/N): ")
     if tolower(l:ans) == 'y'
         let g:ollama_host = input("Enter Ollama base URL: ")
     endif
@@ -244,17 +248,17 @@ function! ollama#setup#Setup()
         " Do not pull, select existing models
         let l:ans = ollama#setup#SelectModel("tab completion", l:models, "starcoder2:3b")
         let g:ollama_model = l:models[l:ans - 1]
-        echon "Configured '" . g:ollama_model . "' as tab completion model.\n"
-        echon "------------------------------------------------------------\n"
+        echon "Configured '" .. g:ollama_model .. "' as tab completion model.\n"
+        echon repeat("-", 80) .. "\n"
 
         let l:ans = ollama#setup#SelectModel("code edit", l:models, "qwen2.5-coder:7b")
         let g:ollama_edit_model = l:models[l:ans - 1]
-        echon "Configured '" . g:ollama_edit_model . "' as code edit model.\n"
-        echon "------------------------------------------------------------\n"
+        echon "Configured '" .. g:ollama_edit_model .. "' as code edit model.\n"
+        echon repeat("-", 80) .. "\n"
 
         let l:ans = ollama#setup#SelectModel("chat", l:models, "llama3.1:8b")
         let g:ollama_chat_model = l:models[l:ans - 1]
-        echon "Configured '" . g:ollama_chat_model . "' as chat model.\n"
+        echon "Configured '" .. g:ollama_chat_model .. "' as chat model.\n"
     endif
 
     call s:ExecuteNextSetupTask()
@@ -286,28 +290,34 @@ function! s:FinalizeSetupTask()
     if !isdirectory(l:config_dir)
         call mkdir(l:config_dir, 'p') " Create the directory if it doesn't exist
     endif
-    let l:config_file = l:config_dir . '/ollama.vim'
+    let l:config_file = l:config_dir .. '/ollama.vim'
 
     " Write the configuration to the file
     let l:config = [
                 \ "\" Use Python virtual environment (and install packages via pip)",
-                \ "let g:ollama_use_venv = " . g:ollama_use_venv,
+                \ "let g:ollama_use_venv = " .. g:ollama_use_venv,
                 \ "\" Ollama base URL",
-                \ "let g:ollama_host = '" . g:ollama_host . "'",
+                \ "let g:ollama_host = '" .. g:ollama_host .. "'",
                 \ "\" tab completion model",
-                \ "let g:ollama_model = '" . g:ollama_model . "'",
+                \ "let g:ollama_model = '" .. g:ollama_model .. "'",
                 \ "\" number of context lines to use for code completion",
                 \ "\"let g:ollama_context_lines = 10",
                 \ "\" debounce time to wait before triggering a completion",
                 \ "\"let g:ollama_debounce_time = 300",
+                \ "\" If you want to enable completion for a limited set of",
+                \ "\" filetypes only, list them here.",
+                \ "\"let g:ollama_completion_allowlist_filetype = []",
+                \ "\" If you do not want to run completion for certain ",
+                \ "\" filetypes, list them here.",
+                \ "\"let g:ollama_completion_denylist_filetype = []",
                 \ "",
                 \ "\" chat model",
-                \ "let g:ollama_chat_model = '" . g:ollama_chat_model . "'",
+                \ "let g:ollama_chat_model = '" .. g:ollama_chat_model .. "'",
                 \ "\" override chat system prompt",
                 \ "\"let g:ollama_chat_systemprompt = 'Give funny answers.'",
                 \ "",
                 \ "\" edit model",
-                \ "let g:ollama_edit_model = '" . g:ollama_edit_model . "'",
+                \ "let g:ollama_edit_model = '" .. g:ollama_edit_model .. "'",
                 \ "\" when disabled, LLM changs are applied directly. Useful when tracking changes via Git.",
                 \ "\"let g:ollama_use_inline_diff = 0",
                 \ "",
@@ -320,7 +330,7 @@ function! s:FinalizeSetupTask()
                 \ "",
                 \ "\" vim: filetype=vim.ollama" ]
     call writefile(l:config, l:config_file)
-    echon "Configuration saved to " . l:config_file . "\n"
+    echon "Configuration saved to " .. l:config_file .. "\n"
     call popup_notification("Setup complete", #{ pos: 'center'})
 endfunction
 
@@ -343,7 +353,7 @@ endfunction
 " Install all dependencies using Pip
 function! ollama#setup#PipInstall() abort
     let l:venv_path = expand('$HOME/.vim/venv/ollama')
-    let l:pip_path = l:venv_path . '/bin/pip'
+    let l:pip_path = l:venv_path .. '/bin/pip'
     let l:reqs = ["'httpx>=0.23.3'", 'requests', 'jinja2']
 
     if !g:ollama_use_venv
@@ -374,14 +384,14 @@ function! ollama#setup#EnsureVenv() abort
     " Check if virtual environment already exists
     if !isdirectory(l:venv_path)
         echon "Setting up Python virtual environment for Vim-Ollama...\n"
-        call system('python3 -m venv ' . shellescape(l:venv_path))
+        call system('python3 -m venv ' .. shellescape(l:venv_path))
         echon "Succeeded.\n"
 
         call ollama#setup#PipInstall()
     endif
 
     " Change path to python to venv
-    let g:ollama_python_interpreter = l:venv_path . '/bin/python'
+    let g:ollama_python_interpreter = l:venv_path .. '/bin/python'
 endfunction
 
 " Loads the plugin's python modules
@@ -432,7 +442,7 @@ if use_venv:
             #print(f'Adding venv site-packages to path: {venv_site_packages}')
             sys.path.insert(0, venv_site_packages)
     else:
-        print('Venv not found: '. venv_path)
+        print('Venv not found: ' + venv_path)
 else:
     print('Venv disabled')
 EOF
