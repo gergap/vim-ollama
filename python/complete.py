@@ -134,7 +134,7 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
-def generate_openai_code_completion(config, prompt, model, options, api_key):
+def generate_code_completion_openai(config, prompt, model, options, api_key):
     try:
         import openai
     except ImportError:
@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     prompt = sys.stdin.read()
     if args.provider == 'openai':
-        response = generate_openai_code_completion(config, prompt, args.model, options, args.api_key)
+        response = generate_code_completion_openai(config, prompt, args.model, options, args.api_key)
     else:
         response = generate_code_completion(config, prompt, args.url, args.model, options)
     print(response, end='')
