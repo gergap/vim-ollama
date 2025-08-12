@@ -455,10 +455,12 @@ function! ollama#setup#Init() abort
         endif
         echon "\n"
 
-        if g:ollama_use_venv && g:ollama_embedded_python
+        if g:ollama_use_venv
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
-            call s:SetupPyVEnv()
+            if g:ollama_embedded_python
+              call s:SetupPyVEnv()
+            endif
         endif
         call ollama#setup#Setup()
         if g:ollama_embedded_python
@@ -470,7 +472,9 @@ function! ollama#setup#Init() abort
         if g:ollama_use_venv && g:ollama_embedded_python
             " Ensure venv and dependencies are set up
             call ollama#setup#EnsureVenv()
-            call s:SetupPyVEnv()
+            if g:ollama_embedded_python
+              call s:SetupPyVEnv()
+            endif
         endif
         if g:ollama_embedded_python
             call s:LoadPluginPyModules()
