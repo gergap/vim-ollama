@@ -14,7 +14,7 @@ DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
-# Is is the only way to make this work reliable. As soon is this works also with Ollama
+# It is the only way to make this work reliable. As soon is this works also with Ollama
 # REST API reliable we can get rid of our own templates.
 USE_CUSTOM_TEMPLATE = True
 
