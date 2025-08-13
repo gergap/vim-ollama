@@ -1,0 +1,14 @@
+{
+    "pre": "<s>[SUFFIX]",
+    "middle": "",
+    "suffix": "[PREFIX]",
+    "eot": "</s>",
+    "stop": [
+        "[INST]",
+        "[/INST]",
+        "[PREFIX]",
+        "[/PREFIX]",
+        "[MIDDLE]",
+        "[SUFFIX]"
+    ]
+}

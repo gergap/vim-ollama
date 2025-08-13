@@ -34,13 +34,6 @@ def load_config(modelname):
         log.error(f"Config file {config_path} not found.")
         sys.exit(1)
 
-# config.json example:
-# {
-#     "pre": "<PRE> ",
-#     "middle": " <MIDDLE>",
-#     "suffix": " <SUFFIX>",
-#     "eot": " <EOT>"
-# }
 def fill_in_the_middle(config, prompt):
     """
     Searches for the string '<FILL_IN_HERE>' in the prompt and
@@ -53,13 +46,14 @@ def fill_in_the_middle(config, prompt):
         log.error("Prompt does not contain '<FILL_IN_HERE>'.")
         sys.exit(1)
 
-    if "suffix" in config["pre"]:
+    if "suffix" in config["pre"].lower():
+        # these models require suffix first
         newprompt = config["pre"] + parts[1] + config["suffix"] + parts[0] + config["middle"]
     else:
         newprompt = config["pre"] + parts[0] + config["suffix"] + parts[1] + config["middle"]
     log.debug(newprompt)
 
-    return newprompt
+    return newprompt, parts[1]
 
 def generate_code_completion(config, prompt, baseurl, model, options):
     headers = {
@@ -70,22 +64,32 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
 
+    # Parse options if it's a string
+    if isinstance(options, str):
+        options = json.loads(options)
+
+    # Ensure stop tokens are set correctly
+    stop_tokens = config.get('stop', [config.get('eot', '')]).copy()
+
     if USE_CUSTOM_TEMPLATE:
         log.info('Using custom prompt in raw mode')
-        # generate model specific prompt using our templates
-        prompt = fill_in_the_middle(config, prompt)
-        # Use Ollama Codegen API in raw mode, bypassing the Ollama template processing
+        prompt, actual_suffix = fill_in_the_middle(config, prompt)
+        # Add actual suffix to stop tokens, avoiding duplicates
+        stop = actual_suffix.split("\n")[0]
+        log.debug(f'stop={stop}')
+        if stop and stop not in stop_tokens:
+            # add suffix until up to the first newline as stop token
+            stop_tokens.append(stop)
+        options['stop'] = stop_tokens
         data = {
             'model': model,
             'prompt': prompt,
             'stream': False,
-            'raw' : True,
+            'raw': True,
             'options': options
         }
     else:
-        log.info("Using Ollama's built-in templates and suffix argument.")
-        # Use Ollama code completion API using built-in templates.
-        # Code completion should be done between prompt and suffix argument
+        log.info("Using Ollama's built-in templates and suffix argument")
         parts = prompt.split('<FILL_IN_HERE>')
         log.debug(parts)
 
@@ -94,13 +98,19 @@ def generate_code_completion(config, prompt, baseurl, model, options):
             sys.exit(1)
 
         prompt = parts[0]
-        suffix = parts[1]
+        actual_suffix = parts[1]
+        stop = actual_suffix.split("\n")[0]
+        log.debug(f'stop={stop}')
+        if stop and stop not in stop_tokens:
+            # add suffix until up to the first newline as stop token
+            stop_tokens.append(stop)
+        options['stop'] = stop_tokens
         data = {
             'model': model,
             'prompt': prompt,
-            'suffix': suffix,
+            'suffix': actual_suffix,
             'stream': False,
-            'raw' : False,
+            'raw': False,
             'options': options
         }
     log.debug('request: ' + json.dumps(data, indent=4))
@@ -110,17 +120,24 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     if response.status_code == 200:
         json_response = response.json()
         log.debug('response: ' + json.dumps(json_response, indent=4))
-        completion = response.json().get('response')
-        log.info('completion:' + completion)
+        completion = json_response.get('response')
+        log.info('completion: ' + completion)
 
-        # find index of sub string
-        try:
-            index = completion.find(config.get('eot', '<EOT>'))
-            if index != -1:
-                completion = completion[:index] # remove EOT marker
-        except:
-            pass
+        # Remove EOT marker if present
+        eot = config.get('eot', '')
+        if eot and completion.endswith(eot):
+            completion = completion[:-len(eot)]
 
+        # Trim any regenerated actual suffix from the output
+        if actual_suffix:
+            if completion.startswith(actual_suffix):
+                log.debug('startswith actual suffix')
+                completion = completion[len(actual_suffix):]
+            elif actual_suffix in completion:
+                log.debug('split actual suffix')
+                completion = completion.split(actual_suffix)[0]
+
+        log.debug(f'completion={completion}')
         return completion.rstrip()
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
