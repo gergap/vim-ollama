@@ -723,9 +723,51 @@ function! s:BuildContextForFiles(files) abort
     return l:pretty
 endfunction
 
-" Create chat window with custom prompt
-function! ollama#review#CreateCode(prompt) range
-    " Prompt template as a list of lines
+function! ollama#review#CreateCode(...) range
+    " if not prompt was given, open a scratch buffer
+    if a:0 == 0 || empty(a:1)
+        " open a new vertical window with the scratch buffer
+        vsplit
+        enew
+        setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
+        setlocal filetype=ollama_prompt
+        call setline(1, ['# Enter your instruction prompt below:', ''])
+        normal! G
+        echo "Write your instruction, then run :call SavePromptAndStartChat()"
+        return
+    endif
+
+    " Wenn ein Prompt übergeben wurde, direkt starten
+    call s:BuildPromptAndStartChat(a:1)
+endfunction
+
+function! ollama#review#SavePromptAndStartChat()
+    " Get the content of the current buffer (without comment line)
+    let l:lines = getline(2, '$')
+    let l:prompt = join(l:lines, "\n")
+    if empty(l:prompt)
+        echo "Prompt is empty!"
+        return
+    endif
+    " close scratch buffer
+    close
+    " start chat with prompt
+    call s:BuildPromptAndStartChat(l:prompt)
+endfunction
+
+function! ollama#review#UsePromptAndStartChat()
+    " Get the content of the current buffer
+    let l:lines = getline(1, '$')
+    let l:prompt = join(l:lines, "\n")
+    if empty(l:prompt)
+        echo "Prompt is empty!"
+        return
+    endif
+    " start chat with prompt
+    call s:BuildPromptAndStartChat(l:prompt)
+endfunction
+
+function! s:BuildPromptAndStartChat(prompt)
     let l:prompt_lines = [
                 \ "\"\"\"",
                 \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
@@ -747,8 +789,6 @@ function! ollama#review#CreateCode(prompt) range
                 \ "]",
                 \ "\"\"\""
                 \ ]
-
-    " Start the chat
     call s:StartChat2(l:prompt_lines)
 endfunction
 
