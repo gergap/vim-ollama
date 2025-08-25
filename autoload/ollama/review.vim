@@ -690,7 +690,7 @@ function! ollama#review#ProcessResponse()
 endfunction
 
 function! s:BuildContextForFiles(files) abort
-    let l:context = []
+    let l:entries = []
 
     for filepath in a:files
         " Only add if the file still exists
@@ -703,19 +703,24 @@ function! s:BuildContextForFiles(files) abort
                 let lines = readfile(filepath)
             endif
 
-            " Get filetype
-            let ext = fnamemodify(filepath, ':e')
-            let ft = ext != '' ? ext : 'text'
+            " Join lines with newline characters
+            let content = join(lines, "\n")
 
-            " Format as markdown code block
-            call extend(l:context, [
-                        \ '# ' . filepath,
-                        \ '```' . ft,
-                        \ ] + lines + ['```', ''])
+            " Create dict for JSON
+            call add(l:entries, {
+                        \ 'path': filepath,
+                        \ 'content': content
+                        \ })
         endif
     endfor
 
-    return l:context
+    " Convert list of dicts to JSON string (compact)
+    let l:json = json_encode(l:entries)
+
+    " Pipe through jq for pretty-printing
+    let l:pretty = system('jq .', l:json)
+
+    return l:pretty
 endfunction
 
 " Create chat window with custom prompt
@@ -754,24 +759,28 @@ function! ollama#review#ModifyCode(prompt)
         return
     endif
 
+    let l:file_context = s:BuildContextForFiles(g:ollama_project_files)
+
     " Build the full prompt
-    let l:header = [
+    let l:prompt_lines = [
                 \ "\"\"\"",
-                \ "You are modifying an existing codebase inside a Vim plugin.",
-                \ "Instruction: " . a:prompt,
+                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
+                \ "Your task is to modify a list of files with full content in response to the instruction below.",
                 \ "",
-                \ "The current files are provided below. Respond ONLY with modified files using the exact JSON format:",
+                \ "Instruction:",
+                \ a:prompt,
+                \ "",
+                \ "Below is the current project state:",
+                \ l:file_context,
+                \ "",
+                \ "Respond ONLY with modified and new files using the following JSON format:",
                 \ "[",
                 \ "  { \"path\": \"file.ext\", \"content\": \"New content\" }",
                 \ "]",
-                \ "Below is the current project state:"
+                \ "",
+                \ "Do NOT output unchanged files.",
+                \ "\"\"\""
                 \ ]
-
-    let l:file_context = s:BuildContextForFiles(g:ollama_project_files)
-    " add file context to prompt
-    let l:prompt_lines = l:header + l:file_context
-    " close multiline prompt
-    let l:prompt_lines += ["\"\"\""]
 
     call s:StartChat2(l:prompt_lines)
 endfunction
