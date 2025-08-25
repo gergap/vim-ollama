@@ -333,28 +333,11 @@ function! ollama#codegen#ProcessResponse()
     call ollama#logger#Debug("ProcessResponse:\n" .. join(lines, "\n"))
 
     " Find JSON array boundaries
-    let start_idx = -1
-    let end_idx = -1
-    for i in range(len(lines))
-        if lines[i] =~ '^\s*\['
-            let start_idx = i
-            break
-        endif
-    endfor
-    for i in range(len(lines)-1, -1, -1)
-        if lines[i] =~ '\]\s*$'
-            let end_idx = i
-            break
-        endif
-    endfor
-
-    if start_idx == -1 || end_idx == -1 || end_idx < start_idx
-        echoerr 'Could not find JSON array in buffer'
+    let json_text = matchstr(join(lines, "\n"), '\[\_.\{-}\]')
+    if empty(json_text)
+        echoerr 'No JSON array found'
         return
     endif
-
-    let json_lines = lines[start_idx : end_idx]
-    let json_text = join(json_lines, "\n")
 
     " Decode JSON
     try
