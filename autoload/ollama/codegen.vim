@@ -10,6 +10,8 @@ let s:ollama_bufname = 'Ollama Codegen'
 let s:ollama_response = []
 " list of AI projct files
 let s:ollama_project_files = []
+" Buffer partial lines
+let s:partial_line = ""
 
 if !exists('g:ollama_codegen_logfile')
     let g:ollama_codegen_logfile = tempname() .. '-ollama-codegen.log'
@@ -88,6 +90,91 @@ function! s:SwitchToBuffer(bufnr)
     endif
 endfunction
 
+function! s:WriteFile(file) abort
+    " Sanitize path: remove leading /, disallow .. to prevent directory escape
+    let filepath = substitute(a:file.path, '^/*', '', '')
+    if filepath =~# '\.\.'
+        echoerr "Unsafe path: " . filepath
+        return
+    endif
+
+    " Create directories if needed
+    let dir = fnamemodify(filepath, ':h')
+    if dir !=# '' && !isdirectory(dir)
+        call mkdir(dir, 'p')
+    endif
+
+    " Clean and write content
+    let content = CleanEscapes(a:file.content)
+    call writefile(split(content, "\n"), filepath)
+    echom "Wrote file: " . filepath
+
+    " Avoid duplicate entries in tracked files
+    if index(s:ollama_project_files, filepath) < 0
+        " add to project files
+        call add(s:ollama_project_files, filepath)
+    endif
+
+    let empty_buf = FindInitialEmptyBuffer()
+    " Open or switch buffer smartly
+    let bufnr = bufnr(filepath)
+    if bufnr == -1
+        echom "buffer does not exist yet"
+        if empty_buf != -1 && bufexists(empty_buf)
+            echom "Use initial empty buffer"
+            " Use initial empty buffer if it exists
+            call s:SwitchToBuffer(empty_buf)
+            call s:OpenGeneratedFile(filepath)
+        elseif bufexists(s:bufnr)
+            echom "Use AI buffer"
+            " Reuse existing AI view buffer window
+            call s:SwitchToBuffer(s:bufnr)
+            call s:OpenGeneratedFile(filepath)
+        else
+            echom "Use split"
+            " Open in a new vertical split
+            vertical leftabove split
+            call s:OpenGeneratedFile(filepath)
+        endif
+    else
+        echom "Switch to existing buffer"
+        " File is already loaded, switch to it
+        call s:SwitchToBuffer(bufnr)
+        call s:OpenGeneratedFile(filepath)
+    endif
+
+    " Remember the buffer for future reuse
+    let s:bufnr = bufnr('%')
+
+    call s:RefreshProjectView()
+endfunction
+
+function! s:HandleNDJSONLine(line) abort
+    " remove any warapping ```json ... ``` text
+    let l:json_match = matchstr(a:line, '{\s*".\{-}"\s*}')
+    if empty(l:json_match)
+        " this is normal with incomplete lines and should not be a error trace
+        " for this reason
+        call ollama#logger#Debug("Invalid NDJSON line: " . a:line)
+        return -1
+    endif
+
+    try
+        let l:file = json_decode(l:json_match)
+        call ollama#logger#Debug("JSON parsing succeeded.")
+    catch
+        call ollama#logger#Error("Failed to decode JSON: " . a:json_match)
+        return -1
+    endtry
+
+    if has_key(l:file, 'path') && has_key(l:file, 'content')
+        call s:WriteFile(l:file)
+    else
+        call ollama#logger#Error(echom "NDJSON missing keys: " . a:line)
+    endif
+    return 0
+endfunction
+
 function! s:StartChat(lines) abort
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
@@ -103,39 +190,40 @@ function! s:StartChat(lines) abort
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
 
-    " Function handling output from the shell: Add it above the prompt.
-    func! GotOutput(channel, msg)
+    func! GotOutput(channel, msg) abort
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
-        " append lines
-        let l:lines = split(a:msg, "\n")
-        for l:line in l:lines
-            " when we received <EOT> start insert mode again
-            let l:idx = stridx(l:line, "<EOT>")
-            if l:idx != -1
-                call ollama#logger#Debug("Stripping <EOT> at idx=" .. l:idx)
-                let l:line = strpart(l:line, 0, l:idx)
-                " append last line
-                call add(s:ollama_response, l:line)
-                call ollama#codegen#ProcessResponse()
-            else
-                " append lines to ollama_response
-                call add(s:ollama_response, l:line)
+        " Debug/View im Chat Buffer
+        call appendbufline(s:buf, "$", a:msg)
+        if bufname() == s:ollama_bufname
+            if mode() ==# 'i'
+                call feedkeys("\<Esc>")
             endif
-            call appendbufline(s:buf, "$", l:line)
-            if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
-                " check if in insert mode
-                if mode() == 'i'
-                    " start insert mode again
-                    call feedkeys("\<Esc>")
-                endif
-                call feedkeys("G") "jump to end
-                if l:idx != -1
-                    " start insert mode
-                    call feedkeys("a")
-                endif
+            call feedkeys("G")
+        endif
+
+        " concatenate string parts
+        let s:partial_line .= a:msg
+
+        let l:line = s:partial_line
+        " check for EOT marker
+        let l:idx = stridx(l:line, "<EOT>")
+        if l:idx != -1
+            call ollama#logger#Debug("Got <EOT>")
+            let l:line = strpart(l:line, 0, l:idx)
+            if !empty(l:line)
+                " process final line
+                call s:HandleNDJSONLine(l:line)
             endif
-        endfor
+            call s:CloseChat()
+            return
+        endif
+
+        " process line
+        let l:ret = s:HandleNDJSONLine(l:line)
+        if l:ret == 0
+            let s:partial_line = ""
+        endif
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
@@ -159,6 +247,8 @@ function! s:StartChat(lines) abort
     " Function handling the shell exits: close the window.
     func! JobExit(job, status)
         call ollama#logger#Debug("JobExit: " .. a:status)
+        call s:CloseChat()
+        return
         " Switch to the chat buffer
         execute 'buffer' s:buf
         " Turn off prompt functionality and make the buffer modifiable
@@ -204,9 +294,10 @@ function! s:StartChat(lines) abort
         \ 'exit_cb': function('JobExit'),
         \ }
 
+    " reset partial line
+    let s:partial_line = ""
     " Start a shell in the background.
     let s:job = job_start(l:command, l:job_options)
-
     " Create chat buffer
     let l:bufname = s:ollama_bufname
     if (s:buf != -1)
@@ -231,7 +322,6 @@ function! s:StartChat(lines) abort
     " Create new chat buffer
     execute 'botright new' l:bufname
     " Set the filetype to ollama-chat
-"    setlocal filetype=ollama-chat
     setlocal filetype=markdown
     setlocal buftype=prompt
     " enable BufDelete event when closing buffer usig :q!
@@ -331,107 +421,6 @@ function! s:OpenGeneratedFile(filepath)
     setlocal autoread
 endfunction
 
-" Process JSON response intended for the plugin.
-function! ollama#codegen#ProcessResponse()
-    " Get last chat response
-    let lines = s:ollama_response
-    call ollama#logger#Debug("ProcessResponse:\n" .. join(lines, "\n"))
-
-    " Find JSON array boundaries
-    let json_text = matchstr(join(lines, "\n"), '\[\_.\{-}\]')
-    if empty(json_text)
-        echoerr 'No JSON array found'
-        return
-    endif
-
-    " Decode JSON
-    try
-        let files = json_decode(json_text)
-    catch /^Vim\%((\a\+)\)\=:E\%(\d\+\)/
-        echoerr 'Failed to decode JSON'
-        return
-    endtry
-
-    " Check that files is a list
-    if type(files) != type([])
-        echoerr 'Decoded JSON is not a list'
-        return
-    endif
-
-    " Write each file
-    for file in files
-        if !has_key(file, 'path') || !has_key(file, 'content')
-            echoerr 'Invalid file object in JSON'
-            continue
-        endif
-
-        " Sanitize path: remove leading /, disallow .. to prevent directory escape
-        let filepath = substitute(file['path'], '^/*', '', '')
-        if filepath =~# '\.\.'
-            echoerr 'Unsafe path detected, skipping: ' . filepath
-            continue
-        endif
-
-        " Create directories if needed
-        let dir = fnamemodify(filepath, ':h')
-        if dir !=# '' && !isdirectory(dir)
-            call mkdir(dir, 'p')
-        endif
-
-        " Clean and write content
-        let content = CleanEscapes(file['content'])
-        try
-            call writefile(split(content, "\n"), filepath)
-            echom 'Wrote file: ' . filepath
-            " Avoid duplicate entries in tracked files
-            if index(s:ollama_project_files, filepath) < 0
-                call add(s:ollama_project_files, filepath)
-            endif
-        catch
-            echoerr 'Failed to write file: ' . filepath
-            continue
-        endtry
-
-        let empty_buf = FindInitialEmptyBuffer()
-        " Open or switch buffer smartly
-        let bufnr = bufnr(filepath)
-        if bufnr == -1
-            echom "buffer does not exist yet"
-            if empty_buf != -1 && bufexists(empty_buf)
-                echom "Use initial empty buffer"
-                " Use initial empty buffer if it exists
-                call s:SwitchToBuffer(empty_buf)
-                call s:OpenGeneratedFile(filepath)
-            elseif bufexists(s:bufnr)
-                echom "Use AI buffer"
-                " Reuse existing AI view buffer window
-                call s:SwitchToBuffer(s:bufnr)
-                call s:OpenGeneratedFile(filepath)
-            else
-                echom "Use split"
-                " Open in a new vertical split
-                vertical leftabove split
-                call s:OpenGeneratedFile(filepath)
-            endif
-        else
-            echom "Switch to existing buffer"
-            " File is already loaded, switch to it
-            call s:SwitchToBuffer(bufnr)
-            call s:OpenGeneratedFile(filepath)
-        endif
-
-        " Remember the buffer for future reuse
-        let s:bufnr = bufnr('%')
-    endfor
-    call s:CloseChat()
-
-    " Open NERDTree to show he new files if this plugin is loaded
-"    if exists('g:NERDTree')
-"        execute ':NERDTreeCWD'
-"    endif
-    call s:RefreshProjectView()
-endfunction
-
 function! s:BuildContextForFiles(files) abort
     let l:entries = []
 
@@ -473,7 +462,7 @@ function! ollama#codegen#CreateCode(...) range
         vsplit
         enew
         setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
-        setlocal filetype=ollama_prompt
+        setlocal filetype=markdown
         call setline(1, ['# Enter your instruction prompt below:', ''])
         normal! G
         echo "Write your instruction, then run :call SavePromptAndStartChat()"
@@ -519,17 +508,9 @@ function! s:BuildPromptAndStartChat(prompt)
                 \ "Instruction:",
                 \ a:prompt,
                 \ "",
-                \ "Respond only in the following JSON format. Do not include any extra explanation:",
-                \ "[",
-                \ "  {",
-                \ "    \"path\": \"example.txt\",",
-                \ "    \"content\": \"Example file content here.\"",
-                \ "  },",
-                \ "  {",
-                \ "    \"path\": \"another.txt\",",
-                \ "    \"content\": \"Another file...\"",
-                \ "  }",
-                \ "]",
+                \ "Respond only in the following NDJSON format without array brackets. Do not include any extra explanation:",
+                \ "{\"path\": \"example.txt\", \"content\": \"Example file content here.\"}",
+                \ "{\"path\": \"another.txt\", \"content\": \"Another file content.\"}",
                 \ "\"\"\""
                 \ ]
     call s:StartChat(l:prompt_lines)
@@ -556,10 +537,9 @@ function! ollama#codegen#ModifyCode(prompt)
                 \ "Below is the current project state:",
                 \ l:file_context,
                 \ "",
-                \ "Respond ONLY with modified and new files using the following JSON format:",
-                \ "[",
-                \ "  { \"path\": \"file.ext\", \"content\": \"New content\" }",
-                \ "]",
+                \ "Respond only in the following NDJSON format without array brackets.",
+                \ "{\"path\": \"example.txt\", \"content\": \"new content.\"}",
+                \ "{\"path\": \"another.txt\", \"content\": \"Another file content.\"}",
                 \ "",
                 \ "Do NOT output unchanged files.",
                 \ "\"\"\""
