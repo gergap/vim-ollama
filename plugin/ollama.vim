@@ -267,16 +267,16 @@ command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
 command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
-command! -nargs=1 OllamaCreate call ollama#review#CreateCode(<f-args>)
-command! -nargs=1 OllamaModify call ollama#review#ModifyCode(<f-args>)
-command! OllamaTrackOpenBuffers call ollama#review#TrackOpenBuffers()
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 
-command! OllamaProjectView call ollama#review#ShowProjectView()
-command! OllamaTrackCurrent call ollama#review#TrackCurrentBuf()
-command! OllamaUntrackCurrent call ollama#review#UntrackCurrentBuf()
+command! -nargs=1 OllamaCreate call ollama#codegen#CreateCode(<f-args>)
+command! -nargs=1 OllamaModify call ollama#codegen#ModifyCode(<f-args>)
+command! OllamaTrackOpenBuffers call ollama#codegen#TrackOpenBuffers()
+command! OllamaProjectView call ollama#codegen#ShowProjectView()
+command! OllamaTrackCurrent call ollama#codegen#TrackCurrentBuf()
+command! OllamaUntrackCurrent call ollama#codegen#UntrackCurrentBuf()
 
 " Define new signs for diffs
 sign define NewLine text=+ texthl=DiffAdd

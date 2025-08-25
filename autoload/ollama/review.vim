@@ -3,13 +3,6 @@
 let s:job = v:null
 let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
-" this variable holds the last response of Ollama
-let s:ollama_response = []
-" list of AI projct files
-let g:ollama_project_files = []
-" buffer for displaying new AI generated code, instead of creating new splits
-" all the time, which clutters the IDE
-let g:ollama_ai_bufnr = -1
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -28,23 +21,6 @@ func! ollama#review#KillChatBot()
         let s:buf = -1
     else
         call ollama#logger#Debug("No job to kill")
-    endif
-endfunc
-
-func! s:CloseWindowByBufNr(bufnr)
-    for win in range(1, winnr('$'))
-        if winbufnr(win) == a:bufnr
-            execute win . 'close!'
-            return
-        endif
-    endfor
-endfunc
-
-func! s:CloseChat()
-    " call s:CloseWindowByBufNr(s:buf)
-    if s:buf != -1
-        call s:SwitchToBuffer(s:buf)
-        execute "q!"
     endif
 endfunc
 
@@ -79,16 +55,6 @@ function! s:FindBufferWindow(bufnr)
     return -1
 endfunction
 
-function! s:SwitchToBuffer(bufnr)
-    let l:win = s:FindBufferWindow(a:bufnr)
-    " switch to existing buffer
-    if l:win != -1
-        execute l:win  ..  'wincmd w'
-    else
-        execute 'buffer' a:bufnr
-    endif
-endfunction
-
 function! s:StartChat(lines) abort
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
@@ -97,10 +63,7 @@ function! s:StartChat(lines) abort
             " don't send empty messages
             return
         endif
-        " Reset last response
-        let s:ollama_response = []
         " Send the text to a shell with Enter appended.
-        call ollama#logger#Debug("ch_sendraw... (TextEntered)")
         call ch_sendraw(s:job, a:text .. "\n")
     endfunc
 
@@ -114,14 +77,8 @@ function! s:StartChat(lines) abort
             " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
             if l:idx != -1
-                call ollama#logger#Debug("Stripping <EOT> at idx=" .. l:idx)
+                call ollama#logger#Debug("idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
-                " append last line
-                call add(s:ollama_response, l:line)
-                call ollama#review#ProcessResponse()
-            else
-                " append lines to ollama_response
-                call add(s:ollama_response, l:line)
             endif
             call appendbufline(s:buf, "$", l:line)
             if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
@@ -179,7 +136,6 @@ function! s:StartChat(lines) abort
     let l:model_options = json_encode(g:ollama_chat_options)
     call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
-    let s:ollama_response = []
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
@@ -446,10 +402,12 @@ function! s:StartChat2(lines) abort
     endif
 
     " Add a title to the chat buffer
-    call append(0, "AI context (type 'quit' to exit, press CTRL-C to interrupt output)")
-    call append(1, "-------------")
+    let l:title = "AI context for '" .. g:ollama_chat_model .. "' (via " .. g:ollama_chat_provider .. ")"
+    call append(0, l:title)
+    call append(1, repeat('-', len(l:title)))
+    call append(2, "(type 'quit' to exit, press CTRL-C to interrupt output)")
     if a:lines isnot v:null
-        call append(2, a:lines)
+        call append(3, a:lines)
         call ollama#logger#Debug("Sending text... (StartChat)")
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
@@ -507,514 +465,4 @@ endfunction
 
 function ollama#review#Chat()
     call s:StartChat(v:null)
-endfunction
-
-" Quick hack for decoding some escaped characters, because json_decode doesn't
-" do it. TODO: add better solution which works more generic.
-" Clean and escape JSON/LLM string for C code
-function! CleanEscapes(s) abort
-    let s = substitute(a:s, '\\u003c', '<', 'g')
-    let s = substitute(s, '\\u003e', '>', 'g')
-
-    let result = ''
-    let rest = s
-    let pattern = '\v"([^"\\]|\\.)*"'
-
-    while len(rest) > 0
-        let match = matchstr(rest, pattern)
-
-        if match ==# ''
-            let result .= rest
-            break
-        endif
-
-        let start = match(rest, pattern)
-        let end = start + len(match)
-
-        " Append non-matching prefix
-        let result .= strpart(rest, 0, start)
-
-        " Extract content inside quotes
-        let inner = strpart(match, 1, len(match) - 2)
-
-        " First, escape single backslashes not followed by 'n'
-        let escaped = substitute(inner, '\\\(.\)', '\=submatch(1) ==# "n" ? "\\n" : "\\\\" . submatch(1)', 'g')
-
-        " Then, replace real newlines with \n (but not already escaped ones)
-        let escaped = substitute(escaped, '\([^\]\)\n', '\1\\n', 'g')
-
-        " Reassemble string literal
-        let result .= '"' . escaped . '"'
-
-        " Advance rest
-        let rest = strpart(rest, end)
-    endwhile
-
-    return result
-endfunction
-
-" When starting Vim, we have an initial empty buffer.
-" We should use it to generate code instead of creating unnecessary splits.
-function! FindInitialEmptyBuffer()
-    for buf in getbufinfo({'buflisted': 1})
-        if buf.name ==# '' && !buf.changed
-            let lines = getbufline(buf.bufnr, 1, '$')
-            if len(lines) == 1 && lines[0] ==# ''
-                return buf.bufnr
-            endif
-        endif
-    endfor
-    return -1
-endfunction
-
-" Process JSON response intended for the plugin.
-function! ollama#review#ProcessResponse()
-    " Get last chat response
-    let lines = s:ollama_response
-    call ollama#logger#Debug("ProcessResponse:\n" .. join(lines, "\n"))
-
-    " Find JSON array boundaries
-    let start_idx = -1
-    let end_idx = -1
-    for i in range(len(lines))
-        if lines[i] =~ '^\s*\['
-            let start_idx = i
-            break
-        endif
-    endfor
-    for i in range(len(lines)-1, -1, -1)
-        if lines[i] =~ '\]\s*$'
-            let end_idx = i
-            break
-        endif
-    endfor
-
-    if start_idx == -1 || end_idx == -1 || end_idx < start_idx
-        echoerr 'Could not find JSON array in buffer'
-        return
-    endif
-
-    let json_lines = lines[start_idx : end_idx]
-    let json_text = join(json_lines, "\n")
-
-    " Decode JSON
-    try
-        let files = json_decode(json_text)
-    catch /^Vim\%((\a\+)\)\=:E\%(\d\+\)/
-        echoerr 'Failed to decode JSON'
-        return
-    endtry
-
-    " Check that files is a list
-    if type(files) != type([])
-        echoerr 'Decoded JSON is not a list'
-        return
-    endif
-
-    " Write each file
-    for file in files
-        if !has_key(file, 'path') || !has_key(file, 'content')
-            echoerr 'Invalid file object in JSON'
-            continue
-        endif
-
-        " Sanitize path: remove leading /, disallow .. to prevent directory escape
-        let filepath = substitute(file['path'], '^/*', '', '')
-        if filepath =~# '\.\.'
-            echoerr 'Unsafe path detected, skipping: ' . filepath
-            continue
-        endif
-
-        " Create directories if needed
-        let dir = fnamemodify(filepath, ':h')
-        if dir !=# '' && !isdirectory(dir)
-            call mkdir(dir, 'p')
-        endif
-
-        " Clean and write content
-        let content = CleanEscapes(file['content'])
-        try
-            call writefile(split(content, "\n"), filepath)
-            echom 'Wrote file: ' . filepath
-            " Avoid duplicate entries in tracked files
-            if index(g:ollama_project_files, filepath) < 0
-                call add(g:ollama_project_files, filepath)
-            endif
-        catch
-            echoerr 'Failed to write file: ' . filepath
-            continue
-        endtry
-
-        let empty_buf = FindInitialEmptyBuffer()
-        " Open or switch buffer smartly
-        let bufnr = bufnr(filepath)
-        if bufnr == -1
-            echom "buffer does not exist yet"
-            if empty_buf != -1 && bufexists(empty_buf)
-                echom "Use initial empty buffer"
-                " Use initial empty buffer if it exists
-                call s:SwitchToBuffer(empty_buf)
-                execute 'edit! ' . filepath
-                execute 'set autoread'
-            elseif bufexists(g:ollama_ai_bufnr)
-                echom "Use AI buffer"
-                " Reuse existing AI view buffer window
-                call s:SwitchToBuffer(g:ollama_ai_bufnr)
-                execute 'edit! ' . filepath
-                execute 'set autoread'
-            else
-                echom "Use split"
-                " Open in a new vertical split
-                vertical leftabove split
-                execute 'edit! ' . filepath
-                execute 'set autoread'
-            endif
-        else
-            echom "Switch to existing buffer"
-            " File is already loaded, switch to it
-            call s:SwitchToBuffer(bufnr)
-            " Ensure reload
-            execute 'edit'
-        endif
-
-        " Remember the buffer for future reuse
-        let g:ollama_ai_bufnr = bufnr('%')
-    endfor
-    call s:CloseChat()
-
-    " Open NERDTree to show he new files if this plugin is loaded
-"    if exists('g:NERDTree')
-"        execute ':NERDTreeCWD'
-"    endif
-    call s:RefreshProjectView()
-endfunction
-
-function! s:BuildContextForFiles(files) abort
-    let l:entries = []
-
-    for filepath in a:files
-        " Only add if the file still exists
-        if filereadable(filepath)
-            " Read from buffer if loaded, else from disk
-            if bufloaded(filepath)
-                let bufnr = bufnr(filepath)
-                let lines = getbufline(bufnr, 1, '$')
-            else
-                let lines = readfile(filepath)
-            endif
-
-            " Join lines with newline characters
-            let content = join(lines, "\n")
-
-            " Create dict for JSON
-            call add(l:entries, {
-                        \ 'path': filepath,
-                        \ 'content': content
-                        \ })
-        endif
-    endfor
-
-    " Convert list of dicts to JSON string (compact)
-    let l:json = json_encode(l:entries)
-
-    " Pipe through jq for pretty-printing
-    let l:pretty = system('jq .', l:json)
-
-    return l:pretty
-endfunction
-
-function! ollama#review#CreateCode(...) range
-    " if not prompt was given, open a scratch buffer
-    if a:0 == 0 || empty(a:1)
-        " open a new vertical window with the scratch buffer
-        vsplit
-        enew
-        setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
-        setlocal filetype=ollama_prompt
-        call setline(1, ['# Enter your instruction prompt below:', ''])
-        normal! G
-        echo "Write your instruction, then run :call SavePromptAndStartChat()"
-        return
-    endif
-
-    " Wenn ein Prompt übergeben wurde, direkt starten
-    call s:BuildPromptAndStartChat(a:1)
-endfunction
-
-function! ollama#review#SavePromptAndStartChat()
-    " Get the content of the current buffer (without comment line)
-    let l:lines = getline(2, '$')
-    let l:prompt = join(l:lines, "\n")
-    if empty(l:prompt)
-        echo "Prompt is empty!"
-        return
-    endif
-    " close scratch buffer
-    close
-    " start chat with prompt
-    call s:BuildPromptAndStartChat(l:prompt)
-endfunction
-
-function! ollama#review#UsePromptAndStartChat()
-    " Get the content of the current buffer
-    let l:lines = getline(1, '$')
-    let l:prompt = join(l:lines, "\n")
-    if empty(l:prompt)
-        echo "Prompt is empty!"
-        return
-    endif
-    " start chat with prompt
-    call s:BuildPromptAndStartChat(l:prompt)
-endfunction
-
-function! s:BuildPromptAndStartChat(prompt)
-    let l:prompt_lines = [
-                \ "\"\"\"",
-                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
-                \ "Your task is to generate a list of files with full content in response to the instruction below.",
-                \ "",
-                \ "Instruction:",
-                \ a:prompt,
-                \ "",
-                \ "Respond only in the following JSON format. Do not include any extra explanation:",
-                \ "[",
-                \ "  {",
-                \ "    \"path\": \"example.txt\",",
-                \ "    \"content\": \"Example file content here.\"",
-                \ "  },",
-                \ "  {",
-                \ "    \"path\": \"another.txt\",",
-                \ "    \"content\": \"Another file...\"",
-                \ "  }",
-                \ "]",
-                \ "\"\"\""
-                \ ]
-    call s:StartChat2(l:prompt_lines)
-endfunction
-
-" A function for modifying tracked (AI generated) files
-function! ollama#review#ModifyCode(prompt)
-    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
-        echoerr "No project files tracked. Run OllamaCreate first."
-        return
-    endif
-
-    let l:file_context = s:BuildContextForFiles(g:ollama_project_files)
-
-    " Build the full prompt
-    let l:prompt_lines = [
-                \ "\"\"\"",
-                \ "You are a code generation tool inside a Vim plugin. You do not ask questions. You do not respond with any explanation. You already received the user's instruction.",
-                \ "Your task is to modify a list of files with full content in response to the instruction below.",
-                \ "",
-                \ "Instruction:",
-                \ a:prompt,
-                \ "",
-                \ "Below is the current project state:",
-                \ l:file_context,
-                \ "",
-                \ "Respond ONLY with modified and new files using the following JSON format:",
-                \ "[",
-                \ "  { \"path\": \"file.ext\", \"content\": \"New content\" }",
-                \ "]",
-                \ "",
-                \ "Do NOT output unchanged files.",
-                \ "\"\"\""
-                \ ]
-
-    call s:StartChat2(l:prompt_lines)
-endfunction
-
-" This function adds all open buffers to the list of tracked files,
-" which are used as file context in ModifyCode
-function! ollama#review#TrackOpenBuffers()
-    if !exists('g:ollama_project_files')
-        let g:ollama_project_files = []
-    endif
-
-    for bufnr in range(1, bufnr('$'))
-        if bufexists(bufnr) && buflisted(bufnr)
-            let filepath = bufname(bufnr)
-
-            " Skip unnamed or non-file buffers
-            if filepath ==# '' || !filereadable(filepath)
-                continue
-            endif
-
-            " Normalize path
-            let filepath = fnamemodify(filepath, ':.')
-
-            " Avoid duplicates
-            if index(g:ollama_project_files, filepath) == -1
-                call add(g:ollama_project_files, filepath)
-"                echom "Tracked: " . filepath
-            endif
-        endif
-    endfor
-    call ollama#review#ShowProjectView()
-endfunction
-
-" Adds the current buffer to the project file list
-function! ollama#review#TrackCurrentBuf()
-    let filepath = expand('%:p')
-    if filepath ==# '' || !filereadable(filepath)
-        echoerr "No valid file in current buffer."
-        return
-    endif
-
-    let relpath = fnamemodify(filepath, ':.')
-    if !exists('g:ollama_project_files')
-        let g:ollama_project_files = []
-    endif
-
-    if index(g:ollama_project_files, relpath) == -1
-        call add(g:ollama_project_files, relpath)
-"        echom "Tracked: " . relpath
-        call ollama#review#ShowProjectView()
-    else
-        echom "Already tracked: " . relpath
-    endif
-endfunction
-
-" Removes the current buffer from the project file list
-function! ollama#review#UntrackCurrentBuf()
-    let filepath = expand('%:p')
-    if filepath ==# ''
-        echoerr "No valid file in current buffer."
-        return
-    endif
-
-    let relpath = fnamemodify(filepath, ':.')
-    if exists('g:ollama_project_files')
-        let g:ollama_project_files = filter(g:ollama_project_files, { _, val -> val !=# relpath })
-        echom "Untracked: " . relpath
-    else
-        echo "No files are currently tracked."
-    endif
-endfunction
-
-" Opens a NERDTree like project view of tracked files
-function! ollama#review#ShowProjectView()
-    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
-        echo "No files tracked yet."
-        return
-    endif
-
-    " Open a vertical split with fixed width (e.g., 60 columns)
-    execute 'vertical ' . 60 . 'vsplit OllamaProjectView'
-    enew
-    setlocal buftype=nofile
-    setlocal bufhidden=wipe
-    setlocal noswapfile
-    setlocal nobuflisted
-    setlocal filetype=ollama_project
-    setlocal modifiable
-    syntax match OllamaProjectHeader /^# AI context/
-    highlight link OllamaProjectHeader String
-
-    let l:header = ['# AI context']  " Use '#' as comment style
-    let l:lines = l:header + g:ollama_project_files
-    call setline(1, l:lines)
-    setlocal nomodifiable
-
-    nnoremap <buffer> <CR> :call ollama#review#OpenTrackedFile()<CR>
-endfunction
-
-" Refresh the project file list after changing it
-function! s:RefreshProjectView()
-    if !exists('g:ollama_project_files') || empty(g:ollama_project_files)
-        echo "No files tracked yet."
-        return
-    endif
-
-    let l:header = ['# AI context']  " Use '#' as comment style
-    " Find the existing project view buffer
-    for buf in range(1, bufnr('$'))
-        if bufloaded(buf) && getbufvar(buf, '&filetype') ==# 'ollama_project'
-            " Make the buffer modifiable to update content
-            call setbufvar(buf, '&modifiable', 1)
-
-            " Replace buffer lines with tracked files
-            let l:lines = l:header + g:ollama_project_files
-            call setbufline(buf, 1, l:lines)
-
-            " Delete any extra lines beyond tracked files
-            let l:num_tracked = len(g:ollama_project_files)
-            let l:num_lines = line('$', buf)
-            if l:num_lines > l:num_tracked
-                call deletebufline(buf, l:num_tracked + 1, l:num_lines)
-            endif
-
-            " Set buffer back to nomodifiable
-            call setbufvar(buf, '&modifiable', 0)
-
-            " Optionally, you could redraw or refresh the window here if needed
-            return
-        endif
-    endfor
-
-    " If no project view buffer found, open it anew
-    call ollama#review#ShowProjectView()
-endfunction
-
-function! s:IsWindowUsable(winnr)
-    " Temporarily switch to the window
-    execute a:winnr . 'wincmd w'
-
-    " Get window and buffer properties
-    let buftype = &buftype
-    let preview = &previewwindow
-    let modified = &modified
-
-    " Return to previous window
-    wincmd p
-
-    " Special buffers like quickfix, help, or preview are not usable
-    if buftype !=# '' || preview
-        return 0
-    endif
-
-    " If buffer is not modified or hidden buffers are allowed, reuse it
-    return !modified || &hidden
-endfunction
-
-" Opens the selected file in project view
-function! ollama#review#OpenTrackedFile()
-    let relpath = getline('.')
-    let abspath = fnamemodify(relpath, ':p')
-
-    if !filereadable(abspath)
-        echoerr "File does not exist: " . relpath
-        return
-    endif
-
-    " Check if buffer is already visible in a window
-    for winnr in range(1, winnr('$'))
-        let bufnr = winbufnr(winnr)
-        if fnamemodify(bufname(bufnr), ':p') ==# abspath
-            execute winnr . 'wincmd w'
-            return
-        endif
-    endfor
-
-    " Try to find a usable window
-    let usable_win = -1
-    for winnr in range(1, winnr('$'))
-        if s:IsWindowUsable(winnr)
-            let usable_win = winnr
-            break
-        endif
-    endfor
-
-    let filepath = fnameescape(abspath)
-
-    if usable_win != -1
-        execute usable_win . 'wincmd w'
-        execute 'edit! ' . filepath
-    else
-        vertical leftabove split
-        execute 'edit! ' . filepath
-    endif
-
-    setlocal autoread
 endfunction
