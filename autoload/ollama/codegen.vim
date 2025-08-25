@@ -326,6 +326,11 @@ function! FindInitialEmptyBuffer()
     return -1
 endfunction
 
+function! s:OpenGeneratedFile(filepath)
+    execute 'edit! ' . a:filepath
+    setlocal autoread
+endfunction
+
 " Process JSON response intended for the plugin.
 function! ollama#codegen#ProcessResponse()
     " Get last chat response
@@ -396,27 +401,23 @@ function! ollama#codegen#ProcessResponse()
                 echom "Use initial empty buffer"
                 " Use initial empty buffer if it exists
                 call s:SwitchToBuffer(empty_buf)
-                execute 'edit! ' . filepath
-                execute 'set autoread'
+                call s:OpenGeneratedFile(filepath)
             elseif bufexists(s:bufnr)
                 echom "Use AI buffer"
                 " Reuse existing AI view buffer window
                 call s:SwitchToBuffer(s:bufnr)
-                execute 'edit! ' . filepath
-                execute 'set autoread'
+                call s:OpenGeneratedFile(filepath)
             else
                 echom "Use split"
                 " Open in a new vertical split
                 vertical leftabove split
-                execute 'edit! ' . filepath
-                execute 'set autoread'
+                call s:OpenGeneratedFile(filepath)
             endif
         else
             echom "Switch to existing buffer"
             " File is already loaded, switch to it
             call s:SwitchToBuffer(bufnr)
-            " Ensure reload
-            execute 'edit'
+            call s:OpenGeneratedFile(filepath)
         endif
 
         " Remember the buffer for future reuse
