@@ -707,6 +707,8 @@ function! ollama#codegen#ShowProjectView()
 
     " Enhanced key mappings
     nnoremap <buffer> <CR> :call ollama#codegen#OpenTrackedFile()<CR>
+    " Open file on double-click (LMB)
+    nnoremap <buffer> <2-LeftMouse> :call ollama#codegen#OpenTrackedFile()<CR>
     nnoremap <buffer> r :call ollama#codegen#RefreshProjectView()<CR>
     nnoremap <buffer> ? :call <SID>ShowProjectViewHelp()<CR>
 endfunction
