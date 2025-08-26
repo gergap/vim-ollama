@@ -676,6 +676,8 @@ function! ollama#codegen#ShowProjectView()
     setlocal nobuflisted
     setlocal filetype=ollama_project
     setlocal modifiable
+    setlocal nonumber
+    setlocal cursorline
 
     " Enhanced syntax highlighting
     syntax match OllamaProjectHeader /^# AI context/
