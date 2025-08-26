@@ -166,7 +166,7 @@ function! s:HandleNDJSONLine(line) abort
     if has_key(l:file, 'path') && has_key(l:file, 'content')
         call s:WriteFile(l:file)
     else
-        call ollama#logger#Error(echom "NDJSON missing keys: " . a:line)
+        call ollama#logger#Error("NDJSON missing keys: " . a:line)
     endif
     return 0
 endfunction
