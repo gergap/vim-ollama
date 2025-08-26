@@ -30,7 +30,7 @@ func! s:BufReallyDelete(buf)
 endfunc
 
 func! ollama#review#BufDelete(buf)
-    call ollama#logger#Debug("BufDelete")
+    call ollama#logger#Debug("BufDelete: " .. a:buf)
     if a:buf == s:buf
         call ollama#logger#Debug("Deleting buffer " .. a:buf)
         " The buffer was closed by :quit or :q!
