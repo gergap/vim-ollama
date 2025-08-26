@@ -13,9 +13,53 @@ let s:ollama_project_files = []
 " Buffer partial lines
 let s:partial_line = ""
 
+" File status tracking for AI-generated files
+let s:file_status = {}
+
+" Define icons for different file states
+let s:file_icons = {
+    \ 'new': '✨',
+    \ 'modified': '📝',
+    \ 'unchanged': '📄',
+    \ 'deleted': '❌'
+    \ }
+
+" Alternative icons (more NERDTree-like)
+" let s:file_icons = {
+"     \ 'new': '+',
+"     \ 'modified': '~',
+"     \ 'unchanged': ' ',
+"     \ 'deleted': '!'
+"     \ }
+
 if !exists('g:ollama_codegen_logfile')
     let g:ollama_codegen_logfile = tempname() .. '-ollama-codegen.log'
 endif
+
+" Set file status (called by WriteFile when AI generates content)
+function! s:SetFileStatus(filepath, status)
+    let s:file_status[a:filepath] = a:status
+endfunction
+
+" Get file status with fallback to 'unchanged'
+function! s:GetFileStatus(filepath)
+    return get(s:file_status, a:filepath, 'unchanged')
+endfunction
+
+" Get the status icon for a file
+function! s:GetFileStatusIcon(filepath)
+    let status = s:GetFileStatus(a:filepath)
+    return get(s:file_icons, status, s:file_icons['unchanged'])
+endfunction
+
+" Reset all tracked files to 'unchanged' status (called when starting AI conversation)
+function! s:ResetAllFileStatus()
+    if exists('s:ollama_project_files')
+        for filepath in s:ollama_project_files
+            let s:file_status[filepath] = 'unchanged'
+        endfor
+    endif
+endfunction
 
 func! ollama#codegen#KillChatBot()
     call ollama#logger#Debug("KillChatBot")
@@ -110,6 +154,9 @@ function! s:WriteFile(file) abort
     if index(s:ollama_project_files, filepath) < 0
         " add to project files
         call add(s:ollama_project_files, filepath)
+        call s:SetFileStatus(filepath, 'new')
+    else
+        call s:SetFileStatus(filepath, 'modified')
     endif
 
     let empty_buf = FindInitialEmptyBuffer()
@@ -172,6 +219,10 @@ function! s:HandleNDJSONLine(line) abort
 endfunction
 
 function! s:StartChat(lines) abort
+    " Reset all file status to 'unchanged' when starting new AI conversation
+    call s:ResetAllFileStatus()
+    call s:RefreshProjectView()
+
     func! GotOutput(channel, msg) abort
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
@@ -616,8 +667,8 @@ function! ollama#codegen#ShowProjectView()
         return
     endif
 
-    " Open a vertical split with fixed width (e.g., 60 columns)
-    execute 'vertical ' . 60 . 'vsplit OllamaProjectView'
+    " Open a vertical split with fixed width
+    execute 'vertical ' . 65 . 'vsplit OllamaProjectView'
     enew
     setlocal buftype=nofile
     setlocal bufhidden=wipe
@@ -625,52 +676,90 @@ function! ollama#codegen#ShowProjectView()
     setlocal nobuflisted
     setlocal filetype=ollama_project
     setlocal modifiable
-    syntax match OllamaProjectHeader /^# AI context/
-    highlight link OllamaProjectHeader String
 
-    let l:header = ['# AI context']  " Use '#' as comment style
-    let l:lines = l:header + s:ollama_project_files
+    " Enhanced syntax highlighting
+    syntax match OllamaProjectHeader /^# AI context/
+    syntax match OllamaProjectNew /✨.*$/
+    syntax match OllamaProjectModified /📝.*$/
+    syntax match OllamaProjectDeleted /❌.*$/
+    syntax match OllamaProjectUnchanged /📄.*$/
+
+    " Color highlighting
+    highlight link OllamaProjectHeader String
+    highlight link OllamaProjectNew DiffAdd
+    highlight link OllamaProjectModified DiffChange
+    highlight link OllamaProjectDeleted DiffDelete
+    highlight link OllamaProjectUnchanged Comment
+
+    let l:header = ['# AI context']
+    let l:lines = l:header[:]
+
+    " Add files with status icons
+    for filepath in s:ollama_project_files
+        let icon = s:GetFileStatusIcon(filepath)
+        call add(l:lines, icon . ' ' . filepath)
+    endfor
+
     call setline(1, l:lines)
     setlocal nomodifiable
 
+    " Enhanced key mappings
     nnoremap <buffer> <CR> :call ollama#codegen#OpenTrackedFile()<CR>
+    nnoremap <buffer> r :call ollama#codegen#RefreshProjectView()<CR>
+    nnoremap <buffer> ? :call <SID>ShowProjectViewHelp()<CR>
 endfunction
 
-" Refresh the project file list after changing it
+" Refresh the project file list with updated icons
 function! s:RefreshProjectView()
     if !exists('s:ollama_project_files') || empty(s:ollama_project_files)
         echo "No files tracked yet."
         return
     endif
 
-    let l:header = ['# AI context']  " Use '#' as comment style
+    let l:header = ['# AI context']
+
     " Find the existing project view buffer
     for buf in range(1, bufnr('$'))
         if bufloaded(buf) && getbufvar(buf, '&filetype') ==# 'ollama_project'
             " Make the buffer modifiable to update content
             call setbufvar(buf, '&modifiable', 1)
 
-            " Replace buffer lines with tracked files
-            let l:lines = l:header + s:ollama_project_files
+            " Build lines with updated status icons
+            let l:lines = l:header[:]
+            for filepath in s:ollama_project_files
+                let icon = s:GetFileStatusIcon(filepath)
+                call add(l:lines, icon . ' ' . filepath)
+            endfor
+
+            " Replace buffer content
             call setbufline(buf, 1, l:lines)
 
-            " Delete any extra lines beyond tracked files
-            let l:num_tracked = len(s:ollama_project_files)
-            let l:num_lines = line('$', buf)
-            if l:num_lines > l:num_tracked
-                call deletebufline(buf, l:num_tracked + 1, l:num_lines)
+            " Delete any extra lines
+            let l:total_lines = len(l:lines)
+            let l:buf_lines = line('$', buf)
+            if l:buf_lines > l:total_lines
+                call deletebufline(buf, l:total_lines + 1, l:buf_lines)
             endif
 
             " Set buffer back to nomodifiable
             call setbufvar(buf, '&modifiable', 0)
-
-            " Optionally, you could redraw or refresh the window here if needed
             return
         endif
     endfor
 
     " If no project view buffer found, open it anew
     call ollama#codegen#ShowProjectView()
+endfunction
+
+" Show help for project view
+function! s:ShowProjectViewHelp()
+    echo "Project View Help:"
+    echo "✨ - New file (generated by AI)"
+    echo "📝 - Modified file (changed by AI)"
+    echo "📄 - Unchanged file"
+    echo "❌ - Deleted file"
+    echo ""
+    echo "Keys: <Enter> - Open file, 'r' - Refresh view, '?' - This help"
 endfunction
 
 function! s:IsWindowUsable(winnr)
@@ -696,6 +785,42 @@ endfunction
 
 " Opens the selected file in project view
 function! ollama#codegen#OpenTrackedFile()
-    let relpath = getline('.')
-    call s:OpenFileSmartly(relpath)
+    let line = getline('.')
+    " Skip header line
+    if line =~# '^# AI context'
+        return
+    endif
+
+    " Extract filename by removing the icon and space
+    let filepath = substitute(line, '^[✨📝📄❌] ', '', '')
+    if !empty(filepath)
+        call s:OpenFileSmartly(filepath)
+    endif
 endfunction
+
+" Function to manually set file status (for future use)
+function! ollama#codegen#SetFileStatus(filepath, status)
+    if index(['new', 'modified', 'unchanged', 'deleted'], a:status) >= 0
+        call s:SetFileStatus(a:filepath, a:status)
+        call s:RefreshProjectView()
+        echom "Set " . a:filepath . " status to: " . a:status
+    else
+        echoerr "Invalid status: " . a:status . ". Use: new, modified, unchanged, deleted"
+    endif
+endfunction
+
+" Function to get current file status (for debugging)
+function! ollama#codegen#GetFileStatus(filepath)
+    return s:GetFileStatus(a:filepath)
+endfunction
+
+" Function to clear all file status (useful for testing)
+function! ollama#codegen#ClearFileStatus()
+    let s:file_status = {}
+    call s:RefreshProjectView()
+    echo "File status cleared and project view refreshed"
+endfunction
+
+" Command to manually set file status
+command! -nargs=1 OllamaSetStatus call ollama#codegen#SetFileStatus(<f-args>)
+command! OllamaRefreshProject call s:RefreshProjectView()
