@@ -5,7 +5,6 @@ let s:chat_buf = -1
 " buffer for displaying new AI generated code, instead of creating new splits
 " all the time, which clutters the IDE
 let s:code_bufnr = -1
-let s:ollama_bufname = 'Ollama Codegen'
 " this variable holds the last response of Ollama
 let s:ollama_response = []
 " list of AI projct files
@@ -13,7 +12,7 @@ let s:ollama_project_files = []
 " Buffer partial lines
 let s:partial_line = ""
 " Experimental tracking changes with Git
-let g:ollama_use_git = 1
+let g:ollama_use_git = 0
 
 " File status tracking for AI-generated files
 let s:file_status = {}
@@ -101,9 +100,12 @@ func! s:CloseChat()
         let ret = s:SwitchToBuffer(s:chat_buf)
         if ret == 0
             close
+        else
+            call ollama#logger#Debug("Could not switch to chat buffer")
         endif
+        let s:chat_buf = -1
     else
-        call ollama#logger#Debug("No chat window to close")
+        call ollama#logger#Debug("No chat buffer to close")
     endif
 endfunc
 
@@ -150,7 +152,7 @@ function! s:WriteFile(file) abort
     " Clean and write content
     let content = CleanEscapes(a:file.content)
     call writefile(split(content, "\n"), filepath)
-    echom "Wrote file: " . filepath
+    echo "Wrote file: " . filepath
     if g:ollama_use_git
         call system('git add ' .. filepath)
     endif
@@ -168,9 +170,7 @@ function! s:WriteFile(file) abort
     " Open or switch buffer smartly
     let bufnr = bufnr(filepath)
     if bufnr == -1
-        echom "buffer does not exist yet"
         if empty_buf != -1 && bufexists(empty_buf)
-"            echom "Use initial empty buffer"
             " Use initial empty buffer if it exists
             call s:SwitchToBuffer(empty_buf)
             call s:OpenGeneratedFile(filepath)
@@ -179,13 +179,11 @@ function! s:WriteFile(file) abort
             call s:SwitchToBuffer(s:code_bufnr)
             call s:OpenGeneratedFile(filepath)
         else
-"            echom "Use split"
             " Open in a new vertical split
             vertical leftabove split
             call s:OpenGeneratedFile(filepath)
         endif
     else
-"        echom "Switch to existing buffer"
         " File is already loaded, switch to it
         call s:SwitchToBuffer(bufnr)
         call s:OpenGeneratedFile(filepath)
@@ -271,12 +269,6 @@ function! s:StartChat(lines) abort
 
         " Debug/View im Chat Buffer
         call appendbufline(s:chat_buf, "$", a:msg)
-        if bufname() == s:ollama_bufname
-            if mode() ==# 'i'
-                call feedkeys("\<Esc>")
-            endif
-            call feedkeys("G")
-        endif
 
         " concatenate string parts
         let s:partial_line .= a:msg
@@ -365,8 +357,7 @@ function! s:StartChat(lines) abort
     let s:partial_line = ""
     " Start a shell in the background.
     let s:job = job_start(l:command, l:job_options)
-    " Create chat buffer
-    let l:bufname = s:ollama_bufname
+    " Create unnamed chat buffer
     if (s:chat_buf != -1)
         " send lines
         if a:lines isnot v:null
@@ -687,7 +678,6 @@ function! ollama#codegen#TrackOpenBuffers()
             " Avoid duplicates
             if index(s:ollama_project_files, filepath) == -1
                 call add(s:ollama_project_files, filepath)
-"                echom "Tracked: " . filepath
             endif
         endif
     endfor
@@ -709,10 +699,7 @@ function! ollama#codegen#TrackCurrentBuf()
 
     if index(s:ollama_project_files, relpath) == -1
         call add(s:ollama_project_files, relpath)
-"        echom "Tracked: " . relpath
         call ollama#codegen#ShowProjectView()
-    else
-        echom "Already tracked: " . relpath
     endif
 endfunction
 
@@ -727,7 +714,6 @@ function! ollama#codegen#UntrackCurrentBuf()
     let relpath = fnamemodify(filepath, ':.')
     if exists('s:ollama_project_files')
         let s:ollama_project_files = filter(s:ollama_project_files, { _, val -> val !=# relpath })
-        echom "Untracked: " . relpath
     else
         echo "No files are currently tracked."
     endif
@@ -880,7 +866,6 @@ function! ollama#codegen#SetFileStatus(filepath, status)
     if index(['new', 'modified', 'unchanged', 'deleted'], a:status) >= 0
         call s:SetFileStatus(a:filepath, a:status)
         call s:RefreshProjectView()
-        echom "Set " . a:filepath . " status to: " . a:status
     else
         echoerr "Invalid status: " . a:status . ". Use: new, modified, unchanged, deleted"
     endif
