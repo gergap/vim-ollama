@@ -12,6 +12,8 @@ let s:ollama_response = []
 let s:ollama_project_files = []
 " Buffer partial lines
 let s:partial_line = ""
+" Experimental tracking changes with Git
+let g:ollama_use_git = 1
 
 " File status tracking for AI-generated files
 let s:file_status = {}
@@ -149,6 +151,9 @@ function! s:WriteFile(file) abort
     let content = CleanEscapes(a:file.content)
     call writefile(split(content, "\n"), filepath)
     echom "Wrote file: " . filepath
+    if g:ollama_use_git
+        call system('git add ' .. filepath)
+    endif
 
     " Avoid duplicate entries in tracked files
     if index(s:ollama_project_files, filepath) < 0
@@ -192,6 +197,26 @@ function! s:WriteFile(file) abort
     call s:RefreshProjectView()
 endfunction
 
+function! s:DeleteFile(filepath) abort
+    " Sanitize path: remove leading /, disallow .. to prevent directory escape
+    let filepath = substitute(a:filepath, '^/*', '', '')
+    if filepath =~# '\.\.'
+        echoerr "Unsafe path: " . filepath
+        return
+    endif
+    " delete file from file system
+    call delete(filepath)
+    call s:SetFileStatus(filepath, 'deleted')
+    if g:ollama_use_git
+        call system('git rm ' .. filepath)
+    endif
+endfunction
+
+function! s:CommitChanges(message) abort
+    " Create a Git commit message
+    call system('git commit -m "' . a:message . '"')
+endfunction
+
 function! s:HandleNDJSONLine(line) abort
     " remove any warapping ```json ... ``` text
     let l:json_match = matchstr(a:line, '{\s*".\{-}"\s*}')
@@ -212,6 +237,24 @@ function! s:HandleNDJSONLine(line) abort
 
     if has_key(l:file, 'path') && has_key(l:file, 'content')
         call s:WriteFile(l:file)
+    elseif has_key(l:file, 'action')
+        let action = l:file['action']
+        if action == 'delete'
+            if has_key(l:file, 'path')
+                call s:DeleteFile(l:file['path'])
+            else
+                call ollama#logger#Error("No path provided for delete action.")
+            endif
+        elseif action == 'commit'
+            if has_key(l:file, 'message')
+                call s:CommitChanges(l:file['message'])
+            else
+                call ollama#logger#Error("No message provided for commit action.")
+            endif
+        else
+            call ollama#logger#Error("Unknown action: " . action)
+        endif
+
     else
         call ollama#logger#Error("NDJSON missing keys: " . a:line)
     endif
@@ -555,8 +598,19 @@ function! s:BuildPromptAndStartChat(prompt)
                 \ "Respond only in the following NDJSON format without array brackets. Do not include any extra explanation:",
                 \ "{\"path\": \"example.txt\", \"content\": \"Example file content here.\"}",
                 \ "{\"path\": \"another.txt\", \"content\": \"Another file content.\"}",
+                \ "",
+                \ ]
+    if g:ollama_use_git
+        let l:prompt_lines += [
+                \ "Create a commit message describing your changes in this format:",
+                \ "{\"message\": \"your description\", \"action\": \"commit\"}",
                 \ "\"\"\""
                 \ ]
+    else
+        let l:prompt_lines += [
+                \ "\"\"\""
+                \ ]
+    endif
     call s:StartChat(l:prompt_lines)
 endfunction
 
@@ -584,10 +638,29 @@ function! ollama#codegen#ModifyCode(prompt)
                 \ "Respond only in the following NDJSON format without array brackets.",
                 \ "{\"path\": \"example.txt\", \"content\": \"new content.\"}",
                 \ "{\"path\": \"another.txt\", \"content\": \"Another file content.\"}",
+                \ "{\"path\": \"another.txt\", \"action\": \"delete\"}",
+                \ "{\"message\": \"AI updated these files\", \"action\": \"commit\"}",
+                \ "",
+                \ ]
+    if g:ollama_use_git
+        let l:prompt_lines += [
+                \ "The following actions are possible an addition to generating code:",
+                \ "* deleting files: action=delete, path=file to delete",
+                \ "* creating a commit for the change: action=commit, message=commit message",
+                \ "",
+                \ "Do NOT output unchanged files.",
+                \ "Create a commit message describing your changes.",
+                \ "\"\"\""
+                \ ]
+    else
+        let l:prompt_lines += [
+                \ "The following actions are possible an addition to generating code:",
+                \ "* deleting files: action=delete, path=file to delete",
                 \ "",
                 \ "Do NOT output unchanged files.",
                 \ "\"\"\""
                 \ ]
+    endif
 
     call s:StartChat(l:prompt_lines)
 endfunction
