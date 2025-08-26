@@ -284,7 +284,7 @@ function! s:StartChat(lines) abort
                 call s:HandleNDJSONLine(l:line)
             endif
             call s:CloseChat()
-            echom "Generatation Complete."
+            call ollama#spinner#SpinnerStop(0)
             return
         endif
 
@@ -317,9 +317,7 @@ function! s:StartChat(lines) abort
     func! JobExit(job, status)
         call ollama#logger#Debug("JobExit: " .. a:status)
         call s:CloseChat()
-        if status != 0
-            echom "Generatation Failed."
-        endif
+        call ollama#spinner#SpinnerStop(a:status)
         return
     endfunc
 
@@ -366,6 +364,7 @@ function! s:StartChat(lines) abort
             call ollama#logger#Debug("Sending prompt '" .. l:prompt .. "'...")
             call ch_sendraw(s:job, l:prompt .. "\n")
         endif
+        call ollama#spinner#SpinnerStart("Generating code...")
         return
     endif
 
@@ -392,7 +391,7 @@ function! s:StartChat(lines) abort
 
     " hide chat window
     hide
-    echo "Sent LLM Request. Waiting for response..."
+    call ollama#spinner#SpinnerStart("Generating code...")
 endfunction
 
 " Quick hack for decoding some escaped characters, because json_decode doesn't
