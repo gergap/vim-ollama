@@ -1,10 +1,10 @@
 " SPDX-License-Identifier: GPL-3.0-or-later
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 let s:job = v:null
-let s:buf = -1
+let s:chat_buf = -1
 " buffer for displaying new AI generated code, instead of creating new splits
 " all the time, which clutters the IDE
-let s:bufnr = -1
+let s:code_bufnr = -1
 let s:ollama_bufname = 'Ollama Codegen'
 " this variable holds the last response of Ollama
 let s:ollama_response = []
@@ -27,7 +27,7 @@ func! ollama#codegen#KillChatBot()
         while job_status(s:job) == 'run'
             sleep 1
         endwhile
-        let s:buf = -1
+        let s:chat_buf = -1
     else
         call ollama#logger#Debug("No job to kill")
     endif
@@ -42,31 +42,22 @@ func! s:CloseWindowByBufNr(bufnr)
     endfor
 endfunc
 
+func! s:CreateScratchBuffer()
+    vsplit
+    enew
+    setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
+    setlocal filetype=markdown
+endfunc
+
 func! s:CloseChat()
-    if s:buf != -1
-        call s:SwitchToBuffer(s:buf)
-        execute "q!"
-    endif
-endfunc
-
-func! s:BufReallyDelete(buf)
-    call ollama#logger#Debug("BufReallyDelete " .. a:buf)
-    execute "bwipeout! " .. a:buf
-endfunc
-
-func! ollama#codegen#BufDelete(buf)
-    call ollama#logger#Debug("BufDelete")
-    if a:buf == s:buf
-        call ollama#logger#Debug("Deleting buffer " .. a:buf)
-        " The buffer was closed by :quit or :q!
-        call ollama#codegen#KillChatBot()
-        " Undo 'buftype=prompt' and make buffer deletable
-        if bufexists(s:buf)
-            setlocal buftype=
-            setlocal modifiable
+    call ollama#logger#Debug("CloseChat")
+    if s:chat_buf != -1
+        let ret = s:SwitchToBuffer(s:chat_buf)
+        if ret == 0
+            close
         endif
-        " We cannot wipe the buffer while being used in autocmd
-        call timer_start(10, {-> s:BufReallyDelete(a:buf)})
+    else
+        call ollama#logger#Debug("No chat window to close")
     endif
 endfunc
 
@@ -86,8 +77,14 @@ function! s:SwitchToBuffer(bufnr)
     if l:win != -1
         execute l:win  ..  'wincmd w'
     else
-        execute 'buffer' a:bufnr
+        try
+            execute 'buffer' a:bufnr
+        catch
+            call ollama#logger#Debug('Buffer does not exist: '.. a:bufnr)
+            return -1
+        endtry
     endif
+    return 0
 endfunction
 
 function! s:WriteFile(file) abort
@@ -121,30 +118,29 @@ function! s:WriteFile(file) abort
     if bufnr == -1
         echom "buffer does not exist yet"
         if empty_buf != -1 && bufexists(empty_buf)
-            echom "Use initial empty buffer"
+"            echom "Use initial empty buffer"
             " Use initial empty buffer if it exists
             call s:SwitchToBuffer(empty_buf)
             call s:OpenGeneratedFile(filepath)
-        elseif bufexists(s:bufnr)
-            echom "Use AI buffer"
-            " Reuse existing AI view buffer window
-            call s:SwitchToBuffer(s:bufnr)
+        elseif s:code_bufnr != -1
+            " Reuse last code buffer, and don't open a new split for each new file
+            call s:SwitchToBuffer(s:code_bufnr)
             call s:OpenGeneratedFile(filepath)
         else
-            echom "Use split"
+"            echom "Use split"
             " Open in a new vertical split
             vertical leftabove split
             call s:OpenGeneratedFile(filepath)
         endif
     else
-        echom "Switch to existing buffer"
+"        echom "Switch to existing buffer"
         " File is already loaded, switch to it
         call s:SwitchToBuffer(bufnr)
         call s:OpenGeneratedFile(filepath)
     endif
 
     " Remember the buffer for future reuse
-    let s:bufnr = bufnr('%')
+    let s:code_bufnr = bufnr('%')
 
     call s:RefreshProjectView()
 endfunction
@@ -163,7 +159,7 @@ function! s:HandleNDJSONLine(line) abort
         let l:file = json_decode(l:json_match)
         call ollama#logger#Debug("JSON parsing succeeded.")
     catch
-        call ollama#logger#Error("Failed to decode JSON: " . a:json_match)
+        call ollama#logger#Error("Failed to decode JSON: " . l:json_match)
         return -1
     endtry
 
@@ -176,25 +172,11 @@ function! s:HandleNDJSONLine(line) abort
 endfunction
 
 function! s:StartChat(lines) abort
-    " Function handling a line of text that has been typed.
-    func! TextEntered(text)
-        call ollama#logger#Debug("TextEntered: " .. a:text)
-        if a:text == ''
-            " don't send empty messages
-            return
-        endif
-        " Reset last response
-        let s:ollama_response = []
-        " Send the text to a shell with Enter appended.
-        call ollama#logger#Debug("ch_sendraw... (TextEntered)")
-        call ch_sendraw(s:job, a:text .. "\n")
-    endfunc
-
     func! GotOutput(channel, msg) abort
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
         " Debug/View im Chat Buffer
-        call appendbufline(s:buf, "$", a:msg)
+        call appendbufline(s:chat_buf, "$", a:msg)
         if bufname() == s:ollama_bufname
             if mode() ==# 'i'
                 call feedkeys("\<Esc>")
@@ -216,6 +198,7 @@ function! s:StartChat(lines) abort
                 call s:HandleNDJSONLine(l:line)
             endif
             call s:CloseChat()
+            echom "Generatation Complete."
             return
         endif
 
@@ -248,20 +231,10 @@ function! s:StartChat(lines) abort
     func! JobExit(job, status)
         call ollama#logger#Debug("JobExit: " .. a:status)
         call s:CloseChat()
+        if status != 0
+            echom "Generatation Failed."
+        endif
         return
-        " Switch to the chat buffer
-        execute 'buffer' s:buf
-        " Turn off prompt functionality and make the buffer modifiable
-        call prompt_setprompt(s:buf, '')
-        setlocal buftype=
-        setlocal modifiable
-        " output info message
-        call append(line("$") - 1, "Chat process terminated with exit code " .. a:status)
-        call append(line("$") - 1, "Use ':q' or ':bd' to delete this buffer and run ':OllamaChat' again to create a new session.")
-        stopinsert
-        let s:buf = -1
-        " avoid saving and make :q just work
-        setlocal nomodified
     endfunc
 
     let l:model_options = json_encode(g:ollama_chat_options)
@@ -300,18 +273,10 @@ function! s:StartChat(lines) abort
     let s:job = job_start(l:command, l:job_options)
     " Create chat buffer
     let l:bufname = s:ollama_bufname
-    if (s:buf != -1)
-        " buffer already exists
-        let l:chat_win = s:FindBufferWindow(s:buf)
-        " switch to existing buffer
-        if l:chat_win != -1
-            execute l:chat_win  ..  'wincmd w'
-        else
-            execute 'buffer' s:buf
-        endif
+    if (s:chat_buf != -1)
         " send lines
         if a:lines isnot v:null
-            call append(line("$") - 1, a:lines)
+            call appendbufline(s:chat_buf, "$", a:lines)
             let l:prompt = join(a:lines, "\n")
             call ollama#logger#Debug("Sending prompt '" .. l:prompt .. "'...")
             call ch_sendraw(s:job, l:prompt .. "\n")
@@ -320,17 +285,9 @@ function! s:StartChat(lines) abort
     endif
 
     " Create new chat buffer
-    execute 'botright new' l:bufname
-    " Set the filetype to ollama-chat
-    setlocal filetype=markdown
-    setlocal buftype=prompt
-    " enable BufDelete event when closing buffer usig :q!
-    setlocal bufhidden=delete
-    setlocal noswapfile
-    setlocal modifiable
-    setlocal wrap
+    call s:CreateScratchBuffer()
     let l:buf = bufnr('')
-    let s:buf = l:buf
+    let s:chat_buf = l:buf
     let b:coc_enabled = 0 " disable CoC in chat buffer
     " Create a channel log so we can see what happens.
     if g:ollama_debug >= 4
@@ -338,24 +295,19 @@ function! s:StartChat(lines) abort
     endif
 
     " Add a title to the chat buffer
-    call append(0, "AI context (type 'quit' to exit, press CTRL-C to interrupt output)")
-    call append(1, "-------------")
     if a:lines isnot v:null
         call append(2, a:lines)
         call ollama#logger#Debug("Sending text... (StartChat)")
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
 
-    " connect buffer with job
-    call prompt_setcallback(buf, function("TextEntered"))
-    eval prompt_setprompt(buf, ">>> ")
-
     " add key mapping for CTRL-C to terminate the chat script
     execute 'nnoremap <buffer> <C-C> :call ollama#codegen#KillChatBot()<CR>'
     execute 'inoremap <buffer> <C-C> <esc>:call ollama#codegen#KillChatBot()<CR>'
 
-    " start accepting shell commands
-    startinsert
+    " hide chat window
+    hide
+    echo "Sent LLM Request. Waiting for response..."
 endfunction
 
 " Quick hack for decoding some escaped characters, because json_decode doesn't
@@ -416,9 +368,53 @@ function! FindInitialEmptyBuffer()
     return -1
 endfunction
 
-function! s:OpenGeneratedFile(filepath)
-    execute 'edit! ' . a:filepath
+" this function trys to open a file in a useable buffer,
+" switches to existing windows or creates a new window if necessary
+" It also set autoread for automatic reload of changes
+function! s:OpenFileSmartly(filename)
+    let abspath = fnamemodify(a:filename, ':p')
+
+    if !filereadable(abspath)
+        echoerr "File does not exist: " . filename
+        return
+    endif
+
+    " Check if buffer is already visible in a window
+    for winnr in range(1, winnr('$'))
+        let bufnr = winbufnr(winnr)
+        if fnamemodify(bufname(bufnr), ':p') ==# abspath
+            execute winnr . 'wincmd w'
+            return
+        endif
+    endfor
+
+    " Try to find a usable window
+    let usable_win = -1
+    for winnr in range(1, winnr('$'))
+        if s:IsWindowUsable(winnr)
+            let usable_win = winnr
+            break
+        endif
+    endfor
+
+    let filepath = fnameescape(abspath)
+
+    if usable_win != -1
+        execute usable_win . 'wincmd w'
+        execute 'edit! ' . filepath
+    else
+        vertical leftabove split
+        execute 'edit! ' . filepath
+    endif
+
     setlocal autoread
+endfunction
+
+" Opens/reloads the given file in the current buffer
+function! s:OpenGeneratedFile(filepath)
+    call s:OpenFileSmartly(a:filepath)
+"    execute 'edit! ' . a:filepath
+"    setlocal autoread
 endfunction
 
 function! s:BuildContextForFiles(files) abort
@@ -459,10 +455,7 @@ function! ollama#codegen#CreateCode(...) range
     " if not prompt was given, open a scratch buffer
     if a:0 == 0 || empty(a:1)
         " open a new vertical window with the scratch buffer
-        vsplit
-        enew
-        setlocal buftype=nofile bufhidden=wipe nobuflisted noswapfile
-        setlocal filetype=markdown
+        call CreateScratchBuffer()
         call setline(1, ['# Enter your instruction prompt below:', ''])
         normal! G
         echo "Write your instruction, then run :call SavePromptAndStartChat()"
@@ -704,40 +697,5 @@ endfunction
 " Opens the selected file in project view
 function! ollama#codegen#OpenTrackedFile()
     let relpath = getline('.')
-    let abspath = fnamemodify(relpath, ':p')
-
-    if !filereadable(abspath)
-        echoerr "File does not exist: " . relpath
-        return
-    endif
-
-    " Check if buffer is already visible in a window
-    for winnr in range(1, winnr('$'))
-        let bufnr = winbufnr(winnr)
-        if fnamemodify(bufname(bufnr), ':p') ==# abspath
-            execute winnr . 'wincmd w'
-            return
-        endif
-    endfor
-
-    " Try to find a usable window
-    let usable_win = -1
-    for winnr in range(1, winnr('$'))
-        if s:IsWindowUsable(winnr)
-            let usable_win = winnr
-            break
-        endif
-    endfor
-
-    let filepath = fnameescape(abspath)
-
-    if usable_win != -1
-        execute usable_win . 'wincmd w'
-        execute 'edit! ' . filepath
-    else
-        vertical leftabove split
-        execute 'edit! ' . filepath
-    endif
-
-    setlocal autoread
+    call s:OpenFileSmartly(relpath)
 endfunction
