@@ -187,9 +187,9 @@ function! s:StartChat(lines) abort
 
     " Create new chat buffer
     if exists('g:ollama_split_vertically') && g:ollama_split_vertically == 1
-        execute 'vnew' l:bufname
+        silent execute 'vnew' l:bufname
     else
-        execute 'new' l:bufname
+        silent execute 'new' l:bufname
     endif
     " Set the filetype to ollama-chat
 "    setlocal filetype=ollama-chat
@@ -223,6 +223,13 @@ function! s:StartChat(lines) abort
     " add key mapping for CTRL-C to terminate the chat script
     execute 'nnoremap <buffer> <C-C> :call ollama#review#KillChatBot()<CR>'
     execute 'inoremap <buffer> <C-C> <esc>:call ollama#review#KillChatBot()<CR>'
+
+    " buftype=prompt change modified. so reset it to easy to :q
+    augroup ollama_chat_fix_modified
+      au!
+      autocmd! TextChanged <buffer> setlocal nomodified
+      autocmd! TextChangedI <buffer> setlocal nomodified
+    augroup END
 
     " start accepting shell commands
     startinsert
