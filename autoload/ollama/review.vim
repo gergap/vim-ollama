@@ -104,13 +104,15 @@ function! s:StartChat(lines) abort
         let l:bufnr = bufnr(l:bufname)
         if (l:bufnr != -1)
             " buffer already exists
-            execute 'buffer' l:bufnr
+            silent execute 'buffer' l:bufnr
         else
             " create new error buffer
-            execute 'new' l:bufname
+            silent execute 'new' l:bufname
         endif
 
-        " Simply append to current buffer
+        setlocal buftype=nofile
+        setlocal bufhidden=delete
+
         call append(line("$"), a:msg)
     endfunc
 
