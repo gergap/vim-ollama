@@ -386,6 +386,9 @@ function! ollama#setup#EnsureVenv() abort
 
     " Change path to python to venv
     let g:ollama_python_interpreter = l:venv_path .. '/bin/python'
+    if has('win32') || has('win64')
+        let g:ollama_python_interpreter = substitute(g:ollama_python_interpreter, '/', '\\', 'g')
+    endif
 endfunction
 
 " Loads the plugin's python modules
@@ -416,14 +419,24 @@ function! s:SetupPyVEnv() abort
     python3 << EOF
 import os
 import sys
+import platform
 import vim
 # Check if venv is enabled
 use_venv = vim.eval('g:ollama_use_venv') or 0
 
 # Should we use a venv?
 if use_venv:
+    if platform.system() == 'Windows':
+        runtime_dir = os.environ['USERPROFILE']
+        if os.path.exists(os.path.join(runtime_dir, 'vimfiles')):
+            runtime_dir = os.path.join(runtime_dir, 'vimfiles')
+        else:
+            runtime_dir = os.path.join(runtime_dir, '.vim')
+    else:
+        runtime_dir = os.path.join(os.environ['HOME'], '.vim')
+
     # Create default venv path
-    venv_path = os.path.join(os.environ['HOME'], '.vim', 'venv', 'ollama')
+    venv_path = os.path.join(runtime_dir, 'venv', 'ollama')
     # Check if the venv path exists
     if os.path.exists(venv_path):
         #print('Found venv:', venv_path)
