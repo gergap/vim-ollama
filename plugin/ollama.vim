@@ -27,6 +27,12 @@ else
     finish
 endif
 
+if has('win32') && $PYTHONUTF8 ==# ''
+    let g:ollama_enabled = 0
+    echom "warning: PYTHONUTF8=1 is required on Windows. Vim-ollama is disabled."
+    finish
+endif
+
 " Default settings
 if !exists('g:ollama_enabled')
     let g:ollama_enabled = 1
