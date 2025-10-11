@@ -471,6 +471,7 @@ function! ollama#setup#Init() abort
         " select Python configuration
         let l:ans = input("Create a Python virtual environment and install all required packages? (Y/n): ")
         if tolower(l:ans) != 'n'
+            redraw
             echon "let g:ollama_use_venv=1\n"
             let g:ollama_use_venv = 1
         endif
