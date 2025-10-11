@@ -285,7 +285,7 @@ endfunction
 " This creates the ollama.vim config file.
 function! s:FinalizeSetupTask()
     " Save the URL to a configuration file
-    let l:config_dir = expand('~/.vim/config')
+    let l:config_dir = expand('$HOME/.vim/config')
     if !isdirectory(l:config_dir)
         call mkdir(l:config_dir, 'p') " Create the directory if it doesn't exist
     endif
