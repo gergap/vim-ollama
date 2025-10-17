@@ -162,6 +162,30 @@ The vim-ollama plugin provides the following commands:
         :OllamaPull qwen2.5-coder:1.5b
 <
 
+:OllamaCreate
+    - Description: Creates new code using an AI prompt. This function can
+    create multiple files at once and directly saves the files in the file
+    system to avoid manual copy/paste. Missing folders are created automatically.
+    All created files are added to the AI context automatically, which can be
+    used in subsequent prompts to modify the files in the context.
+
+:OllamaModify
+    - Description: Modifies files in the AI context. This can be changes of
+    existing files, new files and also removal of files.
+
+:OllamaProjectView:
+    - Description: Opens a project view showing the current AI context.
+
+:OllamaTrackCurrent:
+    - Description: Adds file current file to the AI context.
+
+:OllamaUntrackCurrent:
+    - Description: Removes file current file from the AI context.
+
+:OllamaTrackOpenBuffers:
+   - Description: Adds all open buffers to AI context. This can be useful
+   to edit existing files.
+
 ==============================================================================
 5. Maps                                               *vim-ollama-maps*
 
