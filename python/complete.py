@@ -203,10 +203,22 @@ AFTER:
         max_tokens=max_tokens,
         stop=stops
     )
-    response = response.choices[0].message.content
+    response = response.choices[0].message.content.strip()
     log.debug('response: ' + response)
 
-    return response.strip()
+    # convert response to lines
+    lines = response.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        response = "\n".join(lines)
+
+    return response
 
 
 if __name__ == "__main__":
