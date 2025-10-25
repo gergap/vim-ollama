@@ -209,54 +209,64 @@ AFTER:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
-    parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
-                        help="LLM provider: 'ollama' (default) or 'openai'")
-    parser.add_argument('-m', '--model', type=str, default=None,
-                        help="Model name (Ollama or OpenAI).")
-    parser.add_argument('-u', '--url', type=str, default=None,
-                        help="Base endpoint URL (for Ollama only).")
-    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS,
-                        help="Ollama REST API options (JSON string).")
-    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
-                        help="Specify log level")
-    parser.add_argument('-f', '--log-filename', type=str, default="complete.log",
-                        help="Specify log filename")
-    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
-                        help="Specify log file directory")
-    parser.add_argument('-T', action='store_false', default=True,
-                        help="Use Ollama code generation suffix (experimental)")
-    args = parser.parse_args()
-
-    log = OllamaLogger(args.log_dir, args.log_filename)
-    log.setLevel(args.log_level)
-    USE_CUSTOM_TEMPLATE = args.T
-
-    # parse options JSON string
     try:
-        options = json.loads(args.options)
-    except json.JSONDecodeError:
-        options = json.loads(DEFAULT_OPTIONS)
+        parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
+        parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
+                            help="LLM provider: 'ollama' (default) or 'openai'")
+        parser.add_argument('-m', '--model', type=str, default=None,
+                            help="Model name (Ollama or OpenAI).")
+        parser.add_argument('-u', '--url', type=str, default=None,
+                            help="Base endpoint URL (for Ollama only).")
+        parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS,
+                            help="Ollama REST API options (JSON string).")
+        parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
+                            help="Specify log level")
+        parser.add_argument('-f', '--log-filename', type=str, default="complete.log",
+                            help="Specify log filename")
+        parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
+                            help="Specify log file directory")
+        parser.add_argument('-T', action='store_false', default=True,
+                            help="Use Ollama code generation suffix (experimental)")
+        args = parser.parse_args()
 
-    prompt = sys.stdin.read()
+        log = OllamaLogger(args.log_dir, args.log_filename)
+        log.setLevel(args.log_level)
+        USE_CUSTOM_TEMPLATE = args.T
 
-    if args.provider == "ollama":
-        if args.model:
-            modelname = args.model
+        # parse options JSON string
+        try:
+            options = json.loads(args.options)
+        except json.JSONDecodeError:
+            options = json.loads(DEFAULT_OPTIONS)
+
+        prompt = sys.stdin.read()
+
+        if args.provider == "ollama":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_MODEL
+            baseurl = args.url or DEFAULT_HOST
+            config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
+            response = generate_code_completion(config, prompt, baseurl, modelname, options)
+        elif args.provider == "openai":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_OPENAI_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_openai(prompt, baseurl, modelname, options)
         else:
-            modelname = DEFAULT_MODEL
-        baseurl = args.url or DEFAULT_HOST
-        config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
-        response = generate_code_completion(config, prompt, baseurl, modelname, options)
-    elif args.provider == "openai":
-        if args.model:
-            modelname = args.model
-        else:
-            modelname = DEFAULT_OPENAI_MODEL
-        baseurl = args.url or None
-        response = generate_code_completion_openai(prompt, baseurl, modelname, options)
-    else:
-        log.error(f"Unknown provider: {args.provider}")
+            log.error(f"Unknown provider: {args.provider}")
+            sys.exit(1)
+
+        print(response, end='')
+
+    except KeyboardInterrupt:
+        # Allow Ctrl+C without traceback
+        print("Error: Aborted by user", file=sys.stderr)
         sys.exit(1)
-
-    print(response, end='')
+    except Exception as e:
+        # Print only the root cause message, not the full traceback
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)

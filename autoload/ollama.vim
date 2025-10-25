@@ -89,9 +89,8 @@ endfunction
 function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: " .. a:data)
     if !empty(a:data)
-        echohl ErrorMsg
         echom "Error: " .. a:data
-        echohl None
+        call popup_notification(a:data, #{ pos: "center"})
     endif
 endfunction
 
@@ -102,7 +101,11 @@ function! s:HandleExit(job, exit_code)
         if a:job isnot s:kill_job
             echohl ErrorMsg
             echom "Process exited with code: " .. a:exit_code
-            echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            if g:ollama_model_provider == 'openai'
+                echom "Check if g:ollama_openai_baseurl=" .. g:ollama_openai_baseurl .. " is correct."
+            else
+                echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            endif
             echohl None
         else
             let s:kill_job = v:null
