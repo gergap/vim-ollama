@@ -31,6 +31,8 @@ log = None
 
 
 def load_config(modelname):
+    # strip suffix (e.g ':7b-code') from modelname
+    modelname = modelname.rsplit(':', 1)[0]
     # Get the directory where the Python script resides
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # Construct the full path to the config file relative to the script directory
@@ -240,12 +242,10 @@ if __name__ == "__main__":
 
     if args.provider == "ollama":
         if args.model:
-            # strip suffix (e.g ':7b-code') from modelname
-            modelname = args.model.rsplit(':', 1)[0]
+            modelname = args.model
         else:
             modelname = DEFAULT_MODEL
         baseurl = args.url or DEFAULT_HOST
-        baseurl = baseurl + "/api/chat"
         config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
         response = generate_code_completion(config, prompt, baseurl, modelname, options)
     elif args.provider == "openai":
