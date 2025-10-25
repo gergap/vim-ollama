@@ -111,6 +111,7 @@ log_level = int(vim.eval('l:log_level'))
 # Access global Vim variables
 settings = {
     'url': vim.eval('g:ollama_host'),
+    'provider': vim.eval('g:ollama_edit_provider'),
     'model': vim.eval('g:ollama_edit_model'),
     'options': vim.eval('l:model_options')
 }

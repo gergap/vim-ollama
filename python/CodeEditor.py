@@ -14,9 +14,17 @@ from OllamaLogger import OllamaLogger
 # create logger
 log = None
 
+# Try to import OpenAI SDK
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
+DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = 'qwen2.5-coder:14b'
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 CONTEXT_LINES = 10
 
@@ -314,7 +322,7 @@ f"""```{ft}
 <STOP_EDIT_HERE>
 {postamble}
 ```
-Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified text.
+Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified raw text. Don't surrend it with markdown backticks.
 """}
     ]
 
@@ -376,9 +384,46 @@ def generate_code_completion(prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def generate_code_completion_openai(prompt, model=None, options=None):
+    """
+    Calls OpenAI API with the given prompt.
+    Returns the raw completion text.
+    """
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Install via `pip install openai`.")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+
+    client = OpenAI(api_key=api_key)
+
+    # Extract options
+    temperature = options.get("temperature", 0) if options else 0
+    max_tokens = options.get("max_tokens", 500) if options else 500
+
+    response = client.chat.completions.create(
+        model=model or DEFAULT_OPENAI_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    # OpenAI returns a list of choices
+    completion = response.choices[0].message.content
+
+    # Strip any end markers
+    for end_marker in ["<|endoftext|>", "<STOP_EDIT_HERE>", "<EOT>"]:
+        idx = completion.find(end_marker)
+        if idx != -1:
+            completion = completion[:idx]
+
+    return completion.rstrip()
+
+
 def edit_code(request, preamble, code, postamble, ft, settings):
     """
-    Edit code with Ollama LLM.
+    Edit code with Ollama or OpenAI LLM.
 
     Args:
         request (str): The request to be satisfied by the translation.
@@ -391,6 +436,8 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         Array of lines containing the changed code.
     """
 
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+
     if settings.get('simulate', 0):
         response = settings['response']
     else:
@@ -400,7 +447,10 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         model = settings.get('model', DEFAULT_MODEL)
         options = settings.get('options', DEFAULT_OPTIONS)
         options = json.loads(options)
-        response = generate_code_completion(prompt, url, model, options)
+        if provider == "openai":
+            response = generate_code_completion_openai(prompt, model, options)
+        else:
+            response = generate_code_completion(prompt, url, model, options)
 
     # check if we got a valid response
     if response is None or len(response) == 0:
