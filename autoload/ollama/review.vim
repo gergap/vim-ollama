@@ -143,6 +143,7 @@ function! s:StartChat(lines) abort
     " Create the Python command
     let l:command = [ g:ollama_python_interpreter,
                 \ l:script_path,
+                \ '-p', g:ollama_chat_provider,
                 \ '-m', g:ollama_chat_model,
                 \ '-u', g:ollama_host,
                 \ '-o', l:model_options,

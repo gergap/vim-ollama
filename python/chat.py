@@ -2,59 +2,70 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 #
-# This script uses the chat API endpoint which allows to create conversations
-# and supports sending the history of messages as context.
+# Unified chat client for Ollama and OpenAI APIs.
+# Supports conversation context and multiline input.
+
 import sys
 import argparse
 import httpx
 import json
 import asyncio
+import os
 from OllamaLogger import OllamaLogger
 
+# Try to import OpenAI SDK
+try:
+    from openai import AsyncOpenAI
+except ImportError:
+    AsyncOpenAI = None
+
 # Default values
-DEFAULT_HOST = 'http://localhost:11434'
-DEFAULT_MODEL = 'codellama:code'
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_HOST = "http://localhost:11434"
+DEFAULT_MODEL = "codellama:code"
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_TIMEOUT = 10
 
-# create logger
 log = None
 
-async def stream_chat_message(messages, endpoint, model, options, timeout):
+
+async def stream_chat_message_ollama(messages, endpoint, model, options, timeout):
+    """Stream chat responses from Ollama API."""
     headers = {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Host': endpoint.split('//')[1].split('/')[0]
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Host": endpoint.split("//")[1].split("/")[0],
     }
 
     data = {
-        'model': model,
-        'messages': messages,
+        "model": model,
+        "messages": messages,
         "raw": True,
-        'options': options
+        "options": options,
     }
-    log.debug('request: ' + json.dumps(data, indent=4))
+    log.debug("request: " + json.dumps(data, indent=4))
 
     assistant_message = ""
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream('POST', endpoint, headers=headers, json=data) as response:
+            async with client.stream("POST", endpoint, headers=headers, json=data) as response:
                 if response.status_code == 200:
                     async for line in response.aiter_lines():
                         if line:
                             message = json.loads(line)
-                            if 'message' in message and 'content' in message['message']:
-                                content = message['message']['content']
+                            if "message" in message and "content" in message["message"]:
+                                content = message["message"]["content"]
                                 assistant_message += content
-                                print(content, end='', flush=True)
+                                print(content, end="", flush=True)
 
                                 # If <EOT> is detected, stop processing
-                                if '<EOT>' in content:
+                                if "<EOT>" in content:
                                     break
                             # Stop if response contains an indication of completion
-                            if message.get('done', False):
-                                print('<EOT>', flush=True)
+                            if message.get("done", False):
+                                print("<EOT>", flush=True)
                                 break
                 else:
                     await response.aread()
@@ -73,15 +84,58 @@ async def stream_chat_message(messages, endpoint, model, options, timeout):
     if assistant_message:
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
-async def main(baseurl, model, options, systemprompt, timeout):
+
+async def stream_chat_message_openai(messages, model, options):
+    """Stream chat responses from OpenAI API."""
+    if AsyncOpenAI is None:
+        raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+
+    client = AsyncOpenAI(api_key=api_key)
+    assistant_message = ""
+
+    temperature = options.get('temperature', 0.2)
+    max_tokens = options.get('max_tokens', 500)
+    top_p = options.get('top_p', 1.0)
+
+    try:
+        stream = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            stream=True,
+        )
+
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                token = chunk.choices[0].delta.content
+                assistant_message += token
+                print(token, end="", flush=True)
+
+        print("<EOT>", flush=True)
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(f"Error in OpenAI stream: {str(e)}")
+
+    if assistant_message:
+        messages.append({"role": "assistant", "content": assistant_message.strip()})
+
+
+async def main(provider, baseurl, model, options, systemprompt, timeout):
     conversation_history = []
     endpoint = baseurl + "/api/chat"
-    log.debug('endpoint: ' + endpoint)
+    log.debug("endpoint: " + endpoint)
 
     multiline_input = False
     multiline_message = []
 
-    if systemprompt != '':
+    if systemprompt:
         conversation_history.append({"role": "system", "content": systemprompt})
 
     while True:
@@ -95,7 +149,14 @@ async def main(baseurl, model, options, systemprompt, timeout):
                     conversation_history.append({"role": "user", "content": complete_message})
                     multiline_message = []
 
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, options, timeout))
+                    if provider == "ollama":
+                        task = asyncio.create_task(
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout)
+                        )
+                    else:
+                        task = asyncio.create_task(
+                            stream_chat_message_openai(conversation_history, model, options)
+                        )
                     await task
                 else:
                     multiline_message.append(user_message)
@@ -103,48 +164,66 @@ async def main(baseurl, model, options, systemprompt, timeout):
                 if user_message == '"""':
                     multiline_input = True
                     multiline_message = []
-                elif user_message.lower() in ['exit', 'quit', '/bye']:
+                elif user_message.lower() in ["exit", "quit", "/bye"]:
                     print("Exiting the chat.")
                     exit(0)
                 else:
                     conversation_history.append({"role": "user", "content": user_message})
-                    task = asyncio.create_task(stream_chat_message(conversation_history, endpoint, model, options, timeout))
+                    if provider == "ollama":
+                        task = asyncio.create_task(
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout)
+                        )
+                    else:
+                        task = asyncio.create_task(
+                            stream_chat_message_openai(conversation_history, model, options)
+                        )
                     await task
 
         except KeyboardInterrupt:
             print("\nStreaming interrupted. Showing prompt again...")
-            # Cancel the current task to clean up properly
-            if 'task' in locals():
+            if "task" in locals():
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Chat with an Ollama LLM.")
-    parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
-    parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
-    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
-    parser.add_argument('-s', '--system-prompt', type=str, default='', help="Specify alternative system prompt.")
-    parser.add_argument('-t', '--timeout', type=int, default=DEFAULT_TIMEOUT, help="Specify the timeout")
-    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
-    parser.add_argument('-f', '--log-filename', type=str, default="chat.log", help="Specify log filename")
-    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs", help="Specify log file directory")
+    parser = argparse.ArgumentParser(description="Chat with an Ollama or OpenAI LLM.")
+    parser.add_argument("-p", "--provider", type=str, default=DEFAULT_PROVIDER,
+                        choices=["ollama", "openai"],
+                        help="LLM provider: 'ollama' (default) or 'openai'")
+    parser.add_argument("-m", "--model", type=str, default=None, help="Specify the model name to use.")
+    parser.add_argument("-u", "--url", type=str, default=DEFAULT_HOST,
+                        help="Base endpoint URL (for Ollama only).")
+    parser.add_argument("-o", "--options", type=str, default=DEFAULT_OPTIONS,
+                        help="Ollama REST API options.")
+    parser.add_argument("-s", "--system-prompt", type=str, default="", help="Specify system prompt.")
+    parser.add_argument("-t", "--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout in seconds.")
+    parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
+    parser.add_argument("-f", "--log-filename", type=str, default="chat.log", help="Log filename.")
+    parser.add_argument("-d", "--log-dir", type=str, default="/tmp/logs", help="Log file directory.")
     args = parser.parse_args()
 
     log = OllamaLogger(args.log_dir, args.log_filename)
     log.setLevel(args.log_level)
 
-    # parse options JSON string
+    # Parse options JSON
     try:
         options = json.loads(args.options)
-    except:
-        options = DEFAULT_OPTIONS
+    except json.JSONDecodeError:
+        options = json.loads(DEFAULT_OPTIONS)
+
+    # Choose model defaults
+    if args.provider == "openai":
+        model = args.model or DEFAULT_OPENAI_MODEL
+    else:
+        model = args.model or DEFAULT_MODEL
 
     while True:
         try:
-            asyncio.run(main(args.url, args.model, options, args.system_prompt, args.timeout))
+            asyncio.run(main(args.provider, args.url, model, options, args.system_prompt, args.timeout))
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
