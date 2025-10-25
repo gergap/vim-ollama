@@ -11,6 +11,7 @@ import httpx
 import json
 import asyncio
 import os
+import datetime
 from OllamaLogger import OllamaLogger
 
 # Try to import OpenAI SDK
@@ -136,6 +137,9 @@ async def main(provider, baseurl, model, options, systemprompt, timeout):
     multiline_message = []
 
     if systemprompt:
+        if provider == "ollama":
+            # Let Ollama know the current date
+            systemprompt = f"Today's date is {datetime.date.today().isoformat()}"
         conversation_history.append({"role": "system", "content": systemprompt})
 
     while True:
