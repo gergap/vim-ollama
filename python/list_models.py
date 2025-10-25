@@ -3,50 +3,80 @@
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 import requests
 import argparse
+import os
 import sys
 
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_PROVIDER = "ollama"
+
 def list_ollama_models(base_url):
+    """List models installed in a local Ollama server."""
     url = f"{base_url}/api/tags"
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Failed to retrieve models (status {response.status_code})", file=sys.stderr)
+            sys.exit(1)
+
+        data = response.json()
+        models = data.get("models", [])
+        if not models:
+            print("No models found.", file=sys.stderr)
+            return
+        for model in models:
+            print(model["name"])
+    except requests.exceptions.RequestException as e:
+        print(f"Error contacting Ollama: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def list_openai_models():
+    """List models available to the current OpenAI API key."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        print("Error: OPENAI_API_KEY environment variable not set.", file=sys.stderr)
+        sys.exit(1)
+
+    url = "https://api.openai.com/v1/models"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+    }
 
     try:
-        # Make a GET request to fetch the list of models
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Failed to retrieve OpenAI models (status {response.status_code})", file=sys.stderr)
+            print(response.text, file=sys.stderr)
+            sys.exit(1)
 
-        # Check if the response status code is 200 (OK)
-        if response.status_code == 200:
-            data = response.json()  # Assuming the response is JSON
-
-            # Check if the 'models' key exists in the response
-            if 'models' in data:
-                models = data['models']  # Extract the list of models
-
-                # Print the names of the models
-                if models:
-                    for model in models:
-                        print(model['name'])  # Print the model name
-                else:
-                    print("No models found.", file=sys.stderr)
-            else:
-                print("'models' key not found in the response.", file=sys.stderr)
-                exit(1)
-        else:
-            print(f"Failed to retrieve models. Status code: {response.status_code}", file=sys.stderr)
-            exit(1)
-
+        data = response.json()
+        models = data.get("data", [])
+        if not models:
+            print("No models found.", file=sys.stderr)
+            return
+        for m in models:
+            print(m["id"])
     except requests.exceptions.RequestException as e:
-        print(f"Error occurred while making the request: {e}", file=sys.stderr)
-        exit(1)
+        print(f"Error contacting OpenAI: {e}", file=sys.stderr)
+        sys.exit(1)
 
 def main():
     # Set up argument parsing
-    parser = argparse.ArgumentParser(description="List Ollama models")
-    parser.add_argument('-u', '--url', type=str, default="http://localhost:11434", help="Base URL of the Ollama API")
-
+    parser = argparse.ArgumentParser(description="List models from Ollama or OpenAI")
+    parser.add_argument("-p", "--provider", type=str, default=DEFAULT_PROVIDER,
+                        choices=["ollama", "openai"],
+                        help="Provider to list models from (default: ollama)")
+    parser.add_argument("-u", "--url", type=str, default=DEFAULT_OLLAMA_URL,
+                        help="Base URL for Ollama (ignored for OpenAI)")
     # Parse arguments
     args = parser.parse_args()
 
-    # Call the function with the provided base URL
-    list_ollama_models(args.url)
+    if args.provider == "ollama":
+        list_ollama_models(args.url)
+    elif args.provider == "openai":
+        list_openai_models()
+    else:
+        print(f"Unknown provider: {args.provider}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
