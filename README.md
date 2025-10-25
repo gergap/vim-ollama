@@ -175,6 +175,40 @@ When adding new unsupported code completion models you will see an error like `E
 Simply add this missing file and create a merge request to get it included upstream.
 Consult the model's documentation to find out the correct tokens.
 
+### OpenAI Configuration
+
+**Environment Setup:**
+Ensure that the environment variable `OPENAI_API_KEY` is correctly configured.
+You can do this by setting it in your shell configuration, for example, in `~/.bashrc`
+or by using your OS system settings dialog.
+
+**Configuring Vim-Ollama:**
+1. Open the Vim-Ollama configuration file using the command:
+   ```vim
+   :Ollama config
+   ```
+2. Add the following configuration to switch to the OpenAI backend:
+   ```vim
+   " OpenAI example configuration
+   let g:ollama_model_provider = 'openai'
+   let g:ollama_model = 'gpt-4.1-nano'
+   let g:ollama_chat_provider = 'openai'
+   let g:ollama_chat_model = 'gpt-4.1-mini'
+   let g:ollama_edit_provider = 'openai'
+   let g:ollama_edit_model = 'gpt-4.1-mini'
+   ```
+3. Ensure that the `openai` package is installed in your Python environment.
+   Run the following command to update your Python environment:
+
+   ```vim
+   :Ollama pipinstall
+   ```
+
+> [!TIP]
+> Code completion using the OpenAI REST API introduces a higher latency then running Ollama locally.
+> It makes sense to use Ollama for code completion, and OpenAI only for more complex tasks like
+> code review and code editing tasks.
+
 ## Usage
 
 Simply start coding. The completions will appear as "ghost text" and can be accepted by pressing `<tab>`. To ignore
