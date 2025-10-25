@@ -76,6 +76,10 @@ if !exists('g:ollama_model_options')
                 \ }
 endif
 " Chat specific settings
+if !exists('g:ollama_chat_provider')
+    " Provider for chat models: 'ollama' or 'openai'
+    let g:ollama_chat_provider = 'ollama'
+endif
 if !exists('g:ollama_chat_model')
     " default chat model
     let g:ollama_chat_model = 'llama3'
@@ -96,6 +100,10 @@ if !exists('g:ollama_chat_timeout')
     let g:ollama_chat_timeout = 10
 endif
 " Code edit specific settings
+if !exists('g:ollama_edit_provider')
+    " Provider for edit models: 'ollama' or 'openai'
+    let g:ollama_edit_provider = 'ollama'
+endif
 if !exists('g:ollama_edit_model')
     " default edit model
     let g:ollama_edit_model = 'qwen2.5-coder:7b'
