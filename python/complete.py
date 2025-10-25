@@ -134,6 +134,14 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def extract_stop_marker(after: str) -> str | None:
+    """Return the first meaningful line of `after` to use as a stop marker."""
+    for line in after.splitlines():
+        s = line.strip()
+        if s:  # skip empty lines
+            return line.rstrip()  # preserve indentation
+    return None
+
 def generate_code_completion_openai(prompt, model, options):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
@@ -153,26 +161,34 @@ def generate_code_completion_openai(prompt, model, options):
     after = parts[1]
 
     # OpenAI does not support Fill-in-the-middle, so we need to use prompt engineering.
-    full_prompt = f"""You are a code completion engine.
+    full_prompt = f"""You are a professional code completion engine.
+Fill in the missing code between the markers below.
 
-Your task:
-- Fill in the missing code marked with '<FILL_IN_HERE>'
-- Do NOT repeat any surrounding code.
-- Respond with code only (no explanations).
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
 
-Context:
 Language: C
 
-Code:
-{before}<FILL_IN_HERE>{after}
+BEFORE:
+{before}
+
+AFTER:
+{after}
 """
     log.debug('full_prompt: ' + full_prompt)
+
+    stop_marker = extract_stop_marker(after)
+    stops = [stop_marker] if stop_marker else None
 
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": full_prompt}],
         temperature=0.2,
-        max_tokens=300
+        max_tokens=300,
+        stop=stops
     )
     response = response.choices[0].message.content
     log.debug('response: ' + response)
