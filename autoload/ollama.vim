@@ -153,8 +153,12 @@ function! ollama#GetSuggestion(timer)
 
     let l:prompt = s:ConstructPrompt()
 
+    " Clone global model options and add the current filetype
+    let l:model_options_dict = copy(g:ollama_model_options)
+    let l:model_options_dict['lang'] = &filetype
+
     let l:model_options =
-          \ substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
+          \ substitute(json_encode(l:model_options_dict), "\"", "\\\"", "g")
     call ollama#logger#Debug(
           \ "Connecting to Ollama on " .. g:ollama_host
           \ .. " using model " .. g:ollama_model)

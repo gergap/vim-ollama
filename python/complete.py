@@ -165,6 +165,7 @@ def generate_code_completion_openai(prompt, baseurl, model, options):
     before = parts[0]
     after = parts[1]
 
+    lang = options.get('lang', 'C')
     # OpenAI does not support Fill-in-the-middle, so we need to use prompt engineering.
     full_prompt = f"""You are a professional code completion engine.
 Fill in the missing code between the markers below.
@@ -175,7 +176,7 @@ Rules:
 - Do NOT add explanations or comments.
 - Output the missing code only.
 
-Language: C
+Language: {lang}
 
 BEFORE:
 {before}
