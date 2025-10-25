@@ -53,6 +53,12 @@ The plugin uses Python scripts, e.g. `complete.py` and `chat.py`, to communicate
 script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim plugin
 uses these scripts via I/O redirection to integrate AI results into Vim.
 
+Optionally, it supports also to use OpenAI REST API for code completion, chat
+conversations and code edit tasks. Therefore, you need to create an OpenAI
+account and create an OpenAI API key on https://platform.openai.com/api-keys to
+be able to access the REST API. Export the environment variable
+`OPENAI_API_KEY` with your key to make the Python library `openai` work.
+
 > [!NOTE]
 > This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
 > [LLM](https://github.com/huggingface/llm.nvim).
@@ -68,7 +74,7 @@ uses these scripts via I/O redirection to integrate AI results into Vim.
 > venv support has proven to work well.
 
 - Python 3.x
-- Python package: `httpx>=0.23.3`, `requests`, `jinja2`
+- Python package: `httpx>=0.23.3`, `requests`, `jinja2`, `openai` (optional)
 
 ### Debian-based Systems
 

@@ -251,6 +251,15 @@ g:ollama_host
 >
         let g:ollama_host = 'http://your-server:port'
 <
+                                                      *g:ollama_model_provider*
+g:ollama_model_provider
+    - Description: Configures the REST API backend for code completion.
+      Currently, 'ollama' and 'openai' are supported.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_model_provider = 'openai'
+<
                                                       *g:ollama_model*
 g:ollama_model
     - Description: Sets the default Ollama model for code completions.
@@ -335,6 +344,15 @@ g:ollama_completion_denylist_filetype
 >
         let g:ollama_completion_denylist_filetype = ['fuf']
 <
+                                                      *g:ollama_chat_provider*
+g:ollama_chat_provider
+    - Description: Configures the REST API backend for chat conversations.
+      Currently, 'ollama' and 'openai' are supported.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_chat_provider = 'openai'
+<
                                                       *g:ollama_chat_model*
 g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
@@ -371,6 +389,15 @@ g:ollama_chat_timeout
     - Example:
 >
         let g:ollama_chat_timeout = 10
+<
+                                                      *g:ollama_edit_provider*
+g:ollama_edit_provider
+    - Description: Configures the REST API backend for edit tasks.
+      Currently, 'ollama' and 'openai' are supported.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_edit_provider = 'openai'
 <
                                                       *g:ollama_edit_model*
 g:ollama_edit_model
