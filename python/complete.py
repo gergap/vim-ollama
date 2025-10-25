@@ -183,11 +183,14 @@ AFTER:
     stop_marker = extract_stop_marker(after)
     stops = [stop_marker] if stop_marker else None
 
+    temperature = options.get('temperature', 0)
+    max_tokens = options.get('max_tokens', 300)
+
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": full_prompt}],
-        temperature=0.2,
-        max_tokens=300,
+        temperature=temperature,
+        max_tokens=max_tokens,
         stop=stops
     )
     response = response.choices[0].message.content
