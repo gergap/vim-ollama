@@ -11,6 +11,7 @@ let s:fetched = 0
 let s:help_text = {
 \ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
+\ 'ollama_model_provider': 'Provider for code completions: "ollama" or "openai".',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',
 \ 'ollama_context_lines': 'Number of context lines to consider (default=10).',
@@ -19,10 +20,12 @@ let s:help_text = {
 \     'Only run compltion for these filetypes (default=[]).',
 \ 'ollama_completion_denylist_filetype':
 \     'Do not run compltion for these filetypes (default=[]).',
+\ 'ollama_chat_provider': 'Provider for code conversations: "ollama" or "openai".',
 \ 'ollama_chat_model': 'Model used for chat interactions.',
 \ 'ollama_chat_systemprompt': 'System prompt for chat context.',
 \ 'ollama_chat_options': 'Chat model customization options.',
 \ 'ollama_chat_timeout': 'Timeout for chat responses in seconds (default=10).',
+\ 'ollama_edit_provider': 'Provider for edit tasks: "ollama" or "openai".',
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
 \ 'ollama_use_inline_diff': 'Use inline diff for edits (default=1).',
@@ -42,7 +45,7 @@ function! ollama#config#FetchModels() abort
 
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
-    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', g:ollama_host]
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', g:ollama_host, '-p', g:ollama_model_provider]
 
     " Define the callback for when the job finishes
     let l:job_options = {
