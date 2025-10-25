@@ -6,6 +6,7 @@
 " because of the different concept of talking with Ollama instead of MS
 " copilot. Still it can contain tiny fragments of the original code.
 scriptencoding utf-8
+let g:ollama_install_openai=0
 
 " Retrives the list of installed Ollama models
 function! ollama#setup#GetModels(url)
@@ -360,13 +361,18 @@ function! ollama#setup#PipInstall() abort
         return
     endif
 
+    if !g:ollama_install_openai
+        " append openai package to list
+        let l:reqs += ['openai']
+    endif
+
     " Check if pip exists in venv
     if !filereadable(l:pip_path)
         echon "Error: Failed to create virtual environment.\n"
         return
     endif
 
-    echon "Installing dependencies...\n"
+    echon "Installing dependencies...(".join(l:reqs, ', ').")\n"
     call system(l:pip_path .. ' install ' .. join(l:reqs, ' '))
     echon "Dependencies installed successfully.\n"
 endfunction
@@ -460,6 +466,13 @@ function! ollama#setup#Init() abort
         if tolower(l:ans) != 'n'
             echon "let g:ollama_use_venv=1\n"
             let g:ollama_use_venv = 1
+        endif
+        echon "\n"
+
+        " add optional OpenAI package
+        let l:ans = input("Add optional OpenAI support? (Y/n): ")
+        if tolower(l:ans) != 'n'
+            let g:ollama_install_openai = 1
         endif
         echon "\n"
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
-# This script uses the generate API endpoint for oneshot code completion.
+# This script uses either Ollama or OpenAI API for oneshot code completion.
+
 import requests
 import sys
 import argparse
@@ -9,17 +10,25 @@ import json
 import os
 from OllamaLogger import OllamaLogger
 
+# try to load OpenAI package if it exists
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
+DEFAULT_PROVIDER = 'ollama'
 DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
 # REST API reliable we can get rid of our own templates.
 USE_CUSTOM_TEMPLATE = True
-
-# create logger
 log = None
+
 
 def load_config(modelname):
     # Get the directory where the Python script resides
@@ -125,15 +134,70 @@ def generate_code_completion(config, prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
+def generate_code_completion_openai(prompt, model, options):
+    """Generate code completion using OpenAI's official Python SDK"""
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+
+    client = OpenAI(api_key=api_key)
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker for OpenAI mode.")
+        sys.exit(1)
+    before = parts[0]
+    after = parts[1]
+
+    # OpenAI does not support Fill-in-the-middle, so we need to use prompt engineering.
+    full_prompt = f"""You are a code completion engine.
+
+Your task:
+- Fill in the missing code marked with '<FILL_IN_HERE>'
+- Do NOT repeat any surrounding code.
+- Respond with code only (no explanations).
+
+Context:
+Language: C
+
+Code:
+{before}<FILL_IN_HERE>{after}
+"""
+    log.debug('full_prompt: ' + full_prompt)
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": full_prompt}],
+        temperature=0.2,
+        max_tokens=300
+    )
+    response = response.choices[0].message.content
+    log.debug('response: ' + response)
+
+    return response.strip()
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Complete code with Ollama LLM.")
-    parser.add_argument('-m', '--model', type=str, default=DEFAULT_MODEL, help="Specify the model name to use.")
-    parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST, help="Specify the base endpoint URL to use (default="+DEFAULT_HOST+")")
-    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS, help="Specify the Ollama REST API options.")
-    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR, help="Specify log level")
-    parser.add_argument('-f', '--log-filename', type=str, default="complete.log", help="Specify log filename")
-    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs", help="Specify log file directory")
-    parser.add_argument('-T', action='store_false', default=True, help="Use Ollama code generation suffix (experimental)")
+    parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
+    parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
+                        help="LLM provider: 'ollama' (default) or 'openai'")
+    parser.add_argument('-m', '--model', type=str, default=None,
+                        help="Model name (Ollama or OpenAI).")
+    parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST,
+                        help="Base endpoint URL (for Ollama only).")
+    parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS,
+                        help="Ollama REST API options (JSON string).")
+    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
+                        help="Specify log level")
+    parser.add_argument('-f', '--log-filename', type=str, default="complete.log",
+                        help="Specify log filename")
+    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
+                        help="Specify log file directory")
+    parser.add_argument('-T', action='store_false', default=True,
+                        help="Use Ollama code generation suffix (experimental)")
     args = parser.parse_args()
 
     log = OllamaLogger(args.log_dir, args.log_filename)
@@ -143,17 +207,27 @@ if __name__ == "__main__":
     # parse options JSON string
     try:
         options = json.loads(args.options)
-    except:
-        options = DEFAULT_OPTIONS
-
-    # strip suffix (e.g ':7b-code') from modelname
-    modelname = args.model
-    modelname = modelname.rsplit(':', 1)[0]
-    if USE_CUSTOM_TEMPLATE:
-        config = load_config(modelname)
-    else:
-        config = None
+    except json.JSONDecodeError:
+        options = json.loads(DEFAULT_OPTIONS)
 
     prompt = sys.stdin.read()
-    response = generate_code_completion(config, prompt, args.url, args.model, options)
+
+    if args.provider == "ollama":
+        if args.model:
+            # strip suffix (e.g ':7b-code') from modelname
+            modelname = args.model.rsplit(':', 1)[0]
+        else:
+            modelname = DEFAULT_MODEL
+        config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
+        response = generate_code_completion(config, prompt, args.url, modelname, options)
+    elif args.provider == "openai":
+        if args.model:
+            modelname = args.model
+        else:
+            modelname = DEFAULT_OPENAI_MODEL
+        response = generate_code_completion_openai(prompt, modelname, options)
+    else:
+        log.error(f"Unknown provider: {args.provider}")
+        sys.exit(1)
+
     print(response, end='')

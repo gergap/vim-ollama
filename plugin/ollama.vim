@@ -58,6 +58,10 @@ endif
 if !exists('g:ollama_context_lines')
     let g:ollama_context_lines = 30
 endif
+if !exists('g:ollama_model_provider')
+    " Provider for code completions: 'ollama' or 'openai'
+    let g:ollama_model_provider = 'ollama'
+endif
 if !exists('g:ollama_model')
     " default code completion model
     let g:ollama_model = 'codellama:code'
