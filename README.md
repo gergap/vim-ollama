@@ -209,6 +209,23 @@ or by using your OS system settings dialog.
 > It makes sense to use Ollama for code completion, and OpenAI only for more complex tasks like
 > code review and code editing tasks.
 
+### OpenAI/LMStudio Configuration
+
+Configuring an own OpenAI compatible endpoint like LMStudio works similar to official OpenAI
+endpoint but without an API key. The `g:ollama_openai_baseurl` variable is used to configure a
+different base URL, which is `http://<hostname>:<port>/v1` for LMStudio.
+
+   ```vim
+    " LMStudio example configuration
+    let g:ollama_openai_baseurl = 'http://localhost:1234/v1' " Use local OpenAI endpoint
+    let g:ollama_model_provider = 'openai'
+    let g:ollama_model = 'codegemma-2b'
+    let g:ollama_chat_provider = 'openai'
+    let g:ollama_chat_model = 'gpt-oss'
+    let g:ollama_edit_provider = 'openai'
+    let g:ollama_edit_model = 'gpt-oss'
+   ```
+
 ## Usage
 
 Simply start coding. The completions will appear as "ghost text" and can be accepted by pressing `<tab>`. To ignore

@@ -60,19 +60,23 @@ import json
 import vim
 try:
     buf = vim.current.buffer
-    result, groups = CodeEditor.get_job_status()
+    result, groups, errormsg = CodeEditor.get_job_status()
     if result != 'InProgress':
         # Report changes in code done to user interface
         vim.command('call ollama#edit#EditCodeDone("' + str(result) + '")')
         use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
 
-        if groups:
-            if use_inline_diff:
-                CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
-            else:
-                vim.command("echo 'Applied changes.'")
+        if result == 'Error':
+            vim.command(f'echom "Error updating progress: {errormsg}"')
+            vim.command('call popup_notification("'+errormsg+'", #{ pos: "center"})')
         else:
-            vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
+            if groups:
+                if use_inline_diff:
+                    CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+                else:
+                    vim.command("echo 'Applied changes.'")
+            else:
+                vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
 
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
@@ -108,10 +112,14 @@ request = vim.eval('a:request')
 firstline = vim.eval('a:first_line')
 lastline = vim.eval('a:last_line')
 log_level = int(vim.eval('l:log_level'))
+baseurl = vim.eval('g:ollama_host')
+provider = vim.eval('g:ollama_edit_provider')
+if provider == 'openai':
+    baseurl = vim.eval('g:ollama_openai_baseurl')
 # Access global Vim variables
 settings = {
-    'url': vim.eval('g:ollama_host'),
-    'provider': vim.eval('g:ollama_edit_provider'),
+    'url': baseurl,
+    'provider': provider,
     'model': vim.eval('g:ollama_edit_model'),
     'options': vim.eval('l:model_options')
 }

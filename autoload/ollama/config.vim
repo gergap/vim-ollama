@@ -11,6 +11,7 @@ let s:fetched = 0
 let s:help_text = {
 \ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
+\ 'ollama_openai_baseurl': 'OpenAI base URL (default='', which uses the official OpenAI API).',
 \ 'ollama_model_provider': 'Provider for code completions: "ollama" or "openai".',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',
@@ -37,15 +38,37 @@ let s:help_text = {
 \ }
 
 " Retrieves the list of installed Ollama models asynchronously
-function! ollama#config#FetchModels() abort
+function! ollama#config#FetchModels(type) abort
     if (s:fetched)
         return
     endif
-    let s:fetched = 1
+    "let s:fetched = 1
 
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
-    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', g:ollama_host, '-p', g:ollama_model_provider]
+    let l:baseurl = g:ollama_host
+    if a:type == 'model'
+        let l:provider = g:ollama_model_provider
+        if g:ollama_model_provider =='openai'
+            let l:baseurl = g:ollama_openai_baseurl
+        endif
+    elseif a:type =='chat_model'
+        let l:provider = g:ollama_chat_provider
+        if g:ollama_chat_provider =='openai'
+            let l:baseurl = g:ollama_openai_baseurl
+        endif
+    elseif a:type =='edit_model'
+        let l:provider = g:ollama_edit_provider
+        if g:ollama_edit_provider =='openai'
+            let l:baseurl = g:ollama_openai_baseurl
+        endif
+    else
+        echomsg 'Error fetching models: unknown type='..a:type
+        return
+    endif
+
+    echo "baseurl="..l:baseurl
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', l:baseurl, '-p', l:provider]
 
     " Define the callback for when the job finishes
     let l:job_options = {
@@ -133,8 +156,12 @@ endfunction
 
 function ollama#config#TriggerModelCompletion()
     let line = getline('.')
-    if line =~# '\v(ollama_model|ollama_chat_model|ollama_edit_model)\s*\=\s*$'
-        call ollama#config#FetchModels()
+    if line =~# '\v(ollama_(model|chat_model|edit_model))\s*\=\s*$'
+        " Capture the type (model/chat_model/edit_model)
+        let l:type = matchlist(line, '\vollama_(model|chat_model|edit_model)')[1]
+        echo 'type='..l:type
+        " Pass it to FetchModels
+        call ollama#config#FetchModels(l:type)
         return "'\<C-X>\<C-O>"
     else
         return "'"

@@ -158,12 +158,16 @@ function! ollama#GetSuggestion(timer)
     call ollama#logger#Debug("model_options=" .. l:model_options)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+    let l:base_url = g:ollama_host
+    if g:ollama_model_provider == 'openai'
+        let l:base_url = g:ollama_openai_baseurl
+    endif
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
         \ g:ollama_plugin_dir .. "/python/complete.py",
         \ "-p", g:ollama_model_provider,
         \ "-m", g:ollama_model,
-        \ "-u", g:ollama_host,
+        \ "-u", l:base_url,
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]

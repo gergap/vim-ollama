@@ -251,6 +251,14 @@ g:ollama_host
 >
         let g:ollama_host = 'http://your-server:port'
 <
+                                                      *g:ollama_openai_baseurl*
+g:ollama_openai_baseurl
+    - Description: Sets the OpenAI base URL used for OpenAI backend.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_openai_baseurl = 'http://localhost:1234'
+<
                                                       *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.

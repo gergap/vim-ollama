@@ -142,7 +142,7 @@ def extract_stop_marker(after: str) -> str | None:
             return line.rstrip()  # preserve indentation
     return None
 
-def generate_code_completion_openai(prompt, model, options):
+def generate_code_completion_openai(prompt, baseurl, model, options):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
@@ -151,7 +151,10 @@ def generate_code_completion_openai(prompt, model, options):
     if not api_key:
         raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
 
-    client = OpenAI(api_key=api_key)
+    if baseurl:
+        client = OpenAI(base_url=baseurl, api_key=api_key)
+    else:
+        client = OpenAI(api_key=api_key)
 
     parts = prompt.split('<FILL_IN_HERE>')
     if len(parts) != 2:
@@ -186,6 +189,10 @@ AFTER:
     temperature = options.get('temperature', 0)
     max_tokens = options.get('max_tokens', 300)
 
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('stops: ' + str(stops))
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": full_prompt}],
@@ -205,7 +212,7 @@ if __name__ == "__main__":
                         help="LLM provider: 'ollama' (default) or 'openai'")
     parser.add_argument('-m', '--model', type=str, default=None,
                         help="Model name (Ollama or OpenAI).")
-    parser.add_argument('-u', '--url', type=str, default=DEFAULT_HOST,
+    parser.add_argument('-u', '--url', type=str, default=None,
                         help="Base endpoint URL (for Ollama only).")
     parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS,
                         help="Ollama REST API options (JSON string).")
@@ -237,14 +244,17 @@ if __name__ == "__main__":
             modelname = args.model.rsplit(':', 1)[0]
         else:
             modelname = DEFAULT_MODEL
+        baseurl = args.url or DEFAULT_HOST
+        baseurl = baseurl + "/api/chat"
         config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
-        response = generate_code_completion(config, prompt, args.url, modelname, options)
+        response = generate_code_completion(config, prompt, baseurl, modelname, options)
     elif args.provider == "openai":
         if args.model:
             modelname = args.model
         else:
             modelname = DEFAULT_OPENAI_MODEL
-        response = generate_code_completion_openai(prompt, modelname, options)
+        baseurl = args.url or None
+        response = generate_code_completion_openai(prompt, baseurl, modelname, options)
     else:
         log.error(f"Unknown provider: {args.provider}")
         sys.exit(1)

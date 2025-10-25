@@ -45,6 +45,10 @@ else
     " strip any trailing slash from the URL
     let g:ollama_host = substitute(g:ollama_host, '/$', '', '')
 endif
+if !exists('g:ollama_openai_baseurl')
+    " Use official OpenAI endpoint by default
+    let g:ollama_openai_baseurl = ''
+endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500

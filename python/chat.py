@@ -86,7 +86,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def stream_chat_message_openai(messages, model, options):
+async def stream_chat_message_openai(messages, endpoint, model, options):
     """Stream chat responses from OpenAI API."""
     if AsyncOpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
@@ -95,7 +95,12 @@ async def stream_chat_message_openai(messages, model, options):
     if not api_key:
         raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
 
-    client = AsyncOpenAI(api_key=api_key)
+    if endpoint:
+        log.info('Using OpenAI endpoint '+endpoint)
+        client = AsyncOpenAI(base_url=endpoint, api_key=api_key)
+    else:
+        log.info('Using official OpenAI endpoint')
+        client = AsyncOpenAI(api_key=api_key)
     assistant_message = ""
 
     temperature = options.get('temperature', 0.2)
@@ -128,10 +133,9 @@ async def stream_chat_message_openai(messages, model, options):
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def main(provider, baseurl, model, options, systemprompt, timeout):
+async def main(provider, endpoint, model, options, systemprompt, timeout):
     conversation_history = []
-    endpoint = baseurl + "/api/chat"
-    log.debug("endpoint: " + endpoint)
+    log.debug("endpoint: " + str(endpoint))
 
     multiline_input = False
     multiline_message = []
@@ -159,7 +163,7 @@ async def main(provider, baseurl, model, options, systemprompt, timeout):
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, model, options)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options)
                         )
                     await task
                 else:
@@ -179,7 +183,7 @@ async def main(provider, baseurl, model, options, systemprompt, timeout):
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, model, options)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options)
                         )
                     await task
 
@@ -199,8 +203,8 @@ if __name__ == "__main__":
                         choices=["ollama", "openai"],
                         help="LLM provider: 'ollama' (default) or 'openai'")
     parser.add_argument("-m", "--model", type=str, default=None, help="Specify the model name to use.")
-    parser.add_argument("-u", "--url", type=str, default=DEFAULT_HOST,
-                        help="Base endpoint URL (for Ollama only).")
+    parser.add_argument("-u", "--url", type=str, default=None,
+                        help="Base endpoint URL.")
     parser.add_argument("-o", "--options", type=str, default=DEFAULT_OPTIONS,
                         help="Ollama REST API options.")
     parser.add_argument("-s", "--system-prompt", type=str, default="", help="Specify system prompt.")
@@ -222,12 +226,15 @@ if __name__ == "__main__":
     # Choose model defaults
     if args.provider == "openai":
         model = args.model or DEFAULT_OPENAI_MODEL
+        endpoint = args.url or None
     else:
         model = args.model or DEFAULT_MODEL
+        endpoint = args.url or DEFAULT_HOST
+        endpoint = endpoint + "/api/chat"
 
     while True:
         try:
-            asyncio.run(main(args.provider, args.url, model, options, args.system_prompt, args.timeout))
+            asyncio.run(main(args.provider, endpoint, model, options, args.system_prompt, args.timeout))
         except KeyboardInterrupt:
             print("Canceled.")
     print("\nExiting the chat. (outer)")
