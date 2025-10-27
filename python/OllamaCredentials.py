@@ -15,7 +15,8 @@ class OllamaCredentials:
         if credentialname and os.path.isfile('/usr/bin/pass') and os.access('/usr/bin/pass', os.X_OK):
             # Retrieve API key from pass store
             try:
-                pass_process = subprocess.Popen(['pass', 'show', credentialname], stdout=subprocess.PIPE)
+                # redirect stdout, ignore stderr
+                pass_process = subprocess.Popen(['pass', 'show', credentialname], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 password_bytes, _ = pass_process.communicate()
                 password = password_bytes.decode('utf-8')  # Decode bytes to string using utf-8 encoding
                 return password.strip()  # Remove any leading/trailing whitespace
