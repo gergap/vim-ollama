@@ -90,7 +90,7 @@ function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: " .. a:data)
     if !empty(a:data)
         echom "Error: " .. a:data
-        call popup_notification(a:data, #{ pos: "center"})
+        call popup_notification(a:data, #{ pos: "center", time: 3000 })
     endif
 endfunction
 

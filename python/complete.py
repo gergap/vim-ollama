@@ -188,7 +188,7 @@ AFTER:
     log.debug('full_prompt: ' + full_prompt)
 
     stop_marker = extract_stop_marker(after)
-    stops = [stop_marker] if stop_marker else None
+    stops = [stop_marker] if stop_marker else []
 
     temperature = options.get('temperature', 0)
     max_tokens = options.get('max_tokens', 300)
@@ -197,15 +197,21 @@ AFTER:
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
     log.debug('stops: ' + str(stops))
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": full_prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stop=stops
-    )
-    response = response.choices[0].message.content.strip()
-    log.debug('response: ' + response)
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stop=stops
+        )
+        response = response.choices[0].message.content.strip()
+        log.debug('response: ' + response)
+    except Exception as e:
+        # Print only the root cause message, not the full traceback
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
 
     # convert response to lines
     lines = response.splitlines()
@@ -331,4 +337,5 @@ if __name__ == "__main__":
     except Exception as e:
         # Print only the root cause message, not the full traceback
         print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
         sys.exit(1)
