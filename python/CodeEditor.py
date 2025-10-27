@@ -10,6 +10,7 @@ import threading
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 # create logger
 log = None
@@ -394,7 +395,7 @@ def generate_code_completion(prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
-def generate_code_completion_openai(prompt, baseurl=None, model=None, options=None):
+def generate_code_completion_openai(prompt, baseurl='', model='', options=None, credentialname=None):
     """
     Calls OpenAI API with the given prompt.
     Returns the raw completion text.
@@ -406,19 +407,8 @@ def generate_code_completion_openai(prompt, baseurl=None, model=None, options=No
         model = DEFAULT_OPENAI_MODEL
 
     log.debug('Using OpenAI completion endpoint')
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        api_key = os.getenv("MISTRAL_API_KEY")
-
-    if not api_key:
-        if baseurl is None or baseurl == '':
-            # OpenAI
-            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
-        if baseurl.startswith('https://api.mistral.ai/'):
-            # Mistral
-            raise EnvironmentError("Missing MISTRAL_API_KEY environment variable.")
-        # Local AIs like LMStudio don't need an API key
-        api_key = 'not_needed'
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(baseurl, credentialname)
 
     if baseurl:
         log.info('Using OpenAI endpoint '+baseurl)
@@ -453,7 +443,7 @@ def generate_code_completion_openai(prompt, baseurl=None, model=None, options=No
     return completion.rstrip()
 
 
-def edit_code(request, preamble, code, postamble, ft, settings):
+def edit_code(request, preamble, code, postamble, ft, settings, credentialname):
     """
     Edit code with Ollama or OpenAI LLM.
 
@@ -480,7 +470,7 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         options = settings.get('options', None)
         options = json.loads(options)
         if provider == "openai":
-            response = generate_code_completion_openai(prompt, url, model, options)
+            response = generate_code_completion_openai(prompt, url, model, options, credentialname)
         else:
             response = generate_code_completion(prompt, url, model, options)
 
@@ -508,7 +498,7 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         lines.append(last_line)
     return lines
 
-def vim_edit_code(request, firstline, lastline, settings):
+def vim_edit_code(request, firstline, lastline, settings, credentialname):
     """
     Vim function to edit a selected range of code.
 
@@ -553,7 +543,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         log.debug('postamble: ' + postamble)
 
         # Edit the code
-        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
+        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings, credentialname)
 
         # Produce diff
         diff = compute_diff(code_lines, new_code_lines)
@@ -577,7 +567,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         g_result = result
         g_errormsg = errormsg
 
-def start_vim_edit_code(request, firstline, lastline, settings):
+def start_vim_edit_code(request, firstline, lastline, settings, credentialname):
     global log
     global g_editing_thread
     global g_result
@@ -594,7 +584,7 @@ def start_vim_edit_code(request, firstline, lastline, settings):
     g_start_line = int(firstline)
     g_end_line = int(lastline)
     # Start the thread
-    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings))
+    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings, credentialname))
     g_editing_thread.start()
 
 def get_job_status():

@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 # try to load OpenAI package if it exists
 try:
@@ -144,14 +145,13 @@ def extract_stop_marker(after: str) -> str | None:
             return line.rstrip()  # preserve indentation
     return None
 
-def generate_code_completion_openai(prompt, baseurl, model, options):
+def generate_code_completion_openai(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(baseurl, credentialname)
 
     log.debug('Using OpenAI chat completion endpoint')
     if baseurl:
@@ -221,25 +221,14 @@ AFTER:
 
     return response
 
-def generate_code_completion_openai_legacy(prompt, baseurl, model, options):
+def generate_code_completion_openai_legacy(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
     log.debug('Using OpenAI legacy completion endpoint')
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        api_key = os.getenv("MISTRAL_API_KEY")
-
-    if not api_key:
-        if baseurl is None or baseurl == '':
-            # OpenAI
-            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
-        if baseurl.startswith('https://api.mistral.ai/'):
-            # Mistral
-            raise EnvironmentError("Missing MISTRAL_API_KEY environment variable.")
-        # Local AIs like LMStudio don't need an API key
-        api_key = 'not_needed'
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(baseurl, credentialname)
 
     if baseurl:
         client = OpenAI(base_url=baseurl, api_key=api_key)
@@ -291,6 +280,8 @@ if __name__ == "__main__":
                             help="Specify log file directory")
         parser.add_argument('-T', action='store_false', default=True,
                             help="Use Ollama code generation suffix (experimental)")
+        parser.add_argument('-k', '--keyname', default=None,
+                            help="Credential name to lookup API key and password store")
         args = parser.parse_args()
 
         log = OllamaLogger(args.log_dir, args.log_filename)
@@ -319,14 +310,14 @@ if __name__ == "__main__":
             else:
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
-            response = generate_code_completion_openai(prompt, baseurl, modelname, options)
+            response = generate_code_completion_openai(prompt, baseurl, modelname, options, args.keyname)
         elif args.provider == "openai_legacy":
             if args.model:
                 modelname = args.model
             else:
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
-            response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options)
+            response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options, args.keyname)
         else:
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)

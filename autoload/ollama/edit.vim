@@ -114,8 +114,10 @@ lastline = vim.eval('a:last_line')
 log_level = int(vim.eval('l:log_level'))
 baseurl = vim.eval('g:ollama_host')
 provider = vim.eval('g:ollama_edit_provider')
+credentialname = None
 if provider == 'openai':
     baseurl = vim.eval('g:ollama_openai_baseurl')
+    credentialname = vim.eval('g:ollama_openai_credentialname')
 # Access global Vim variables
 settings = {
     'url': baseurl,
@@ -125,7 +127,7 @@ settings = {
 }
 CodeEditor.SetLogLevel(log_level)
 # Now pass these settings to the CodeEditor function
-CodeEditor.start_vim_edit_code(request, firstline, lastline, settings)
+CodeEditor.start_vim_edit_code(request, firstline, lastline, settings, credentialname)
 EOF
 
     " Create a floating window for progress

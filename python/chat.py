@@ -10,9 +10,9 @@ import argparse
 import httpx
 import json
 import asyncio
-import os
 import datetime
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 # Try to import OpenAI SDK
 try:
@@ -86,25 +86,14 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def stream_chat_message_openai(messages, endpoint, model, options):
+async def stream_chat_message_openai(messages, endpoint, model, options, credentialname):
     """Stream chat responses from OpenAI API."""
     if AsyncOpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
     log.debug('Using OpenAI completion endpoint')
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        api_key = os.getenv("MISTRAL_API_KEY")
-
-    if not api_key:
-        if endpoint is None or endpoint == '':
-            # OpenAI
-            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
-        if endpoint.startswith('https://api.mistral.ai/'):
-            # Mistral
-            raise EnvironmentError("Missing MISTRAL_API_KEY environment variable.")
-        # Local AIs like LMStudio don't need an API key
-        api_key = 'not_needed'
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(endpoint, credentialname)
 
     if endpoint:
         log.info('Using OpenAI endpoint '+endpoint)
@@ -144,7 +133,7 @@ async def stream_chat_message_openai(messages, endpoint, model, options):
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def main(provider, endpoint, model, options, systemprompt, timeout):
+async def main(provider, endpoint, model, options, systemprompt, timeout, credentialname):
     conversation_history = []
     log.debug("endpoint: " + str(endpoint))
 
@@ -174,7 +163,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout):
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname)
                         )
                     await task
                 else:
@@ -194,7 +183,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout):
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname)
                         )
                     await task
 
@@ -223,6 +212,8 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
     parser.add_argument("-f", "--log-filename", type=str, default="chat.log", help="Log filename.")
     parser.add_argument("-d", "--log-dir", type=str, default="/tmp/logs", help="Log file directory.")
+    parser.add_argument('-k', '--keyname', default=None,
+                        help="Credential name to lookup API key and password store")
     args = parser.parse_args()
 
     log = OllamaLogger(args.log_dir, args.log_filename)
@@ -243,9 +234,16 @@ if __name__ == "__main__":
         endpoint = args.url or DEFAULT_HOST
         endpoint = endpoint + "/api/chat"
 
-    while True:
-        try:
-            asyncio.run(main(args.provider, endpoint, model, options, args.system_prompt, args.timeout))
-        except KeyboardInterrupt:
-            print("Canceled.")
+    try:
+        while True:
+            try:
+                asyncio.run(main(args.provider, endpoint, model, options, args.system_prompt, args.timeout, args.keyname))
+            except KeyboardInterrupt:
+                print("Canceled.")
+                break
+    except Exception as e:
+        # Print only the root cause message, not the full traceback
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
     print("\nExiting the chat. (outer)")

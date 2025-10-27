@@ -178,6 +178,11 @@ function! ollama#GetSuggestion(timer)
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]
+    " Add optional credentialname for looking up the API key
+    if g:ollama_openai_credentialname != ''
+         " add system prompt option
+        let l:command += [ '-k', g:ollama_openai_credentialname ]
+    endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',

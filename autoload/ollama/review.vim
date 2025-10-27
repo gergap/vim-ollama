@@ -158,6 +158,11 @@ function! s:StartChat(lines) abort
          " add system prompt option
         let l:command += [ '-s', g:ollama_chat_systemprompt ]
     endif
+    " Add optional credentialname for looking up the API key
+    if g:ollama_openai_credentialname != ''
+         " add system prompt option
+        let l:command += [ '-k', g:ollama_openai_credentialname ]
+    endif
 
     " Redirect job's IO to buffer
     let job_options = {
