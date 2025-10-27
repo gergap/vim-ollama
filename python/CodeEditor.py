@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
-import requests
-import argparse
 import json
 import os
-import time
+import re
 import threading
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
@@ -433,6 +431,20 @@ def generate_code_completion_openai(prompt, baseurl='', model='', options=None, 
 
     # OpenAI returns a list of choices
     completion = response.choices[0].message.content
+    log.debug(completion)
+    # convert response to lines
+    lines = completion.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        completion = "\n".join(lines)
+    completion = completion.strip()
+    log.debug(completion)
 
     # Strip any end markers
     for end_marker in ["<|endoftext|>", "<STOP_EDIT_HERE>", "<EOT>"]:
@@ -441,7 +453,6 @@ def generate_code_completion_openai(prompt, baseurl='', model='', options=None, 
             completion = completion[:idx]
 
     return completion.rstrip()
-
 
 def edit_code(request, preamble, code, postamble, ft, settings, credentialname):
     """
