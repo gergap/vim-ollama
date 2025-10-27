@@ -233,7 +233,7 @@ Mistral also supports an OpenAI endpoint and can be used with the 'openai' provi
 The legacy OpenAI endpoint is not supported.
 
 **Environment Setup:**
-Ensure that the environment variable `MISTRAL_API_KEY` (or `OPENAI_API_KEY`) is correctly configured.
+Ensure that the environment variable `MISTRAL_API_KEY` is correctly configured.
 You can do this by setting it in your shell configuration, for example, in `~/.bashrc`
 or by using your OS system settings dialog.
 
