@@ -153,6 +153,7 @@ def generate_code_completion_openai(prompt, baseurl, model, options):
     if not api_key:
         raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
 
+    log.debug('Using OpenAI chat completion endpoint')
     if baseurl:
         client = OpenAI(base_url=baseurl, api_key=api_key)
     else:
@@ -220,6 +221,45 @@ AFTER:
 
     return response
 
+def generate_code_completion_openai_legacy(prompt, baseurl, model, options):
+    """Generate code completion using OpenAI's official Python SDK"""
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
+
+    log.debug('Using OpenAI legacy completion endpoint')
+    if baseurl:
+        client = OpenAI(base_url=baseurl, api_key='not_needed')
+    else:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+        client = OpenAI(api_key=api_key)
+
+    config = {
+        'pre': '<|fim_prefix|>',
+        'middle': '<|fim_middle|>',
+        'suffix': '<|fim_suffix|>',
+        'eot': '<|endoftext|>'
+    }
+    full_prompt = fill_in_the_middle(config, prompt)
+    log.debug('full_prompt: ' + full_prompt)
+
+    temperature = options.get('temperature', 0)
+    max_tokens = options.get('max_tokens', 300)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    response = client.completions.create(
+        model=model,
+        prompt=full_prompt,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+    response = response.choices[0].text
+    log.debug('response: ' + response)
+
+    return response
 
 if __name__ == "__main__":
     try:
@@ -269,6 +309,13 @@ if __name__ == "__main__":
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
             response = generate_code_completion_openai(prompt, baseurl, modelname, options)
+        elif args.provider == "openai_legacy":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_OPENAI_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options)
         else:
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)

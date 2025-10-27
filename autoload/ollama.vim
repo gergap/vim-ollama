@@ -101,7 +101,7 @@ function! s:HandleExit(job, exit_code)
         if a:job isnot s:kill_job
             echohl ErrorMsg
             echom "Process exited with code: " .. a:exit_code
-            if g:ollama_model_provider == 'openai'
+            if g:ollama_model_provider == 'openai' || g:ollama_model_provider == 'openai_legacy'
                 echom "Check if g:ollama_openai_baseurl=" .. g:ollama_openai_baseurl .. " is correct."
             else
                 echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
@@ -166,7 +166,7 @@ function! ollama#GetSuggestion(timer)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     let l:base_url = g:ollama_host
-    if g:ollama_model_provider == 'openai'
+    if g:ollama_model_provider == 'openai' || g:ollama_model_provider == 'openai_legacy'
         let l:base_url = g:ollama_openai_baseurl
     endif
     " Adjust the command to use the prompt as stdin input
