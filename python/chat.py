@@ -91,9 +91,20 @@ async def stream_chat_message_openai(messages, endpoint, model, options):
     if AsyncOpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
+    log.debug('Using OpenAI completion endpoint')
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+        api_key = os.getenv("MISTRAL_API_KEY")
+
+    if not api_key:
+        if endpoint is None or endpoint == '':
+            # OpenAI
+            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+        if endpoint.startswith('https://api.mistral.ai/'):
+            # Mistral
+            raise EnvironmentError("Missing MISTRAL_API_KEY environment variable.")
+        # Local AIs like LMStudio don't need an API key
+        api_key = 'not_needed'
 
     if endpoint:
         log.info('Using OpenAI endpoint '+endpoint)

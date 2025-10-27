@@ -405,9 +405,20 @@ def generate_code_completion_openai(prompt, baseurl=None, model=None, options=No
     if model is None:
         model = DEFAULT_OPENAI_MODEL
 
+    log.debug('Using OpenAI completion endpoint')
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+        api_key = os.getenv("MISTRAL_API_KEY")
+
+    if not api_key:
+        if baseurl is None or baseurl == '':
+            # OpenAI
+            raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
+        if baseurl.startswith('https://api.mistral.ai/'):
+            # Mistral
+            raise EnvironmentError("Missing MISTRAL_API_KEY environment variable.")
+        # Local AIs like LMStudio don't need an API key
+        api_key = 'not_needed'
 
     if baseurl:
         log.info('Using OpenAI endpoint '+baseurl)
