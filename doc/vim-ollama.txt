@@ -262,11 +262,16 @@ g:ollama_openai_baseurl
                                                       *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.
-      Currently, 'ollama' and 'openai' are supported.
+      Currently, 'ollama', 'openai' and 'openai_legacy' are supported.
+      OpenAI notes: The OpenAI '/v1/chat/completions' endpoint does not support
+      fill-in-the-middle, which is required for good code completion. The
+      plugin tries to work around this using prompt engineering. Choose
+      'ollama' or 'openai_legacy' ('/v1/completions' endpoint) to make
+      fill-in-the-middle working.
     - Default: 'ollama'
     - Example:
 >
-        let g:ollama_model_provider = 'openai'
+        let g:ollama_model_provider = 'openai_legacy'
 <
                                                       *g:ollama_model*
 g:ollama_model

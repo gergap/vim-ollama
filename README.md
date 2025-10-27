@@ -190,7 +190,7 @@ or by using your OS system settings dialog.
 2. Add the following configuration to switch to the OpenAI backend:
    ```vim
    " OpenAI example configuration
-   let g:ollama_model_provider = 'openai'
+   let g:ollama_model_provider = 'openai_legacy'
    let g:ollama_model = 'gpt-4.1-nano'
    let g:ollama_chat_provider = 'openai'
    let g:ollama_chat_model = 'gpt-4.1-mini'
@@ -218,7 +218,7 @@ different base URL, which is `http://<hostname>:<port>/v1` for LMStudio.
    ```vim
     " LMStudio example configuration
     let g:ollama_openai_baseurl = 'http://localhost:1234/v1' " Use local OpenAI endpoint
-    let g:ollama_model_provider = 'openai'
+    let g:ollama_model_provider = 'openai_legacy'
     let g:ollama_model = 'codegemma-2b'
     let g:ollama_chat_provider = 'openai'
     let g:ollama_chat_model = 'gpt-oss'
