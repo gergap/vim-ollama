@@ -32,19 +32,21 @@ def list_ollama_models(base_url):
         print(f"Error contacting Ollama: {e}", file=sys.stderr)
         sys.exit(1)
 
-def list_openai_models():
+def list_openai_models(base_url):
     """List models available to the current OpenAI API key."""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print("Error: OPENAI_API_KEY environment variable not set.", file=sys.stderr)
         sys.exit(1)
 
-    url = "https://api.openai.com/v1/models"
+    url = f"{base_url}/models"
     headers = {
         "Authorization": f"Bearer {api_key}",
     }
 
     try:
+        log.debug(f'url={url}')
+        log.debug(f'headers={headers}')
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             print(f"Failed to retrieve OpenAI models (status {response.status_code})", file=sys.stderr)
