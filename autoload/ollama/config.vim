@@ -49,7 +49,7 @@ function! ollama#config#FetchModels(type) abort
     let l:baseurl = g:ollama_host
     if a:type == 'model'
         let l:provider = g:ollama_model_provider
-        if g:ollama_model_provider =='openai'
+        if g:ollama_model_provider =~ '^openai'
             let l:baseurl = g:ollama_openai_baseurl
         endif
     elseif a:type =='chat_model'
@@ -66,9 +66,11 @@ function! ollama#config#FetchModels(type) abort
         echomsg 'Error fetching models: unknown type='..a:type
         return
     endif
+    " Convert plugin debug level to python logger levels
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
     echo "baseurl="..l:baseurl
-    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', l:baseurl, '-p', l:provider]
+    let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', l:baseurl, '-p', l:provider, '-l', l:log_level]
 
     " Define the callback for when the job finishes
     let l:job_options = {
