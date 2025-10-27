@@ -5,14 +5,17 @@ import requests
 import argparse
 import os
 import sys
+from OllamaLogger import OllamaLogger
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_PROVIDER = "ollama"
+log = None
 
 def list_ollama_models(base_url):
     """List models installed in a local Ollama server."""
     url = f"{base_url}/api/tags"
     try:
+        log.debug(f'url={url}')
         response = requests.get(url)
         if response.status_code != 200:
             print(f"Failed to retrieve models (status {response.status_code})", file=sys.stderr)
@@ -60,20 +63,30 @@ def list_openai_models():
         sys.exit(1)
 
 def main():
+    global log
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="List models from Ollama or OpenAI")
     parser.add_argument("-p", "--provider", type=str, default=DEFAULT_PROVIDER,
-                        choices=["ollama", "openai"],
+                        choices=["ollama", "openai", "openai_legacy"],
                         help="Provider to list models from (default: ollama)")
     parser.add_argument("-u", "--url", type=str, default=DEFAULT_OLLAMA_URL,
-                        help="Base URL for Ollama (ignored for OpenAI)")
+                        help="Base URL for Ollama or OpenAI")
+    parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
+                        help="Specify log level")
+    parser.add_argument('-f', '--log-filename', type=str, default="list_models.log",
+                        help="Specify log filename")
+    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
+                        help="Specify log file directory")
     # Parse arguments
     args = parser.parse_args()
 
+    log = OllamaLogger(args.log_dir, args.log_filename)
+    log.setLevel(args.log_level)
+
     if args.provider == "ollama":
         list_ollama_models(args.url)
-    elif args.provider == "openai":
-        list_openai_models()
+    elif args.provider == "openai" or args.provider == "openai_legacy":
+        list_openai_models(args.url)
     else:
         print(f"Unknown provider: {args.provider}", file=sys.stderr)
         sys.exit(1)
