@@ -184,25 +184,26 @@ or by using your OS system settings dialog.
 
 **Configuring Vim-Ollama:**
 1. Open the Vim-Ollama configuration file using the command:
-   ```vim
-   :Ollama config
-   ```
+```vim
+:Ollama config
+```
+
 2. Add the following configuration to switch to the OpenAI backend:
-   ```vim
-   " OpenAI example configuration
-   let g:ollama_model_provider = 'openai_legacy'
-   let g:ollama_model = 'gpt-4.1-nano'
-   let g:ollama_chat_provider = 'openai'
-   let g:ollama_chat_model = 'gpt-4.1-mini'
-   let g:ollama_edit_provider = 'openai'
-   let g:ollama_edit_model = 'gpt-4.1-mini'
-   ```
+```vim
+" OpenAI example configuration
+let g:ollama_model_provider = 'openai_legacy'
+let g:ollama_model = 'gpt-4.1-nano'
+let g:ollama_chat_provider = 'openai'
+let g:ollama_chat_model = 'gpt-4.1-mini'
+let g:ollama_edit_provider = 'openai'
+let g:ollama_edit_model = 'gpt-4.1-mini'
+```
+
 3. Ensure that the `openai` package is installed in your Python environment.
    Run the following command to update your Python environment:
-
-   ```vim
-   :Ollama pipinstall
-   ```
+```vim
+:Ollama pipinstall
+```
 
 > [!TIP]
 > Code completion using the OpenAI REST API introduces a higher latency then running Ollama locally.
@@ -215,16 +216,43 @@ Configuring an own OpenAI compatible endpoint like LMStudio works similar to off
 endpoint but without an API key. The `g:ollama_openai_baseurl` variable is used to configure a
 different base URL, which is `http://<hostname>:<port>/v1` for LMStudio.
 
-   ```vim
-    " LMStudio example configuration
-    let g:ollama_openai_baseurl = 'http://localhost:1234/v1' " Use local OpenAI endpoint
-    let g:ollama_model_provider = 'openai_legacy'
-    let g:ollama_model = 'codegemma-2b'
-    let g:ollama_chat_provider = 'openai'
-    let g:ollama_chat_model = 'gpt-oss'
-    let g:ollama_edit_provider = 'openai'
-    let g:ollama_edit_model = 'gpt-oss'
-   ```
+```vim
+" LMStudio example configuration
+let g:ollama_openai_baseurl = 'http://localhost:1234/v1' " Use local OpenAI endpoint
+let g:ollama_model_provider = 'openai_legacy'
+let g:ollama_model = 'codegemma-2b'
+let g:ollama_chat_provider = 'openai'
+let g:ollama_chat_model = 'gpt-oss'
+let g:ollama_edit_provider = 'openai'
+let g:ollama_edit_model = 'gpt-oss'
+```
+
+### Mistral API Configuration
+
+Mistral also supports an OpenAI endpoint and can be used with the 'openai' provider.
+The legacy OpenAI endpoint is not supported.
+
+**Environment Setup:**
+Ensure that the environment variable `MISTRAL_API_KEY` (or `OPENAI_API_KEY`) is correctly configured.
+You can do this by setting it in your shell configuration, for example, in `~/.bashrc`
+or by using your OS system settings dialog.
+
+**Configuring Vim-Ollama:**
+1. Open the Vim-Ollama configuration file using the command:
+```vim
+:Ollama config
+```
+2. Add the following configuration to switch to the OpenAI backend:
+```vim
+" Mistral example configuration
+let g:ollama_openai_baseurl = 'https://api.mistral.ai/v1'
+let g:ollama_model_provider = 'openai'
+let g:ollama_model = 'codestral-2501'
+let g:ollama_chat_provider = 'openai'
+let g:ollama_chat_model = 'ministral-3b-latest'
+let g:ollama_edit_provider = 'openai'
+let g:ollama_edit_model = 'ministral-3b-latest'
+```
 
 ## Usage
 
