@@ -12,6 +12,7 @@ let s:help_text = {
 \ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
 \ 'ollama_openai_baseurl': 'OpenAI base URL (default='', which uses the official OpenAI API).',
+\ 'ollama_openai_credentialname': 'Credential name to lookup API key in password store',
 \ 'ollama_model_provider': 'Provider for code completions: "ollama", "openai" or "openai_legacy".',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',

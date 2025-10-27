@@ -259,6 +259,16 @@ g:ollama_openai_baseurl
 >
         let g:ollama_openai_baseurl = 'http://localhost:1234'
 <
+                                                      *g:ollama_openai_credentialname*
+g:ollama_openai_credentialname
+    - Description: Sets the credentialname for loading the API-key from the
+      UNIX password store. This avoids setting the OPENAI_API_KEY or MISTRAL_API_KEY
+      as environment variable.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_openai_credentialname = 'api-tokens/mistral-ai'
+<
                                                       *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.
