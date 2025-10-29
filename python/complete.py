@@ -17,11 +17,18 @@ try:
 except ImportError:
     OpenAI = None
 
+# try to load Mistral package if it exists
+try:
+    from mistralai import Mistral
+except ImportError:
+    Mistral = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
 DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
@@ -74,6 +81,7 @@ def fill_in_the_middle(config, prompt):
     return newprompt
 
 def generate_code_completion(config, prompt, baseurl, model, options):
+    """ Code completion using Ollama REST API """
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
@@ -136,6 +144,62 @@ def generate_code_completion(config, prompt, baseurl, model, options):
         return completion.rstrip()
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
+
+def generate_code_completion_mistral(prompt, baseurl, model, options, credentialname):
+    """ Code completion using Mistral REST API """
+    if Mistral is None:
+        raise ImportError("Mistral package not found. Please install via 'pip install mistralai'.")
+
+    # Mistral provider does not need baseurl, we just set it to lookup the 
+    # correct API key
+    if not baseurl:
+        baseurl = 'https://api.mistral.ai/'
+
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(baseurl, credentialname)
+    log.debug('Using Mistral API')
+    client = Mistral(api_key=api_key)
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker for OpenAI mode.")
+        sys.exit(1)
+    prompt = parts[0]
+    suffix = parts[1]
+
+    stop_marker = extract_stop_marker(suffix)
+    stops = [stop_marker] if stop_marker else []
+
+    temperature = options.get('temperature', 0)
+#    min_tokens = options.get('min_tokens', 1)
+    max_tokens = options.get('max_tokens', 300)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('prompt: ' + str(prompt))
+    log.debug('suffix: ' + str(suffix))
+    log.debug('stops: ' + str(stops))
+
+    try:
+        response = client.fim.complete(
+            model=model,
+            prompt=prompt,
+            suffix=suffix,
+            temperature=temperature,
+    #        min_tokens=min_tokens,
+            max_tokens=max_tokens,
+            stop=stops
+        )
+        response = response.choices[0].message.content
+        log.debug('response: ' + response)
+    except Exception as e:
+        # Print only the root cause message, not the full traceback
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
+
+    return response
 
 def extract_stop_marker(after: str) -> str | None:
     """Return the first meaningful line of `after` to use as a stop marker."""
@@ -271,7 +335,7 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
         parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
-                            help="LLM provider: 'ollama' (default) or 'openai'")
+                            help="LLM provider: 'ollama' (default), 'mistral' or 'openai'")
         parser.add_argument('-m', '--model', type=str, default=None,
                             help="Model name (Ollama or OpenAI).")
         parser.add_argument('-u', '--url', type=str, default=None,
@@ -310,6 +374,13 @@ if __name__ == "__main__":
             baseurl = args.url or DEFAULT_HOST
             config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
             response = generate_code_completion(config, prompt, baseurl, modelname, options)
+        elif args.provider == "mistral":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_MISTRAL_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_mistral(prompt, baseurl, modelname, options, args.keyname)
         elif args.provider == "openai":
             if args.model:
                 modelname = args.model
