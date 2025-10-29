@@ -217,10 +217,12 @@ def generate_code_completion_openai(prompt, baseurl, model, options, credentialn
     cred = OllamaCredentials()
     api_key = cred.GetApiKey(baseurl, credentialname)
 
-    log.debug('Using OpenAI chat completion endpoint')
+    log.debug('Using OpenAI chat completion endpoint (prompt engineering)')
     if baseurl:
+        log.debug(f'baseurl={baseurl}')
         client = OpenAI(base_url=baseurl, api_key=api_key)
     else:
+        log.debug(f'Using default OpenAI URL')
         client = OpenAI(api_key=api_key)
 
     parts = prompt.split('<FILL_IN_HERE>')
@@ -296,13 +298,15 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
-    log.debug('Using OpenAI legacy completion endpoint')
+    log.debug('Using OpenAI legacy completion endpoint (FIM support)')
     cred = OllamaCredentials()
     api_key = cred.GetApiKey(baseurl, credentialname)
 
     if baseurl:
+        log.debug(f'baseurl={baseurl}')
         client = OpenAI(base_url=baseurl, api_key=api_key)
     else:
+        log.debug(f'Using default OpenAI URL')
         client = OpenAI(api_key=api_key)
 
     config = {
@@ -329,7 +333,7 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     response = response.choices[0].text
     log.debug('response: ' + response)
 
-    return response
+    return response.rstrip()
 
 if __name__ == "__main__":
     try:
