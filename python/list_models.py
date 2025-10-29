@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 DEFAULT_PROVIDER = "ollama"
@@ -32,12 +33,13 @@ def list_ollama_models(base_url):
         print(f"Error contacting Ollama: {e}", file=sys.stderr)
         sys.exit(1)
 
-def list_openai_models(base_url):
+def list_openai_models(base_url, credentialname):
     """List models available to the current OpenAI API key."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("Error: OPENAI_API_KEY environment variable not set.", file=sys.stderr)
-        sys.exit(1)
+    if not base_url:
+        base_url = 'https://api.mistral.ai/v1'
+
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey(base_url, credentialname)
 
     url = f"{base_url}/models"
     headers = {
@@ -69,16 +71,18 @@ def main():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="List models from Ollama or OpenAI")
     parser.add_argument("-p", "--provider", type=str, default=DEFAULT_PROVIDER,
-                        choices=["ollama", "openai", "openai_legacy"],
+                        choices=["ollama", "mistral", "openai", "openai_legacy"],
                         help="Provider to list models from (default: ollama)")
-    parser.add_argument("-u", "--url", type=str, default=DEFAULT_OLLAMA_URL,
-                        help="Base URL for Ollama or OpenAI")
+    parser.add_argument("-u", "--url", type=str, default=None,
+                        help="Base URL for Ollama, Mistral or OpenAI")
     parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
                         help="Specify log level")
     parser.add_argument('-f', '--log-filename', type=str, default="list_models.log",
                         help="Specify log filename")
     parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
                         help="Specify log file directory")
+    parser.add_argument('-k', '--keyname', default=None,
+                        help="Credential name to lookup API key and password store")
     # Parse arguments
     args = parser.parse_args()
 
@@ -86,9 +90,11 @@ def main():
     log.setLevel(args.log_level)
 
     if args.provider == "ollama":
+        if args.url == None:
+            args.url = DEFAULT_OLLAMA_URL
         list_ollama_models(args.url)
-    elif args.provider == "openai" or args.provider == "openai_legacy":
-        list_openai_models(args.url)
+    elif args.provider == "openai" or args.provider == "openai_legacy" or args.provider == "mistral":
+        list_openai_models(args.url, args.keyname)
     else:
         print(f"Unknown provider: {args.provider}", file=sys.stderr)
         sys.exit(1)
