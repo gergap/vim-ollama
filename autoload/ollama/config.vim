@@ -77,6 +77,18 @@ function! ollama#config#FetchModels(type) abort
 
     echo "baseurl="..l:baseurl
     let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', l:baseurl, '-p', l:provider, '-l', l:log_level]
+    " Add optional credentialname for looking up the API key
+    if g:ollama_model_provider =~ '^openai'
+        if g:ollama_openai_credentialname != ''
+            " add credentialname option for OpenAI
+            let l:command += [ '-k', g:ollama_openai_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'mistral'
+        if g:ollama_mistral_credentialname != ''
+            " add credentialname option for Mistral
+            let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    endif
 
     " Define the callback for when the job finishes
     let l:job_options = {
