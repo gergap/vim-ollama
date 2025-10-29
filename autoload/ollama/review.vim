@@ -219,10 +219,12 @@ function! s:StartChat(lines) abort
     endif
 
     " Add a title to the chat buffer
-    call append(0, "Chat with Bot (type 'quit' to exit, press CTRL-C to interrupt output)")
-    call append(1, "-------------")
+    let l:title = "Chat with '" .. g:ollama_chat_model .. "' (via " .. g:ollama_chat_provider .. ")"
+    call append(0, l:title)
+    call append(1, repeat('-', len(l:title)))
+    call append(2, "(type 'quit' to exit, press CTRL-C to interrupt output)")
     if a:lines isnot v:null
-        call append(2, a:lines)
+        call append(3, a:lines)
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
 
