@@ -19,6 +19,8 @@ class OllamaCredentials:
                 pass_process = subprocess.Popen(['pass', 'show', credentialname], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 password_bytes, _ = pass_process.communicate()
                 password = password_bytes.decode('utf-8')  # Decode bytes to string using utf-8 encoding
+                # only use first line
+                password = password.split('\n')[0]
                 return password.strip()  # Remove any leading/trailing whitespace
             except Exception as e:
                 print(f"Error retrieving password from password store: {e}")
