@@ -45,6 +45,14 @@ else
     " strip any trailing slash from the URL
     let g:ollama_host = substitute(g:ollama_host, '/$', '', '')
 endif
+if !exists('g:ollama_mistral_baseurl')
+    " Use official Mistral endpoint by default
+    let g:ollama_mistral_baseurl = ''
+endif
+if !exists('g:ollama_mistral_credentialname')
+    " UNIX Pass credential name to lookup API key for Mistral service
+    let g:ollama_mistral_credentialname = ''
+endif
 if !exists('g:ollama_openai_baseurl')
     " Use official OpenAI endpoint by default
     let g:ollama_openai_baseurl = ''

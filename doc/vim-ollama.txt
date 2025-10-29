@@ -251,9 +251,29 @@ g:ollama_host
 >
         let g:ollama_host = 'http://your-server:port'
 <
+                                                      *g:ollama_mistral_baseurl*
+g:ollama_mistral_baseurl
+    - Description: Sets the Mistral base URL used for Mistral backend.
+    - Default: '' (Currently, this will be ignored and always use Mistral API)
+    - Example:
+>
+        let g:ollama_mistral_baseurl = 'http://localhost:1234'
+<
+                                                      *g:ollama_mistral_credentialname*
+g:ollama_mistral_credentialname
+    - Description: Sets the credentialname for loading the API-key from the
+      UNIX password store. This avoids setting the MISTRAL_API_KEY as
+      environment variable.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_mistral_credentialname = 'api-tokens/mistral-ai'
+<
                                                       *g:ollama_openai_baseurl*
 g:ollama_openai_baseurl
     - Description: Sets the OpenAI base URL used for OpenAI backend.
+      You can use this to configure other OpenAI compatible endpoints
+      like e.g. LMStudio or Mistral.
     - Default: ''
     - Example:
 >
@@ -262,22 +282,26 @@ g:ollama_openai_baseurl
                                                       *g:ollama_openai_credentialname*
 g:ollama_openai_credentialname
     - Description: Sets the credentialname for loading the API-key from the
-      UNIX password store. This avoids setting the OPENAI_API_KEY or MISTRAL_API_KEY
-      as environment variable.
+      UNIX password store. This avoids setting the OPENAI_API_KEY as
+      environment variable.
     - Default: ''
     - Example:
 >
-        let g:ollama_openai_credentialname = 'api-tokens/mistral-ai'
+        let g:ollama_openai_credentialname = 'api-tokens/openai'
 <
                                                       *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.
-      Currently, 'ollama', 'openai' and 'openai_legacy' are supported.
+      Currently, 'ollama', 'mistral', 'openai' and 'openai_legacy' are supported.
       OpenAI notes: The OpenAI '/v1/chat/completions' endpoint does not support
-      fill-in-the-middle, which is required for good code completion. The
+      fill-in-the-middle (FIM), which is required for good code completion. The
       plugin tries to work around this using prompt engineering. Choose
-      'ollama' or 'openai_legacy' ('/v1/completions' endpoint) to make
-      fill-in-the-middle working.
+      'openai_legacy' ('/v1/completions' endpoint) to make FIM working with
+      OpenAI, or choose a different provider.
+      Mistral notes: Mistral also supports an OpenAI compatible endpoint
+      at https://api.mistral.ai/v1 and https://codestral.mistral.ai/v1.
+      However, it is recommended to use the 'mistral' provider instead for
+      better FIM support.
     - Default: 'ollama'
     - Example:
 >

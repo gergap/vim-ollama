@@ -179,9 +179,16 @@ function! ollama#GetSuggestion(timer)
         \ "-l", l:log_level
         \ ]
     " Add optional credentialname for looking up the API key
-    if g:ollama_openai_credentialname != ''
-         " add system prompt option
-        let l:command += [ '-k', g:ollama_openai_credentialname ]
+    if g:ollama_model_provider == 'openai' || g:ollama_model_provider == 'openai_legacy'
+        if g:ollama_openai_credentialname != ''
+            " add credentialname option for OpenAI
+            let l:command += [ '-k', g:ollama_openai_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'mistral'
+        if g:ollama_mistral_credentialname != ''
+            " add credentialname option for Mistral
+            let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
     endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {

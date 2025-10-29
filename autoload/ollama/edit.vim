@@ -118,6 +118,9 @@ credentialname = None
 if provider == 'openai':
     baseurl = vim.eval('g:ollama_openai_baseurl')
     credentialname = vim.eval('g:ollama_openai_credentialname')
+elif provider == 'mistral':
+    baseurl = vim.eval('g:ollama_mistral_baseurl')
+    credentialname = vim.eval('g:ollama_mistral_credentialname')
 # Access global Vim variables
 settings = {
     'url': baseurl,
