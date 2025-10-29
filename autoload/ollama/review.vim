@@ -112,6 +112,7 @@ function! s:StartChat(lines) abort
 
         " Simply append to current buffer
         call append(line("$"), a:msg)
+        stopinsert
     endfunc
 
     " Function handling the shell exits: close the window.
