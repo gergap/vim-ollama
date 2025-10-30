@@ -115,7 +115,7 @@ log_level = int(vim.eval('l:log_level'))
 baseurl = vim.eval('g:ollama_host')
 provider = vim.eval('g:ollama_edit_provider')
 credentialname = None
-if provider == 'openai':
+if provider.startswith('openai'):
     baseurl = vim.eval('g:ollama_openai_baseurl')
     credentialname = vim.eval('g:ollama_openai_credentialname')
 elif provider == 'mistral':
