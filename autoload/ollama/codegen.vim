@@ -216,7 +216,7 @@ function! s:CommitChanges(message) abort
 endfunction
 
 function! s:HandleNDJSONLine(line) abort
-    " remove any warapping ```json ... ``` text
+    " remove any wrapping ```json ... ``` text
     let l:json_match = matchstr(a:line, '{\s*".\{-}"\s*}')
     if empty(l:json_match)
         " this is normal with incomplete lines and should not be a error trace
@@ -507,7 +507,8 @@ endfunction
 " Opens/reloads the given file in the current buffer
 function! s:OpenGeneratedFile(filepath)
     call s:OpenFileSmartly(a:filepath)
-"    execute 'edit! ' . a:filepath
+    " force reload of the buffer from file
+    execute 'edit! ' . a:filepath
 "    setlocal autoread
 endfunction
 
