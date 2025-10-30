@@ -3,7 +3,7 @@
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
 import json
 import os
-import re
+import requests
 import threading
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
@@ -378,7 +378,7 @@ def generate_code_completion(prompt, baseurl, model, options):
         log.debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
         if completion is None:
-            error = response.json().get('error')
+            error = response.json().get('error', 'no response')
             raise Exception(f"Error: {error}")
 
         log.debug(completion)
