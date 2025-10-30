@@ -26,6 +26,11 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
   - Or accept without prompt for a Git based workflow using [vim-fugitive](https://github.com/tpope/vim-fugitive)
     (e.g. using `:Gvdiffsplit`)
 - Python venv support for easier installation (NEW in V1.1)
+- OpenAI endpoint support for using LMStudio, Open WebUI or commercial OpenAI services (NEW in 2.0)
+- Mistral AI support (NEW in 2.0). If you need to use a cloud service for
+  performance reasons, this is a good choice.
+  Mistral AI, headquartered in Paris, France, is designed with European data
+  privacy laws, particularly the General Data Protection Regulation (GDPR), at its core.
 
 ![Demo](screenshots/game.gif)
 
@@ -56,8 +61,10 @@ uses these scripts via I/O redirection to integrate AI results into Vim.
 Optionally, it supports also to use OpenAI REST API for code completion, chat
 conversations and code edit tasks. Therefore, you need to create an OpenAI
 account and create an OpenAI API key on https://platform.openai.com/api-keys to
-be able to access the REST API. Export the environment variable
-`OPENAI_API_KEY` with your key to make the Python library `openai` work.
+be able to access the REST API.
+
+The plugin now also support Mistral AI. See [Mistral Quickstart](https://docs.mistral.ai/getting-started/quickstart)
+for more information on creating an account and API keys.
 
 > [!NOTE]
 > This plugin supports Vim only, not NeoVim! If you're looking for a NeoVim plugin, check out
@@ -74,7 +81,7 @@ be able to access the REST API. Export the environment variable
 > venv support has proven to work well.
 
 - Python 3.x
-- Python package: `httpx>=0.23.3`, `requests`, `jinja2`, `openai` (optional)
+- Python package: `httpx>=0.23.3`, `requests`, `jinja2`, `openai` (optional), `mistral` (optional)
 
 ### Debian-based Systems
 
