@@ -328,13 +328,18 @@ function! s:StartChat(lines) abort
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+    let l:base_url = g:ollama_host
+    if g:ollama_chat_provider == 'openai'
+        let l:base_url = g:ollama_openai_baseurl
+    endif
 
     let l:script_path = printf('%s/python/chat.py', g:ollama_plugin_dir)
     " Create the Python command
     let l:command = [ g:ollama_python_interpreter,
                 \ l:script_path,
+                \ '-p', g:ollama_edit_provider,
                 \ '-m', g:ollama_edit_model,
-                \ '-u', g:ollama_host,
+                \ '-u', l:base_url,
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
@@ -342,6 +347,11 @@ function! s:StartChat(lines) abort
     if g:ollama_chat_systemprompt != ''
          " add system prompt option
         let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
+    " Add optional credentialname for looking up the API key
+    if g:ollama_openai_credentialname != ''
+         " add system prompt option
+        let l:command += [ '-k', g:ollama_openai_credentialname ]
     endif
 
     " Redirect job's IO to buffer
