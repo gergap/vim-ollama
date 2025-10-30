@@ -175,12 +175,49 @@ When adding new unsupported code completion models you will see an error like `E
 Simply add this missing file and create a merge request to get it included upstream.
 Consult the model's documentation to find out the correct tokens.
 
+### Credential Storage
+
+Commercial REST APIs typically require an API key for authentication. While you
+can store these keys as environment variables, a more secure approach is to use
+a password manager. The plugin supports **[UNIX password manager
+(`pass`)](https://www.passwordstore.org)**, a command-line tool that encrypts
+passwords using **PGP**. Under the hood, `pass` relies on **GnuPG**, which can
+securely store **RSA/ECC private keys** on **OpenPGP-compatible smartcards**
+(e.g., **YubiKey** or **NitroKey**). Instead of hardcoding API keys in
+environment variables, you can configure the plugin to fetch them from your
+password store. Simply specify the credential name in the plugin’s
+configuration file, and it will automatically retrieve the corresponding API
+key when needed.
+
+**Example Configuration:**
+
+```vim
+" Mistral API key credential name
+let g:ollama_mistral_credentialname = 'api-keys/mistral-key'
+" OpenAI API key credential name
+let g:ollama_openai_credentialname = 'api-keys/openai-key'
+```
+
 ### OpenAI Configuration
 
+The `openai` provider supports OpenAI compatible endpoints, which can be the
+commercial OpenAI REST API, or other compatible endpoints like LMStudio or Open WebUI.
+
+You need to configure either the `openai` or `openai_legacy` provider for the
+tab completion. For Chat and Edit tasks only `openai` works.
+
+Note that the standard OpenAI endpoint does not support fill-in-the-middle (FIM) for
+code completion. This is only supported by the legacy endpoint.
+
+| Endpoint               | Description                                         | Provider              | FIM Support |
+| ---------------------- | --------------------------------------------------- | ---------------       | ---         |
+| /v1/completions        | Legacy endpoint. Not supported by GPT-4 and GPT-5.  | openai_legacy         | Yes         |
+| /v1/chat/completions   | Endpoint for newer models.                          | openai                | No          |
+| /v1/models             | For listing models.                                 | openai, openai_legacy | -           |
+
 **Environment Setup:**
-Ensure that the environment variable `OPENAI_API_KEY` is correctly configured.
-You can do this by setting it in your shell configuration, for example, in `~/.bashrc`
-or by using your OS system settings dialog.
+Ensure that the environment variable `OPENAI_API_KEY` is correctly configured
+or the credential name is set in the plugin configuration.
 
 **Configuring Vim-Ollama:**
 1. Open the Vim-Ollama configuration file using the command:
@@ -191,8 +228,9 @@ or by using your OS system settings dialog.
 2. Add the following configuration to switch to the OpenAI backend:
 ```vim
 " OpenAI example configuration
+let g:ollama_openai_credentialname = 'api-keys/openai-key'
 let g:ollama_model_provider = 'openai_legacy'
-let g:ollama_model = 'gpt-4.1-nano'
+let g:ollama_model = 'gpt-3.5-turbo'
 let g:ollama_chat_provider = 'openai'
 let g:ollama_chat_model = 'gpt-4.1-mini'
 let g:ollama_edit_provider = 'openai'
@@ -204,11 +242,6 @@ let g:ollama_edit_model = 'gpt-4.1-mini'
 ```vim
 :Ollama pipinstall
 ```
-
-> [!TIP]
-> Code completion using the OpenAI REST API introduces a higher latency then running Ollama locally.
-> It makes sense to use Ollama for code completion, and OpenAI only for more complex tasks like
-> code review and code editing tasks.
 
 ### OpenAI/LMStudio Configuration
 
@@ -229,29 +262,36 @@ let g:ollama_edit_model = 'gpt-oss'
 
 ### Mistral API Configuration
 
-Mistral also supports an OpenAI endpoint and can be used with the 'openai' provider.
-The legacy OpenAI endpoint is not supported.
+Mistral also supports an OpenAI endpoint and can be used with the `openai` provider,
+but the legacy OpenAI endpoint is not supported. Instead using `mistral` provider is
+the preferred way to use Mistral for code completion. Use `openai` backend for
+chat and edit tasks.
 
 **Environment Setup:**
-Ensure that the environment variable `MISTRAL_API_KEY` is correctly configured.
-You can do this by setting it in your shell configuration, for example, in `~/.bashrc`
-or by using your OS system settings dialog.
+Ensure that the environment variable `MISTRAL_API_KEY` and/or `OPENAI_API_KEY`
+is correctly configured or the credential name is set in the plugin
+configuration.
 
 **Configuring Vim-Ollama:**
 1. Open the Vim-Ollama configuration file using the command:
 ```vim
 :Ollama config
 ```
-2. Add the following configuration to switch to the OpenAI backend:
+2. Add the following configuration to switch to the Mistral backend or tab completion
+   and OpenAI backend or Chat and Edit tasks.
 ```vim
 " Mistral example configuration
-let g:ollama_openai_baseurl = 'https://api.mistral.ai/v1'
-let g:ollama_model_provider = 'openai'
+" Use mistral for tab completion
+let g:ollama_mistral_credentialname = 'api-keys/mistral-key'
+let g:ollama_model_provider = 'mistral'
 let g:ollama_model = 'codestral-2501'
+" Use OpenAI for chat and edit
+let g:ollama_openai_credentialname = 'api-keys/mistral-key'
+let g:ollama_openai_baseurl = 'https://api.mistral.ai/v1'
 let g:ollama_chat_provider = 'openai'
-let g:ollama_chat_model = 'ministral-3b-latest'
+let g:ollama_chat_model = 'codestral-2501'
 let g:ollama_edit_provider = 'openai'
-let g:ollama_edit_model = 'ministral-3b-latest'
+let g:ollama_edit_model = 'codestral-2501'
 ```
 
 ## Usage
