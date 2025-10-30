@@ -67,6 +67,8 @@ try:
         use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
 
         if result == 'Error':
+            if errormsg is None:
+                errormsg = 'Unknown'
             vim.command(f'echom "Error updating progress: {errormsg}"')
             vim.command('call popup_notification("'+errormsg+'", #{ pos: "center"})')
         else:

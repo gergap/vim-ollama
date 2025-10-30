@@ -24,7 +24,11 @@ DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = 'qwen2.5-coder:14b'
 DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+# default options if missing
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+# default parameters if options is given, but missing these entries
+DEFAULT_TEMPERATURE = 0
+DEFAULT_MAX_TOKENS = 5000
 CONTEXT_LINES = 10
 
 # Shared variable to indicate whether the editing thread is active
@@ -416,8 +420,11 @@ def generate_code_completion_openai(prompt, baseurl='', model='', options=None, 
         client = OpenAI(api_key=api_key)
 
     # Extract options
-    temperature = options.get("temperature", 0) if options else 0
-    max_tokens = options.get("max_tokens", 500) if options else 500
+    if options is None:
+        options = json.loads(DEFAULT_OPTIONS)
+
+    temperature = options.get("temperature", DEFAULT_TEMPERATURE)
+    max_tokens = options.get("max_tokens", DEFAULT_MAX_TOKENS)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))

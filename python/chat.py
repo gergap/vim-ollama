@@ -23,13 +23,17 @@ except ImportError:
 # Default values
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_MODEL = "codellama:code"
-DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
-DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_TIMEOUT = 10
+# Default models if missing
+DEFAULT_MODEL = "codellama:code"
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+# default options if missing
+DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+# default parameters if options is given, but missing these entries
+DEFAULT_TEMPERATURE = 0
+DEFAULT_MAX_TOKENS = 5000
 
 log = None
-
 
 async def stream_chat_message_ollama(messages, endpoint, model, options, timeout):
     """Stream chat responses from Ollama API."""
@@ -94,6 +98,8 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
     log.debug('Using OpenAI completion endpoint')
     cred = OllamaCredentials()
     api_key = cred.GetApiKey(endpoint, credentialname)
+    # don't trace API keys in production, just a development helper
+    #log.debug(f'api_key={api_key}')
 
     if endpoint:
         log.info('Using OpenAI endpoint '+endpoint)
@@ -103,8 +109,8 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
         client = AsyncOpenAI(api_key=api_key)
     assistant_message = ""
 
-    temperature = options.get('temperature', 0.2)
-    max_tokens = options.get('max_tokens', 500)
+    temperature = options.get('temperature', DEFAULT_TEMPERATURE)
+    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
     top_p = options.get('top_p', 1.0)
 
     try:
