@@ -12,7 +12,7 @@ class FakeBuffer(list):
 class FakeVim:
     def __init__(self):
         self.current = types.SimpleNamespace(buffer=FakeBuffer())
-        self._vars = {"&filetype": "python", "g:ollama_use_inline_diff": "0"}
+        self._vars = {"&filetype": "python", "g:ollama_use_inline_diff": "1"}
         self.commands = []
 
     def eval(self, expr):
@@ -27,6 +27,25 @@ class FakeVimHelper:
     @classmethod
     def reset(cls):
         cls.calls.clear()
+        cls._reset_state()
+
+    @classmethod
+    def _reset_state(cls):
+        cls.signs = {}
+        cls.above_text = {}
+        cls.below_text = {}
+        cls.highlights = {}
+
+    # ---------------------------------------------------------------------
+    # Basic VimHelper methods
+    # ---------------------------------------------------------------------
+    ###############################
+    # Buffer edit functions
+    ###############################
+
+    @classmethod
+    def GetLine(cls, lineno, buf):
+        return buf[lineno]
 
     @classmethod
     def InsertLine(cls, lineno, content, buf):
@@ -34,18 +53,121 @@ class FakeVimHelper:
         buf.insert(lineno, content)
 
     @classmethod
+    def ReplaceLine(cls, lineno, content, buf):
+        cls.calls.append(("ReplaceLine", lineno, content))
+        oldcontent = buf[lineno]
+        buf[lineno] = content
+        return oldcontent
+
+    @classmethod
     def DeleteLine(cls, lineno, buf):
         cls.calls.append(("DeleteLine", lineno))
         if 0 <= lineno < len(buf):
             return buf.pop(lineno)
 
+    ###############################
+    # Sign edit functions
+    ###############################
     @classmethod
-    def GetLine(cls, lineno, buf):
-        return buf[lineno]
+    def PlaceSign(cls, lineno, signname, buf):
+        cls.signs[lineno] = signname
+        cls.calls.append(("PlaceSign", lineno, signname))
+
+    @classmethod
+    def UnplaceSign(cls, lineno, buf):
+        cls.signs[lineno] = ''
+        cls.calls.append(("UnpaceSign", lineno))
 
     @classmethod
     def SignClear(cls, *a, **kw):
+        cls.signs = {}
         cls.calls.append(("SignClear",))
+
+    ###############################
+    # Line property edit functions
+    ###############################
+    @classmethod
+    def ShowTextAbove(cls, lineno, propname, text, buf):
+        if lineno not in cls.above_text:
+            cls.above_text[lineno] = text
+        else:
+            cls.above_text[lineno] += "\n"+text
+        cls.calls.append(("ShowTextAbove", lineno, text))
+
+    @classmethod
+    def ShowTextBelow(cls, lineno, propname, text, buf):
+        if lineno not in cls.below_text:
+            cls.below_text[lineno] = text
+        else:
+            cls.below_text[lineno] += "\n"+text
+        cls.calls.append(("ShowTextBelow", lineno, text))
+
+    @classmethod
+    def HighlightLine(cls, lineno, propname, length, buf):
+        cls.highlights[lineno] = propname
+        cls.calls.append(("HighlightLine", lineno, length))
+
+    # ---------------------------------------------------------------------
+    # Render functions
+    # ---------------------------------------------------------------------
+    @classmethod
+    def render_state(cls, buf):
+        """
+        Render buffer as simple text with markers:
+        D = deleted line above this line
+        A = added line
+        """
+        out = []
+        for i, line in enumerate(buf, 0):
+            marker = ' '
+            if i in cls.signs:
+                if cls.signs[i] == 'DeletedLine': marker = '-'
+                elif cls.signs[i] == 'NewLine': marker = '+'
+                elif cls.signs[i] == 'ChangedLine': marker = '~'
+            if i in cls.above_text:
+                out.append(f'A {i} {cls.above_text[i]}')
+            out.append(f'{marker} {i} {line}')
+            if i in cls.below_text:
+                out.append(f'B {i} {cls.below_text[i]}')
+        return '\n'.join(out)
+
+    @classmethod
+    def render_html(cls, buf, title="Buffer Render"):
+        """
+        Render buffer as HTML with line numbers, added lines green, deleted lines red.
+        """
+        html = ['<html><head><meta charset="utf-8"><title>{}</title>'.format(title),
+                '<style>',
+                '.line { font-family: monospace; white-space: pre; }',
+                '.added { background-color: #d0f0c0; }',
+                '.deleted { background-color: #f0d0d0; }',
+                '.changed { background-color: #f0f0d0; }',
+                '.normal {}',
+                '</style></head><body>']
+
+        for i, line in enumerate(buf, 0):
+            cls_sign = cls.signs.get(i, None)
+            cls_above = cls.above_text.get(i, '')
+            cls_below = cls.below_text.get(i, '')
+
+            # Show above text
+            if cls_above:
+                html.append('<div class="line deleted">{}</div>'.format(cls_above))
+
+            # Show line
+            css_class = 'normal'
+            if cls_sign == 'DeletedLine': css_class = 'deleted'
+            elif cls_sign == 'NewLine': css_class = 'added'
+            elif cls_sign == 'ChangedLine': css_class = 'changed'
+
+            html.append('<div class="line {}">{:3d} {}</div>'.format(css_class, i, line))
+
+            # Show below text
+            if cls_below:
+                html.append('<div class="line deleted">{}</div>'.format(cls_below))
+
+        html.append('</body></html>')
+        return '\n'.join(html)
 
 # -----------------------------------------------------------------------------
 # Prepare sys.modules for CodeEditor import
@@ -171,10 +293,20 @@ if os.path.isdir(EXAMPLES_DIR):
                 diff = CodeEditor.compute_diff(before, after)
                 buf = FakeBuffer(before.copy())
                 FakeVimHelper.reset()
-                CodeEditor.apply_change(diff, buf)
+                CodeEditor.apply_diff(diff, buf)
                 assert buf == after
                 groups = CodeEditor.group_diff(diff, starting_line=1)
                 assert all('changes' in g and g['changes'] for g in groups)
+                text = FakeVimHelper.render_state(buf)
+                # create output dir
+                os.makedirs("output", exist_ok=True)
+                with open(f"output/test_{name}.state", 'w') as f:
+                    f.write(text)
+                html = FakeVimHelper.render_html(buf)
+                # save html to file
+                with open(f"output/test_{name}.html", 'w') as f:
+                    f.write(html)
+
             _test.__name__ = f"test_example_{name.replace('.', '_')}"
             return _test
 
