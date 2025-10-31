@@ -45,6 +45,22 @@ else
     " strip any trailing slash from the URL
     let g:ollama_host = substitute(g:ollama_host, '/$', '', '')
 endif
+if !exists('g:ollama_mistral_baseurl')
+    " Use official Mistral endpoint by default
+    let g:ollama_mistral_baseurl = ''
+endif
+if !exists('g:ollama_mistral_credentialname')
+    " UNIX Pass credential name to lookup API key for Mistral service
+    let g:ollama_mistral_credentialname = ''
+endif
+if !exists('g:ollama_openai_baseurl')
+    " Use official OpenAI endpoint by default
+    let g:ollama_openai_baseurl = ''
+endif
+if !exists('g:ollama_openai_credentialname')
+    " UNIX Pass credential name to lookup API key for OpenAI service
+    let g:ollama_openai_credentialname = ''
+endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
@@ -58,6 +74,10 @@ endif
 if !exists('g:ollama_context_lines')
     let g:ollama_context_lines = 30
 endif
+if !exists('g:ollama_model_provider')
+    " Provider for code completions: 'ollama' or 'openai'
+    let g:ollama_model_provider = 'ollama'
+endif
 if !exists('g:ollama_model')
     " default code completion model
     let g:ollama_model = 'codellama:code'
@@ -68,10 +88,15 @@ if !exists('g:ollama_model_options')
     let g:ollama_model_options = {
                 \ 'temperature': 0,
                 \ 'top_p': 0.95,
-                \ 'num_predict': 128
+                \ 'num_predict': 128,
+                \ 'max_tokens': 500
                 \ }
 endif
 " Chat specific settings
+if !exists('g:ollama_chat_provider')
+    " Provider for chat models: 'ollama' or 'openai'
+    let g:ollama_chat_provider = 'ollama'
+endif
 if !exists('g:ollama_chat_model')
     " default chat model
     let g:ollama_chat_model = 'llama3'
@@ -92,6 +117,10 @@ if !exists('g:ollama_chat_timeout')
     let g:ollama_chat_timeout = 10
 endif
 " Code edit specific settings
+if !exists('g:ollama_edit_provider')
+    " Provider for edit models: 'ollama' or 'openai'
+    let g:ollama_edit_provider = 'ollama'
+endif
 if !exists('g:ollama_edit_model')
     " default edit model
     let g:ollama_edit_model = 'qwen2.5-coder:7b'

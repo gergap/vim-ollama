@@ -9,6 +9,13 @@ All notable changes to this project will be documented in this file.
 - Add repo completion with multiple files
 - Insert contexts into chat window using special keywords (e.g. @Files)
 
+## [Version 1.2] - 2025-10-31
+
+- Add support for OpenAI REST API, this includes support for
+  - OpenAI (https://openai.com)
+  - Mistral (https://mistral.ai)
+  - and local OpenAI endpoints like e.g. LM-Studio
+
 ## [Version 1.1] - 2025-03-18
 
 ### Added

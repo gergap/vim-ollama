@@ -89,9 +89,8 @@ endfunction
 function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: " .. a:data)
     if !empty(a:data)
-        echohl ErrorMsg
         echom "Error: " .. a:data
-        echohl None
+        call popup_notification(a:data, #{ pos: "center", time: 3000 })
     endif
 endfunction
 
@@ -102,7 +101,13 @@ function! s:HandleExit(job, exit_code)
         if a:job isnot s:kill_job
             echohl ErrorMsg
             echom "Process exited with code: " .. a:exit_code
-            echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            if g:ollama_model_provider =~ '^openai'
+                echom "Check if g:ollama_openai_baseurl=" .. g:ollama_openai_baseurl .. " is correct."
+            elseif g:ollama_model_provider == 'mistral'
+                echom "Check if g:ollama_mistral_baseurl=" .. g:ollama_mistral_baseurl .. " is correct."
+            else
+                echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            endif
             echohl None
         else
             let s:kill_job = v:null
@@ -150,22 +155,43 @@ function! ollama#GetSuggestion(timer)
 
     let l:prompt = s:ConstructPrompt()
 
+    " Clone global model options and add the current filetype
+    let l:model_options_dict = copy(g:ollama_model_options)
+    let l:model_options_dict['lang'] = &filetype
+
     let l:model_options =
-          \ substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
+          \ substitute(json_encode(l:model_options_dict), "\"", "\\\"", "g")
     call ollama#logger#Debug(
           \ "Connecting to Ollama on " .. g:ollama_host
           \ .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+    let l:base_url = g:ollama_host
+    if g:ollama_model_provider =~ '^openai'
+        let l:base_url = g:ollama_openai_baseurl
+    endif
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
         \ g:ollama_plugin_dir .. "/python/complete.py",
+        \ "-p", g:ollama_model_provider,
         \ "-m", g:ollama_model,
-        \ "-u", g:ollama_host,
+        \ "-u", l:base_url,
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]
+    " Add optional credentialname for looking up the API key
+    if g:ollama_model_provider =~ '^openai'
+        if g:ollama_openai_credentialname != ''
+            " add credentialname option for OpenAI
+            let l:command += [ '-k', g:ollama_openai_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'mistral'
+        if g:ollama_mistral_credentialname != ''
+            " add credentialname option for Mistral
+            let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',

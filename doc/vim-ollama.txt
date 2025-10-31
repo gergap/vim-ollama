@@ -122,7 +122,7 @@ The vim-ollama plugin provides the following commands:
 <
     - Example:
 >
-        :OllamaTask "check spelling of this text"
+        :OllamaTask "Add doxygen comments to all functions"
 <
                                                       *:OllamaEdit*
 :OllamaEdit
@@ -251,6 +251,62 @@ g:ollama_host
 >
         let g:ollama_host = 'http://your-server:port'
 <
+                                                      *g:ollama_mistral_baseurl*
+g:ollama_mistral_baseurl
+    - Description: Sets the Mistral base URL used for Mistral backend.
+    - Default: '' (Currently, this will be ignored and always use Mistral API)
+    - Example:
+>
+        let g:ollama_mistral_baseurl = 'http://localhost:1234'
+<
+                                                      *g:ollama_mistral_credentialname*
+g:ollama_mistral_credentialname
+    - Description: Sets the credentialname for loading the API-key from the
+      UNIX password manager. This avoids setting the MISTRAL_API_KEY as
+      environment variable.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_mistral_credentialname = 'api-tokens/mistral-ai'
+<
+                                                      *g:ollama_openai_baseurl*
+g:ollama_openai_baseurl
+    - Description: Sets the OpenAI base URL used for OpenAI backend.
+      You can use this to configure other OpenAI compatible endpoints
+      like e.g. LMStudio or Mistral.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_openai_baseurl = 'http://localhost:1234/v1'
+<
+                                                      *g:ollama_openai_credentialname*
+g:ollama_openai_credentialname
+    - Description: Sets the credentialname for loading the API-key from the
+      UNIX password manager. This avoids setting the OPENAI_API_KEY as
+      environment variable.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_openai_credentialname = 'api-tokens/openai'
+<
+                                                      *g:ollama_model_provider*
+g:ollama_model_provider
+    - Description: Configures the REST API backend for code completion.
+      Currently, 'ollama', 'mistral', 'openai' and 'openai_legacy' are supported.
+      OpenAI notes: The OpenAI '/v1/chat/completions' endpoint does not support
+      fill-in-the-middle (FIM), which is required for good code completion. The
+      plugin tries to work around this using prompt engineering. Choose
+      'openai_legacy' ('/v1/completions' endpoint) to make FIM working with
+      OpenAI, or choose a different provider.
+      Mistral notes: Mistral also supports an OpenAI compatible endpoint
+      at https://api.mistral.ai/v1 and https://codestral.mistral.ai/v1.
+      However, it is recommended to use the 'mistral' provider instead for
+      better FIM support.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_model_provider = 'openai_legacy'
+<
                                                       *g:ollama_model*
 g:ollama_model
     - Description: Sets the default Ollama model for code completions.
@@ -263,6 +319,8 @@ g:ollama_model
 g:ollama_model_options
     - Description: Sets the default Ollama model options.
     - Default: '{"temperature": 0, "top_p": 0.95}'
+      Different REST APIs may require different options. OpenAI uses
+      `max_tokens` instead of `num_predict` to give one example.
     - Example:
 >
         let g:ollama_model_options = {
@@ -285,11 +343,13 @@ g:ollama_context_lines
                                                       *g:ollama_debounce_time*
 g:ollama_debounce_time
     - Description: Sets the delay after the last keystroke before triggering
-      a new search. Using smaller values give you faster reaction times, but
-      create higher load on the system. Small values make only sense on fast
+      a new search. Using smaller values gives you faster reaction times, but
+      creates higher load on the system. Small values make sense only on fast
       GPU based LLMs, where the LLM computation time is not much longer than
       the debounce time.
-      By settings this to 0 you can disable the auto-trigger behavior and
+      When using paid services, you may want to use a higher value to save
+      costs.
+      By setting this to 0 you can disable the auto-trigger behavior and
       define a mapping for `<Plug>(ollama-trigger-completion)` instead.
     - Default: 500 ms
     - Example:
@@ -335,6 +395,15 @@ g:ollama_completion_denylist_filetype
 >
         let g:ollama_completion_denylist_filetype = ['fuf']
 <
+                                                      *g:ollama_chat_provider*
+g:ollama_chat_provider
+    - Description: Configures the REST API backend for chat conversations.
+      Currently, 'ollama' and 'openai' are supported.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_chat_provider = 'openai'
+<
                                                       *g:ollama_chat_model*
 g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
@@ -367,10 +436,22 @@ g:ollama_chat_options
                                                       *g:ollama_chat_timeout*
 g:ollama_chat_timeout
     - Description: Sets the timeout value in chat requests.
+      Unlike code completion, the plugin uses streaming responses for chats,
+      but if the time to receive single fragments of a response exceeds the
+      timeout value, the request will be aborted.
     - Default: 10
     - Example:
 >
         let g:ollama_chat_timeout = 10
+<
+                                                      *g:ollama_edit_provider*
+g:ollama_edit_provider
+    - Description: Configures the REST API backend for edit tasks.
+      Currently, 'ollama' and 'openai' are supported.
+    - Default: 'ollama'
+    - Example:
+>
+        let g:ollama_edit_provider = 'openai'
 <
                                                       *g:ollama_edit_model*
 g:ollama_edit_model
@@ -433,7 +514,7 @@ g:ollama_use_venv
       executing the required python scripts. If enabled it will install
       the required packages automatically in this vim-ollama specific
       virtual environment.
-      When disabled, you an still manually install the packges as before.
+      When disabled, you need to install the packages manually.
     - Default: 0 (if missing), but setup wizard creates a config with 1 by default.
     - Example:
 >
