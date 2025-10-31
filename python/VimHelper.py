@@ -78,28 +78,3 @@ def ShowTextBelow(lineno, propname, text, buf):
         f"call prop_add({lineno}, 0, {{'type': '{propname}', 'text': '{escaped_text}', 'text_align': 'below', 'bufnr': {bufno}}})"
     )
 
-def ApplyInlineDiff(change, offset, buf):
-    lineno = offset + change['line_number']
-    status = change['type']
-    content = change['line']
-    content_len = len(content)
-
-    if status == 'added':
-        InsertLine(lineno, content, buf)
-        HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
-        PlaceSign(lineno, 'NewLine', buf)
-
-    elif status == 'changed':
-        oldcontent = ReplaceLine(lineno, content, buf)
-        # JSON encode old content to avoid escaping issues
-        oldcontent = json.dumps(oldcontent)
-        HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
-        ShowTextAbove(lineno, 'OllamaDiffDel', oldcontent, buf)
-        PlaceSign(lineno, 'ChangedLine', buf)
-
-    elif status == 'deleted':
-        oldcontent = DeleteLine(lineno, buf)
-        # JSON encode old content to avoid escaping issues
-        oldcontent = json.dumps(oldcontent)
-        ShowTextAbove(lineno, 'OllamaDiffDel', oldcontent, buf)
-        PlaceSign(lineno, 'DeletedLine', buf)
