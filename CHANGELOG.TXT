@@ -3,11 +3,11 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - Planned changes and ideas...
-- List changes that are planned or being worked on here.
 - Cycle through different suggestions in code completion.
 - Generic template support read from the model itself.
 - Add repo completion with multiple files
 - Insert contexts into chat window using special keywords (e.g. @Files)
+- AI Tool support for agentic behavior
 
 ## [Version 1.2] - 2025-10-31
 
@@ -15,6 +15,20 @@ All notable changes to this project will be documented in this file.
   - OpenAI (https://openai.com)
   - Mistral (https://mistral.ai)
   - and local OpenAI endpoints like e.g. LM-Studio
+  - add UNIX password manager credential access
+- Add support for manual triggering code completion
+- Improve killing of running python chat processes
+
+- User contributions
+  - merged PR-84: Preserve newlines in logfile
+  - merged PR-82: Use more modern .. string concatenation
+  - merged PR-78,80: Improve documentation
+  - merged PR-77: Add completion filetype allow/deny list
+  - merged PR-70: Improve finding plugin directory
+  - merged PR-68: Don't interfere with non-ollama-chat buffers
+  - merged PR-65: Add granite-code model support
+  - merged PR-64: Add codegeex4 model support
+  - merged PR-61: Add support for vim with dynamically linked python
 
 ## [Version 1.1] - 2025-03-18
 
@@ -29,7 +43,6 @@ All notable changes to this project will be documented in this file.
 - Change default mapping `<C-I>` to `<leader>e`, because many terminals map `<C-I>`
 - Various bugfixes: See git history for more details.
   to `<TAB>`.
-
 
 ## [Version 1.0] - 2025-02-08
 
