@@ -37,7 +37,7 @@ class FakeVimHelper:
     def DeleteLine(cls, lineno, buf):
         cls.calls.append(("DeleteLine", lineno))
         if 0 <= lineno < len(buf):
-            buf.pop(lineno)
+            return buf.pop(lineno)
 
     @classmethod
     def GetLine(cls, lineno, buf):
