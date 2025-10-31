@@ -148,5 +148,37 @@ int main(int argc, char *argv[])
         cur_diff = "\n".join(g['changes'])
         assert cur_diff == exp_diff
 
+# -----------------------------------------------------------------------------
+# Real code examples from external files
+# -----------------------------------------------------------------------------
+EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "examples")
+if os.path.isdir(EXAMPLES_DIR):
+    for fname in os.listdir(EXAMPLES_DIR):
+        if not fname.endswith(".txt"):
+            continue
+        path = os.path.join(EXAMPLES_DIR, fname)
+        with open(path, 'r') as f:
+            content = f.read()
+        if '---' not in content:
+            continue
+        before_text, after_text = content.split('---', 1)
+        before_lines = before_text.strip().splitlines()
+        after_lines = after_text.strip().splitlines()
+
+        # Create pytest case dynamically
+        def make_test(before, after, name=fname):
+            def _test():
+                diff = CodeEditor.compute_diff(before, after)
+                buf = FakeBuffer(before.copy())
+                FakeVimHelper.reset()
+                CodeEditor.apply_change(diff, buf)
+                assert buf == after
+                groups = CodeEditor.group_diff(diff, starting_line=1)
+                assert all('changes' in g and g['changes'] for g in groups)
+            _test.__name__ = f"test_example_{name.replace('.', '_')}"
+            return _test
+
+        globals()[f"test_example_{fname.replace('.', '_')}"] = make_test(before_lines, after_lines)
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
