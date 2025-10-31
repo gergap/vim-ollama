@@ -141,6 +141,7 @@ def apply_diff(diff, buf, line_offset=0):
     """
     debug_print("\n".join(diff))
     deleted_lines = []  # Collect deleted lines for multi-line display
+    lineno = line_offset
 
     for line in diff:
 
@@ -201,9 +202,15 @@ def apply_diff(diff, buf, line_offset=0):
             line_offset += 1
 
     # Handle any remaining deleted lines at the end
-    if deleted_lines:
-        for i, deleted_line in enumerate(deleted_lines):
-            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
+    # check if lineno is below buf's max lines
+    if line_offset >= len(buf):
+        if deleted_lines:
+            for i, deleted_line in enumerate(deleted_lines):
+                VimHelper.ShowTextBelow(line_offset-1, 'OllamaDiffDel', deleted_line, buf)
+    else:
+        if deleted_lines:
+            for i, deleted_line in enumerate(deleted_lines):
+                VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
 
 def apply_change(diff, buf, line_offset=0):
     """

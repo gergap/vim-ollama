@@ -67,6 +67,17 @@ def ShowTextAbove(lineno, propname, text, buf):
         f"call prop_add({lineno}, 0, {{'type': '{propname}', 'text': '{escaped_text}', 'text_align': 'above', 'bufnr': {bufno}}})"
     )
 
+def ShowTextBelow(lineno, propname, text, buf):
+    """
+    Show text below the given line with specified property type.
+    """
+    bufno = buf.number
+    # Escape for insertion as a literal single quotes string.
+    escaped_text = text.replace("'", "''")
+    vim.command(
+        f"call prop_add({lineno}, 0, {{'type': '{propname}', 'text': '{escaped_text}', 'text_align': 'below', 'bufnr': {bufno}}})"
+    )
+
 def ApplyInlineDiff(change, offset, buf):
     lineno = offset + change['line_number']
     status = change['type']
