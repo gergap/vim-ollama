@@ -116,5 +116,37 @@ def test_multiple_groups_in_diff():
     for g in groups:
         assert 'changes' in g and g['changes']
 
+def test_real_code():
+    # Add missing include at start of file
+    before="""int main(int argc, char *argv[])
+{
+    printf("Hello, World\\n");
+    return 0;
+}
+"""
+    after="""#include <stdio>
+
+int main(int argc, char *argv[])
+{
+    printf("Hello, World\\n");
+    return 0;
+}
+"""
+    # expected diff
+    exp_diff="""\
++ #include <stdio>
++ """
+    old = before.split("\n")
+    new = after.split("\n")
+    diff = CodeEditor.compute_diff(old, new)
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+
+    # Check for expected diff
+    assert len(groups) == 1
+    for g in groups:
+        assert g['changes']
+        cur_diff = "\n".join(g['changes'])
+        assert cur_diff == exp_diff
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
