@@ -154,6 +154,58 @@ EOF
     let b:timer = timer_start(100, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
 endfunction
 
+function! s:AIFixCode() abort
+    if exists('g:edit_in_progress') && g:edit_in_progress
+        return
+    endif
+    let l:model_options = substitute(json_encode(g:ollama_edit_options), "\"", "\\\"", "g")
+    let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+
+    " Call the python code to edit the code via Ollama.
+    " The python code starts a worker thread so that the GUI stays responsive
+    " while waiting for the response.
+    python3 << EOF
+import vim
+
+# Process arguments
+log_level = int(vim.eval('l:log_level'))
+baseurl = vim.eval('g:ollama_host')
+provider = vim.eval('g:ollama_edit_provider')
+credentialname = None
+if provider.startswith('openai'):
+    baseurl = vim.eval('g:ollama_openai_baseurl')
+    credentialname = vim.eval('g:ollama_openai_credentialname')
+elif provider == 'mistral':
+    baseurl = vim.eval('g:ollama_mistral_baseurl')
+    credentialname = vim.eval('g:ollama_mistral_credentialname')
+AIReflect.SetLogLevel(log_level)
+# Now pass these settings to the CodeEditor function
+AIReflect.ai_reflective_fix_code(baseurl, 'mistral:7b', credentialname)
+EOF
+
+"    " Create a floating window for progress
+"    let l:popup_options = {
+"    \   'pos': 'center',
+"    \   'minwidth': 20,
+"    \   'minheight': 1,
+"    \   'time': 0,
+"    \   'zindex': 10,
+"    \   'border': [],
+"    \   'padding': [0, 1, 0, 1]
+"    \ }
+"    let l:popup = popup_create('Processing...', l:popup_options)"
+"    let b:popup = l:popup
+"    let g:progress_indicator = 0
+"    let g:edit_in_progress = 1
+"
+"    " Set up a timer to check progress periodically
+"    let b:timer = timer_start(100, { -> ollama#edit#UpdateProgress(l:popup) }, {'repeat': -1})
+endfunction
+
+function! ollama#edit#FixCode()
+    call s:AIFixCode()
+endfunction
+
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Start the Python function and return immediately (Range command)
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""

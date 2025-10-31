@@ -414,6 +414,7 @@ if plugin_python_path not in sys.path:
 try:
     # Import your CodeEditor module
     import CodeEditor
+    import AIReflect
     import VimHelper
 except ImportError as e:
     print(f'Error importing CodeEditor module:\n{e}')
