@@ -179,6 +179,10 @@ sys.modules['VimHelper'] = FakeVimHelper
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "python")))
 import CodeEditor
 
+# initialize logger before using it
+CodeEditor.CreateLogger()
+CodeEditor.SetLogLevel(10)
+
 # -----------------------------------------------------------------------------
 # Test cases for CodeEditor diff logic
 # -----------------------------------------------------------------------------
