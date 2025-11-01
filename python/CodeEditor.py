@@ -141,7 +141,6 @@ def apply_diff(diff, buf, line_offset=0):
     """
     debug_print("\n".join(diff))
     deleted_lines = []  # Collect deleted lines for multi-line display
-    lineno = line_offset
 
     for line in diff:
 
@@ -180,6 +179,7 @@ def apply_diff(diff, buf, line_offset=0):
         elif line.startswith('  '):
             debug_print("unchanged line")
             # Unchanged line
+            lineno = line_offset
             if deleted_lines:
                 # Show the collected deleted lines above the current unchanged line
                 for i, deleted_line in enumerate(deleted_lines):
@@ -187,7 +187,6 @@ def apply_diff(diff, buf, line_offset=0):
                 deleted_lines = []  # Reset deleted lines
                 VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
 
-            lineno = line_offset
             old_content = VimHelper.GetLine(lineno, buf)
             debug_print(f"line {lineno}: '{old_content}'")
             debug_print(f"diffline {lineno}: '{line}'")
@@ -751,7 +750,7 @@ def AcceptChange(line):
         print(f'AcceptChange: group for line {line} not found')
         return
 
-    log.debug(group)
+    log.debug("diff group: " +json.dumps(group, indent=4))
     # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
     end_line = group.get('end_line', 1) + g_restored_lines
@@ -777,7 +776,7 @@ def RejectChange(line):
         print(f'RejectChange: group for line {line} not found')
         return
 
-    log.debug(group)
+    log.debug("diff group: " +json.dumps(group, indent=4))
     # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
     end_line = group.get('end_line', 1) + g_restored_lines
