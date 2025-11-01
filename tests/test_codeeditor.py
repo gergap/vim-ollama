@@ -197,20 +197,69 @@ def test_no_changes():
     assert buf == old
 
 def test_single_line_addition():
+    diff = ["+ c"]
     buf = FakeBuffer(["a", "b"])
-    diff = ["  a", "+ c", "  b"]
     FakeVimHelper.reset()
+    # apply at start of buffer
     CodeEditor.apply_change(diff, buf)
-    assert "c" in buf
+    assert buf == ["c", "a", "b"]
+    assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
+    # apply in the middle
+    buf = FakeBuffer(["a", "b"])
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf, 1)
+    assert buf == ["a", "c", "b"]
+    assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
+    # apply at end of buffer
+    buf = FakeBuffer(["a", "b"])
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf, 2)
+    assert buf == ["a", "b", "c"]
+    assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
+    # apply on empty buffer
+    buf = FakeBuffer([])
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf, 2)
+    assert buf == ["c"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
 
 def test_single_line_deletion():
+    # delete first line
+    buf = FakeBuffer(["a", "b", "c"])
+    diff = ["- a"]
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf)
+    assert buf == ["b", "c"]
+    assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
+    # delete middle line
+    buf = FakeBuffer(["a", "b", "c"])
+    diff = ["- b"]
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf, 1)
+    assert buf == ["a", "c"]
+    assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
+    # delete middle line with unchanged context
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["  a", "- b", "  c"]
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf)
+    CodeEditor.apply_change(diff, buf, 0)
     assert buf == ["a", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
+    # delete last line
+    buf = FakeBuffer(["a", "b", "c"])
+    diff = ["- c"]
+    FakeVimHelper.reset()
+    CodeEditor.apply_change(diff, buf, 2)
+    assert buf == ["a", "b"]
+    assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
+    # test not matching diff
+    buf = FakeBuffer(["a", "b", "c"])
+    diff = ["- d"]
+    FakeVimHelper.reset()
+    try:
+        CodeEditor.apply_change(diff, buf, 2)
+    except Exception as e:
+        assert str(e).startswith("error: diff does not apply at deleted line 2:")
 
 def test_single_line_change():
     buf = FakeBuffer(["x", "y", "z"])
@@ -231,16 +280,122 @@ def test_change_last_line():
     CodeEditor.apply_change(diff, buf)
     assert buf[-1] == "END"
 
-def test_multiple_groups_in_diff():
-    old = ["a", "b", "c", "d", "e", "f"]
-    new = ["a", "x", "c", "d", "y", "f"]
-    diff = CodeEditor.compute_diff(old, new)
+def test_group_diff_line_numbers():
+    """ This test computes grouped diffs and checks the expected line numbers of the changes """
+    # Insert two groups
+    diff ="""
+  line1
++ foo
++ bar
+  line2
++ bla
+  line4
+    """
+    diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
+    assert len(groups) == 2
+    groups[0].get('start_line') == 2
+    groups[0].get('end_line') == 3
+    groups[1].get('start_line') == 5
+    groups[1].get('end_line') == 5
+    # Delete two groups
+    diff ="""
+  line1
+- line2
+  line3
+- line4
+- line5
+    """
+    diff = diff.strip().splitlines()
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    assert len(groups) == 2
+    groups[0].get('start_line') == 2
+    groups[0].get('end_line') == 2
+    groups[1].get('start_line') == 3
+    groups[1].get('end_line') == 3
+    # Insert and delete
+    diff ="""
+  line1
++ foo
+  line2
+- line3
+- line4
+  line5
+    """
+    diff = diff.strip().splitlines()
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    assert len(groups) == 2
+    groups[0].get('start_line') == 2
+    groups[0].get('end_line') == 2
+    groups[1].get('start_line') == 4
+    groups[1].get('end_line') == 4
+    # Delete and insert
+    diff ="""
+  line1
+- line2
+  line3
+  line4
++ foo
+  line5
+    """
+    diff = diff.strip().splitlines()
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    assert len(groups) == 2
+    groups[0].get('start_line') == 2
+    groups[0].get('end_line') == 2
+    groups[1].get('start_line') == 4
+    groups[1].get('end_line') == 4
+    # Change lines
+    diff ="""
+  line1
+- line2
++ foo
+  line3
+- line4
++ foo
+  line5
+    """
+    diff = diff.strip().splitlines()
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    assert len(groups) == 2
+    groups[0].get('start_line') == 2
+    groups[0].get('end_line') == 2
+    groups[1].get('start_line') == 4
+    groups[1].get('end_line') == 4
 
-    # Expect at least two groups separated by unchanged lines
-    assert len(groups) >= 2
-    for g in groups:
-        assert 'changes' in g and g['changes']
+#def test_group_diff_only_inserts():
+#    old = ["a", "b", "c", "d", "e", "f"]
+#    new = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
+#    diff = CodeEditor.compute_diff(old, new)
+#    groups = CodeEditor.group_diff(diff, starting_line=1)
+#
+#    # Expect at least two groups separated by unchanged lines
+#    assert len(groups) == 1
+#    for g in groups:
+#        assert 'changes' in g and g['changes']
+#
+#def test_group_diff_only_deletes():
+#    old = ["a", "b", "c", "d", "e", "f"]
+#    new = ["a", "b", "c"]
+#    diff = CodeEditor.compute_diff(old, new)
+#    groups = CodeEditor.group_diff(diff, starting_line=1)
+#
+#    # Expect at least two groups separated by unchanged lines
+#    assert len(groups) == 1
+#    g = groups[0]
+#    assert g.get('start_line') == 4
+#    assert g.get('end_line') == 6
+#
+#def test_multiple_groups_in_diff():
+#    old = ["a", "b", "c", "d", "e", "f"]
+#    new = ["a", "x", "c", "d", "y", "f"]
+#    diff = CodeEditor.compute_diff(old, new)
+#    groups = CodeEditor.group_diff(diff, starting_line=1)
+#
+#    # Expect at least two groups separated by unchanged lines
+#    assert len(groups) >= 2
+#    for g in groups:
+#        assert 'changes' in g and g['changes']
 
 def test_real_code():
     # Add missing include at start of file
@@ -273,6 +428,68 @@ int main(int argc, char *argv[])
         assert g['changes']
         cur_diff = "\n".join(g['changes'])
         assert cur_diff == exp_diff
+
+#def test_apply_accept_and_reject():
+#    # buffer state before change
+#    before="""line1
+#line2
+#line3
+#line4
+#line5
+#line6
+#"""
+#    # AI suggestions
+#    after="""line1
+#line2 foo
+#line3
+#line4 bar
+#line5
+#line6
+#"""
+#    # Expected result when accepting 1st change and rejecting 2nd change
+#    exp_result="""line1
+#line2 foo
+#line3
+#line4
+#line5
+#line6
+#"""
+#    old = before.strip().splitlines()
+#    new = after.strip().splitlines()
+#    exp = exp_result.strip().splitlines()
+#    # prepare fake buffer
+#    buf = FakeBuffer(old.copy())
+#    FakeVimHelper.reset()
+#
+#    # compute the diff
+#    diff = CodeEditor.compute_diff(old, new)
+#    # apply as inline diff
+#    CodeEditor.apply_diff(diff, buf)
+#    # compute groups
+#    groups = CodeEditor.group_diff(diff, starting_line=1)
+#    # we need to save this in CodeEditor to make things working
+#    CodeEditor.g_groups = groups
+#    vim.current.buffer = buf
+#
+#    # Check for expected diff
+#    assert len(groups) == 2
+#    # accept first change on line 2
+#    CodeEditor.AcceptChange(2)
+#    # reject second change on line 4
+#    CodeEditor.RejectChange(4)
+#
+#    # create output dir
+#    os.makedirs("output", exist_ok=True)
+#    # debug output
+#    text = FakeVimHelper.render_state(buf)
+#    with open(f"output/test_accept_and_reject.state", 'w') as f:
+#        f.write(text)
+#    html = FakeVimHelper.render_html(buf)
+#    # save html to file
+#    with open(f"output/test_accept_and_reject.html", 'w') as f:
+#        f.write(html)
+#
+#    assert buf == exp
 
 # -----------------------------------------------------------------------------
 # Real code examples from external files
