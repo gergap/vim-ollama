@@ -45,25 +45,25 @@ class FakeVimHelper:
 
     @classmethod
     def GetLine(cls, lineno, buf):
-        return buf[lineno]
+        return buf[lineno-1]
 
     @classmethod
     def InsertLine(cls, lineno, content, buf):
         cls.calls.append(("InsertLine", lineno, content))
-        buf.insert(lineno, content)
+        buf.insert(lineno-1, content)
 
     @classmethod
     def ReplaceLine(cls, lineno, content, buf):
         cls.calls.append(("ReplaceLine", lineno, content))
-        oldcontent = buf[lineno]
-        buf[lineno] = content
+        oldcontent = buf[lineno-1]
+        buf[lineno-1] = content
         return oldcontent
 
     @classmethod
     def DeleteLine(cls, lineno, buf):
         cls.calls.append(("DeleteLine", lineno))
-        if 0 <= lineno < len(buf):
-            return buf.pop(lineno)
+        if 1 <= lineno <= len(buf):
+            return buf.pop(lineno-1)
 
     ###############################
     # Sign edit functions
@@ -178,6 +178,7 @@ sys.modules['VimHelper'] = FakeVimHelper
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "python")))
 import CodeEditor
+import vim
 
 # initialize logger before using it
 CodeEditor.CreateLogger()
@@ -193,7 +194,7 @@ def test_no_changes():
     diff = CodeEditor.compute_diff(old, new)
     assert diff == [] or all(line.startswith(' ') for line in diff)
     buf = FakeBuffer(old.copy())
-    CodeEditor.apply_change(diff, buf)
+    CodeEditor.apply_change(diff, buf, 1)
     assert buf == old
 
 def test_single_line_addition():
@@ -201,25 +202,25 @@ def test_single_line_addition():
     buf = FakeBuffer(["a", "b"])
     FakeVimHelper.reset()
     # apply at start of buffer
-    CodeEditor.apply_change(diff, buf)
+    CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["c", "a", "b"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply in the middle
     buf = FakeBuffer(["a", "b"])
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 1)
+    CodeEditor.apply_change(diff, buf, 2)
     assert buf == ["a", "c", "b"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply at end of buffer
     buf = FakeBuffer(["a", "b"])
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 2)
+    CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["a", "b", "c"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply on empty buffer
     buf = FakeBuffer([])
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 2)
+    CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["c"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
 
@@ -228,28 +229,28 @@ def test_single_line_deletion():
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- a"]
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf)
+    CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["b", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete middle line
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- b"]
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 1)
+    CodeEditor.apply_change(diff, buf, 2)
     assert buf == ["a", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete middle line with unchanged context
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["  a", "- b", "  c"]
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 0)
+    CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["a", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete last line
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- c"]
     FakeVimHelper.reset()
-    CodeEditor.apply_change(diff, buf, 2)
+    CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["a", "b"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # test not matching diff
@@ -257,9 +258,9 @@ def test_single_line_deletion():
     diff = ["- d"]
     FakeVimHelper.reset()
     try:
-        CodeEditor.apply_change(diff, buf, 2)
+        CodeEditor.apply_change(diff, buf, 3)
     except Exception as e:
-        assert str(e).startswith("error: diff does not apply at deleted line 2:")
+        assert str(e).startswith("error: diff does not apply at deleted line 3:")
 
 def test_single_line_change():
     buf = FakeBuffer(["x", "y", "z"])
