@@ -39,7 +39,6 @@ g_result = None
 g_errormsg = ''
 g_start_line = 0 # start line of edit
 g_end_line = 0 # end line of edit
-g_restored_lines = 0 # number of restored lines (undone deletes)
 g_new_code_lines = []
 g_diff = []
 g_groups = []
@@ -130,7 +129,7 @@ def group_diff(diff, starting_line=1):
 
     return grouped_diff
 
-def apply_diff(diff, buf, line_offset=0):
+def apply_diff(diff, buf, line_offset=1):
     """
     Apply differences directly to a Vim buffer as inline diff.
 
@@ -211,7 +210,7 @@ def apply_diff(diff, buf, line_offset=0):
             for i, deleted_line in enumerate(deleted_lines):
                 VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
 
-def apply_change(diff, buf, line_offset=0):
+def apply_change(diff, buf, line_offset=1):
     """
     Apply differences directly to a Vim buffer without inline diff.
 
@@ -623,7 +622,6 @@ def get_job_status():
     global g_errormsg
     global g_start_line
     global g_end_line
-    global g_restored_lines
     global g_new_code_lines
     global g_diff
     global g_groups
@@ -655,7 +653,6 @@ def get_job_status():
         g_groups = group_diff(g_diff, g_start_line)
         log.debug(g_groups)
         g_change_index = 0
-        g_restored_lines = 0
 
         result = 'Done'
     except Exception as e:
@@ -736,15 +733,13 @@ def FindGroupForLine(line):
             start_line = int(g.get('start_line', 0))
             log.debug(f"{i}: start_line={start_line}")
             if start_line == int(line):
-                return g
-    return None
+                return i, g
+    return 0, None
 
 def AcceptChange(line):
-    global g_restored_lines
-
     log.debug("AcceptChange")
 
-    group = FindGroupForLine(line)
+    index, group = FindGroupForLine(line)
     # sanity check
     if not group:
         print(f'AcceptChange: group for line {line} not found')
@@ -752,8 +747,8 @@ def AcceptChange(line):
 
     log.debug("diff group: " +json.dumps(group, indent=4))
     # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
+    start_line = group.get('start_line', 1)
+    end_line = group.get('end_line', 1)
     buf = vim.current.buffer
 
     log.debug(f"remove signs from {start_line} to {end_line}")
@@ -766,11 +761,10 @@ def AcceptChange(line):
     vim.command(f'call prop_clear({start_line}, {end_line})')
 
 def RejectChange(line):
-    global g_restored_lines
-
     log.debug("RejectChange")
+    restored_lines = 0
 
-    group = FindGroupForLine(line)
+    index, group = FindGroupForLine(line)
     # sanity check
     if not group:
         print(f'RejectChange: group for line {line} not found')
@@ -778,8 +772,8 @@ def RejectChange(line):
 
     log.debug("diff group: " +json.dumps(group, indent=4))
     # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
+    start_line = group.get('start_line', 1)
+    end_line = group.get('end_line', 1)
     buf = vim.current.buffer
 
     # remove any abovetext
@@ -798,13 +792,23 @@ def RejectChange(line):
             log.debug(f"restore line {lineno}")
             VimHelper.InsertLine(lineno, content, buf)
             lineno += 1
-            g_restored_lines += 1
+            restored_lines += 1
         elif (line.startswith('+ ')):
+            content = line[2:]
             # remove added line
             log.debug(f"delete line {lineno}")
-            VimHelper.DeleteLine(lineno, buf)
-            g_restored_lines -= 1
-    log.debug(f"restored_lines={g_restored_lines}")
+            old_content = VimHelper.DeleteLine(lineno, buf)
+            if old_content != content:
+                raise Exception(f"error: diff does not apply to restore deleted line {lineno}: {content} != {old_content}")
+            restored_lines -= 1
+
+    log.debug(f"restored_lines={restored_lines}")
+
+    # correct lines of remaining changes: index+1 and above
+    for i in range(index+1, len(group)):
+        g = g_groups[i]
+        g['start_line'] += restored_lines
+        g['end_line'] += restored_lines
 
 # Main entry point
 if __name__ == "__main__":
