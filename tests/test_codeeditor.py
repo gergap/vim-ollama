@@ -364,6 +364,135 @@ def test_group_diff_line_numbers():
     groups[1].get('start_line') == 4
     groups[1].get('end_line') == 4
 
+# When computing diff groups each group contains a start- and end_line number of the change.
+# These numbers are the numbers after the changes are applied.
+# When rejecting changes these numbers must be corrected.
+def test_apply_and_reject_forward():
+    # create a diff with 3 inserts of different lengths
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "1", "b", "2", "3", "c", "d", "4", "5", "6", "e", "f"]
+
+    # prepare fake buffer
+    buf = FakeBuffer(old.copy())
+    FakeVimHelper.reset()
+
+    # compute the diff
+    diff = CodeEditor.compute_diff(old, new)
+    # apply as inline diff
+    CodeEditor.apply_diff(diff, buf)
+    # compute groups
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    # we need to save this in CodeEditor to make things working
+    CodeEditor.g_groups = groups
+    vim.current.buffer = buf
+
+    # Check for expected diff
+    assert len(groups) == 3
+    # reject first change on line 2
+    CodeEditor.RejectChange(2)
+    # reject second change on line 4 -> 3 after previous reject
+    CodeEditor.RejectChange(3)
+    # reject third change on line 8 -> 5 after previous rejects
+    CodeEditor.RejectChange(5)
+
+    assert buf == old
+
+# When rejecting in reverse order it's actually easier because no line number correction is required
+def test_apply_and_reject_reverse():
+    # create a diff with 3 inserts of different lengths
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "1", "b", "2", "3", "c", "d", "4", "5", "6", "e", "f"]
+
+    # prepare fake buffer
+    buf = FakeBuffer(old.copy())
+    FakeVimHelper.reset()
+
+    # compute the diff
+    diff = CodeEditor.compute_diff(old, new)
+    # apply as inline diff
+    CodeEditor.apply_diff(diff, buf)
+    # compute groups
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    # we need to save this in CodeEditor to make things working
+    CodeEditor.g_groups = groups
+    vim.current.buffer = buf
+
+    # Check for expected diff
+    assert len(groups) == 3
+    # reject third change on line 8
+    CodeEditor.RejectChange(8)
+    # reject second change on line 4
+    CodeEditor.RejectChange(4)
+    # reject first change on line 2
+    CodeEditor.RejectChange(2)
+
+    assert buf == old
+
+# Just in case. If the above two tests works,this should work too.
+def test_apply_and_reject_mixed_order():
+    # create a diff with 3 inserts of different lengths
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "1", "b", "2", "3", "c", "d", "4", "5", "6", "e", "f"]
+
+    # prepare fake buffer
+    buf = FakeBuffer(old.copy())
+    FakeVimHelper.reset()
+
+    # compute the diff
+    diff = CodeEditor.compute_diff(old, new)
+    # apply as inline diff
+    CodeEditor.apply_diff(diff, buf)
+    # compute groups
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    # we need to save this in CodeEditor to make things working
+    CodeEditor.g_groups = groups
+    vim.current.buffer = buf
+
+    # Check for expected diff
+    assert len(groups) == 3
+    # reject second change on line 4
+    CodeEditor.RejectChange(4)
+    # reject third change on line 8 -> 6
+    CodeEditor.RejectChange(6)
+    # reject first change on line 2
+    CodeEditor.RejectChange(2)
+
+    assert buf == old
+
+# Just in case. If the above two tests works,this should work too.
+def test_apply_and_reject_different_types():
+    # create a diff with inserts, changes and deletetions
+    # insert 1
+    # change cd -> CD
+    # delete f, g, h
+    old = ["a", "b", "c", "d", "e", "f", "g", "h"]
+    new = ["a", "1", "b", "C", "D", "e"]
+
+    # prepare fake buffer
+    buf = FakeBuffer(old.copy())
+    FakeVimHelper.reset()
+
+    # compute the diff
+    diff = CodeEditor.compute_diff(old, new)
+    # apply as inline diff
+    CodeEditor.apply_diff(diff, buf)
+    # compute groups
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+    # we need to save this in CodeEditor to make things working
+    CodeEditor.g_groups = groups
+    vim.current.buffer = buf
+
+    # Check for expected diff
+    assert len(groups) == 3
+    # reject first change on line 2
+    CodeEditor.RejectChange(2)
+    # reject second change on line 4 -> 3 (-1 due to reject insert 1)
+    CodeEditor.RejectChange(3) # rejecting changes does not modify the line numbers
+    # reject third change on line 7 -> 6 (due to -1 of 1st change)
+    CodeEditor.RejectChange(6)
+
+    assert buf == old
+
 #def test_group_diff_only_inserts():
 #    old = ["a", "b", "c", "d", "e", "f"]
 #    new = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
