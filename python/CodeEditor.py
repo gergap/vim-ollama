@@ -796,13 +796,13 @@ def RejectChange(line):
             content = line[2:]
             # restore deleted line
             log.debug(f"restore line {lineno}")
-            VimHelper.InsertLine(lineno, content)
+            VimHelper.InsertLine(lineno, content, buf)
             lineno += 1
             g_restored_lines += 1
         elif (line.startswith('+ ')):
             # remove added line
             log.debug(f"delete line {lineno}")
-            VimHelper.DeleteLine(lineno)
+            VimHelper.DeleteLine(lineno, buf)
             g_restored_lines -= 1
     log.debug(f"restored_lines={g_restored_lines}")
 
