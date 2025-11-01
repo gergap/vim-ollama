@@ -5,6 +5,102 @@ let s:buf = -1
 " avoid starting a 2nd edit job while one is in progress
 let g:edit_in_progress = 0
 
+" Function to show Accept/Reject popup at a given line
+function! s:ShowAcceptButtons(lnum, lcol) abort
+    " Add a text property to the given line
+    let propId = a:lnum  " use line number as unique id
+    call prop_add(a:lnum, a:lcol, #{type: 'popupButtonMarker', id: propId, length: 1})
+
+    " Create the popup text with two buttons
+"    let lines = ['[Accept]  [Reject]']
+    let lines = ['✅  ❌']
+
+    " Callback for when the popup closes
+    function! s:PopupCallback(winid, result) abort
+        " Get the options used to create the popup
+        let opts = popup_getoptions(a:winid)
+        " The 'textpropid' is stored in opts
+        if has_key(opts, 'textpropid')
+            let l:line = opts.textpropid
+            if a:result == 0
+                call ollama#edit#AcceptChange(l:line)
+            elseif a:result == 1
+                call ollama#edit#RejectChange(l:line)
+            endif
+        else
+            echoerr "Cannot determine line for popup"
+        endif
+    endfunction
+
+    " Filter function to handle clicks
+    function! s:PopupFilter(winid, key) abort
+        " Ignore empty keys
+        if a:key ==# ''
+            return 0
+        endif
+
+        " get popup properties
+        let opts = popup_getoptions(a:winid)
+        " only process our popups
+        if !has_key(opts, 'textprop') || opts.textprop != 'popupButtonMarker'
+            call ollama#logger#Debug('not our textprop')
+            return 0
+        endif
+        " get line this popup belongs to
+        if has_key(opts, 'textpropid')
+            let l:line = opts.textpropid + 0
+            call ollama#logger#Debug('line='..l:line)
+        else
+            call ollama#logger#Debug('not our line')
+            return 0
+        endif
+
+"        let hex = join(map(split(a:key, '\zs'), {idx, val -> printf('%02X', char2nr(val))}), ' ')
+"        call ollama#logger#Debug('PopupFilter:'..a:winid..' key='..hex)
+
+        " handle raw terminal mouse codes
+        if (a:key[0] ==# "\x80" && a:key[1] == "\xFD") || a:key =~? '<LeftMouse>'
+            let mp = getmousepos()
+            call ollama#logger#Debug('mp: col='..mp.column..' line='.mp.line)
+            " only handle mouse clicks when on the correct line.
+            " mp.col/line is relative to winid
+            if mp.line != 1 " our popup only has one line
+                return 0
+            endif
+            " Determine which button was clicked
+            if mp.column < 3
+                call ollama#logger#Debug('Accept with 0')
+                call popup_close(a:winid, 0) " Accept
+            else
+                call ollama#logger#Debug('Reject with 1')
+                call popup_close(a:winid, 1) " Reject
+            endif
+            return 1
+        endif
+        return 0
+    endfunction
+
+    " Create the popup attached to the text property
+    call popup_create(lines, #{
+        \ textprop: 'popupButtonMarker',
+        \ textpropid: propId,
+        \ line: 1,
+        \ col: 1,
+        \ pos: 'botleft',
+        \ padding: [0,1,0,1],
+        \ border: [0,0,0,0],
+        \ highlight: 'OllamaPopup',
+        \ close: 'click',
+        \ filter: function('s:PopupFilter'),
+        \ filter_mode: 'n',
+        \ callback: function('s:PopupCallback')
+        \ })
+endfunction
+
+function! ollama#edit#ShowAcceptButtons(lnum, lcol)
+    call s:ShowAcceptButtons(a:lnum, a:lcol)
+endfunction
+
 " Define the VimScript callback function
 " This will be called from python when to operations is 'done'
 " or aborted with 'error'
@@ -22,6 +118,9 @@ function! ollama#edit#EditCodeDone(status)
     let b:popup = 0
     " reset status
     let g:edit_in_progress = 0
+    " Show Winbar with Accept/Deny buttons
+    nnoremenu 1.10 WinBar.Accept\ All :OllamaAcceptAll<CR>
+    nnoremenu 1.20 WinBar.Reject\ All :OllamaRejectAll<CR>
     redraw!
 endfunction
 
@@ -72,13 +171,22 @@ try:
             vim.command(f'echom "Error updating progress: {errormsg}"')
             vim.command('call popup_notification("'+errormsg+'", #{ pos: "center"})')
         else:
-            if groups:
-                if use_inline_diff:
-                    CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
-                else:
-                    vim.command("echo 'Applied changes.'")
-            else:
-                vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
+            # Success
+            if groups and use_inline_diff:
+                for g in groups:
+                    start_line = g.get('start_line', 0)
+                    if start_line > 0:
+                        contents = buf[start_line - 1]
+                        col = len(contents) + 2
+                        vim.command(f'call s:ShowAcceptButtons({start_line}, {col})')
+
+#            if groups:
+#                if use_inline_diff:
+#                    CodeEditor.ShowAcceptDialog("ollama#edit#DialogCallback", 0)
+#                else:
+#                    vim.command("echo 'Applied changes.'")
+#            else:
+#                vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
 
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
@@ -193,10 +301,48 @@ function! ollama#edit#EditPrompt()
     call s:EditCodeInternal(l:prompt, l:firstline, l:lastline)
 endfunction
 
+function! ollama#edit#AcceptChange(line)
+    " remove menubar
+    aunmenu WinBar
+    python3 << EOF
+import vim
+try:
+    line = vim.eval('a:line')
+    CodeEditor.AcceptChange(line)
+except Exception as e:
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command('echo "Error accepting change: ' + str(e) + '"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
+EOF
+endfunction
+
+function! ollama#edit#RejectChange(line)
+    " remove menubar
+    aunmenu WinBar
+    python3 << EOF
+import vim
+try:
+    line = vim.eval('a:line')
+    CodeEditor.RejectChange(line)
+except Exception as e:
+    # Handle or print the exception here.
+    vim.command('echohl ErrorMsg')
+    vim.command('echo "Error rejecting change: ' + str(e) + '"')
+    vim.command('echon ""')  # To display a newline.
+finally:
+    pass
+EOF
+endfunction
+
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Accept All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#AcceptAll()
+    " remove menubar
+    aunmenu WinBar
     python3 << EOF
 import vim
 try:
@@ -215,6 +361,8 @@ endfunction
 " Reject All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#RejectAll()
+    " remove menubar
+    aunmenu WinBar
     python3 << EOF
 import vim
 try:

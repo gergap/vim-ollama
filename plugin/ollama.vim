@@ -267,16 +267,20 @@ command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
+command! OllamaAcceptAll call ollama#edit#AcceptAll()
+command! OllamaRejectAll call ollama#edit#RejectAll()
 
 " Define new signs for diffs
-sign define NewLine text=+ texthl=DiffAdd
-sign define ChangedLine text=~ texthl=DiffChange
-sign define DeletedLine text=- texthl=DiffDelete
+sign define NewLine text=+ texthl=SignColumn
+sign define ChangedLine text=~ texthl=SignColumn
+sign define DeletedLine text=- texthl=SignColumn
 " Define inline diff property types
 highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
+highlight OllamaPopup  ctermfg=166 ctermbg=2 cterm=bold
 call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
+call prop_type_add('popupButtonMarker', {})
 
 " expand does funky stuff inside of a function need to set it here
 let s:ollama_plugin_dir=expand('<sfile>:p:h:h')

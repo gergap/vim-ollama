@@ -729,18 +729,28 @@ def NextChange():
 
     ShowAcceptDialog(g_dialog_callback, g_change_index)
 
-def AcceptChange(index):
-    global g_change_index, g_groups
+def FindGroupForLine(line):
+    global g_groups
+    log.debug(f"FindGroupForLine line={line}")
+    if g_groups:
+        for i, g in enumerate(g_groups):
+            start_line = int(g.get('start_line', 0))
+            log.debug(f"{i}: start_line={start_line}")
+            if start_line == int(line):
+                return g
+    return None
+
+def AcceptChange(line):
     global g_restored_lines
 
+    log.debug("AcceptChange")
+
+    group = FindGroupForLine(line)
     # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring AcceptChange.")
+    if not group:
+        print(f'AcceptChange: group for line {line} not found')
         return
 
-    log.debug("AcceptChange")
-    # get current change
-    group = g_groups[g_change_index]
     log.debug(group)
     # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
@@ -756,18 +766,17 @@ def AcceptChange(index):
     log.debug(f"remove abovetext from {start_line} to {end_line}")
     vim.command(f'call prop_clear({start_line}, {end_line})')
 
-def RejectChange(index):
-    global g_change_index, g_groups
+def RejectChange(line):
     global g_restored_lines
 
+    log.debug("RejectChange")
+
+    group = FindGroupForLine(line)
     # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring RejectChange.")
+    if not group:
+        print(f'RejectChange: group for line {line} not found')
         return
 
-    log.debug("RejectChange")
-    # get current change
-    group = g_groups[g_change_index]
     log.debug(group)
     # compute start and end lines
     start_line = group.get('start_line', 1) + g_restored_lines
@@ -797,7 +806,6 @@ def RejectChange(index):
             VimHelper.DeleteLine(lineno)
             g_restored_lines -= 1
     log.debug(f"restored_lines={g_restored_lines}")
-
 
 # Main entry point
 if __name__ == "__main__":
