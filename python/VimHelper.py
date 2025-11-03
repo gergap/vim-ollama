@@ -24,6 +24,13 @@ def GetLine(lineno, buffer = vim.current.buffer):
 
 def InsertLine(lineno, content, buffer = vim.current.buffer):
     debug_log(f'InsertLine {lineno}: "{content}"')
+    # Clamp lineno in valid range
+    if lineno < 1:
+        lineno = 1
+    elif lineno > len(buffer) + 1:
+        lineno = len(buffer) + 1
+
+     # Vim buffer behaves oddly with slicing at end — use append explicitly
     if lineno == len(buffer) + 1:
         buffer.append(content)
     else:
