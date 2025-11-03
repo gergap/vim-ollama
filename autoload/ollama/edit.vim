@@ -32,8 +32,7 @@ function! s:CreatePopupMarker(lnum, changeId) abort
         let length = 1
     endif
     call ollama#logger#Debug('prop_add at line '..a:lnum..', id='..propId..', length='..length)
-"    let ret = prop_add(a:lnum, 1, #{type: 'OllamaPopupMarker', id: propId, length: length})
-    let ret = prop_add(a:lnum, length, #{type: 'OllamaPopupMarker', id: propId})
+    let ret = prop_add(a:lnum, 1, #{type: 'OllamaPopupMarker', id: propId, length: length})
     call ollama#logger#Debug('ret='..ret)
 endfunction
 
@@ -74,6 +73,8 @@ function! s:ShowAcceptButtons(lnum, changeId) abort
             elseif a:result == 1
                 call ollama#logger#Debug('Rejecting change '..l:change_id)
                 call ollama#edit#RejectChange(l:change_id)
+            elseif a:result == 2
+                " Ignore
             else
                 echoerr "Unexpected result "..a:result
             endif
@@ -123,14 +124,15 @@ function! s:ShowAcceptButtons(lnum, changeId) abort
     call ollama#logger#Debug('Create popup at line '..a:lnum..' for propId '..propId)
     " Create the popup attached to the text property
     let popup_winid = popup_create(lines, #{
+        \ pos: 'botleft',
         \ textprop: 'OllamaPopupMarker',
         \ textpropid: propId,
         \ line: 1,
         \ col: 1,
-        \ pos: 'botleft',
         \ padding: [0,1,0,1],
         \ border: [0,0,0,0],
         \ highlight: 'OllamaPopup',
+        \ zindex: 1000,
         \ close: 'none',
         \ filter: function('s:PopupFilter'),
         \ filter_mode: 'n',
@@ -202,7 +204,6 @@ try:
                         vim.command(f'call ollama#edit#ShowAcceptButtons({start_line}, {change_id})')
             else:
                 vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
-            vim.command('redraw!')
 
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
