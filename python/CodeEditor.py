@@ -144,6 +144,11 @@ def group_diff(diff: Iterable[str], starting_line: int = 1) -> list[Group]:
 
 
 def apply_diff_groups(groups, buf):
+    global g_groups
+
+    log.debug('apply_diff_groups')
+    # Save current groups in global context
+    g_groups = groups
     for index, g in enumerate(groups):
         apply_diff(index, g.changes, buf, g.start_line)
 
@@ -156,6 +161,7 @@ def apply_diff(changeId, diff, buf, line_offset):
         buf: The Vim buffer to apply changes to.
         line_offset (int): Line offset for the current buffer.
     """
+    log.debug(f'apply_diff for changeId={changeId}')
     debug_print("\n".join(diff))
     deleted_lines = []  # Collect deleted lines for multi-line display
 
@@ -631,9 +637,11 @@ def start_vim_edit_code(request, firstline, lastline, settings, credentialname):
 def get_job_status():
     """
     Check if the editing thread is still running.
+    This is called from Vim main thread using a timer callback to be able to update the GUI.
 
     Returns:
-        str: Job status: 'InProgress', 'Done', 'Error'
+        Tuple of job status, diff groups and error message
+        Job status: 'InProgress', 'Done', 'Error'
     """
     global g_editing_thread
     global g_result
@@ -642,16 +650,15 @@ def get_job_status():
     global g_end_line
     global g_new_code_lines
     global g_diff
-    global g_groups
     global g_change_index
 
-    log.debug(f"result={g_result}")
     groups = None
+    log.debug(f"result={g_result}")
     try:
         is_running = False
         if g_editing_thread:
             with g_thread_lock:
-                is_runining = g_editing_thread.is_alive()
+                is_running = g_editing_thread.is_alive()
 
         if (is_running):
             return "InProgress", None, ''
@@ -662,13 +669,13 @@ def get_job_status():
             return g_result, None, g_errormsg
 
         # Success:
-        g_groups = group_diff(g_diff, g_start_line)
-        log.debug(g_groups)
+        groups = group_diff(g_diff, g_start_line)
+        log.debug(groups)
         g_change_index = 0
 
         use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
         if use_inline_diff:
-            apply_diff_groups(g_groups, vim.current.buffer)
+            apply_diff_groups(groups, vim.current.buffer)
         else:
             apply_change(g_diff, vim.current.buffer, g_start_line)
 
@@ -678,7 +685,7 @@ def get_job_status():
         g_errormsg = str(e)
         result = 'Error'
 
-    return result, g_groups, g_errormsg
+    return result, groups, g_errormsg
 
 def AcceptAllChanges():
     accept_changes(vim.current.buffer)
