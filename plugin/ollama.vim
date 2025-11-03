@@ -280,7 +280,11 @@ highlight OllamaPopup  ctermfg=166 ctermbg=2 cterm=bold
 call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
-call prop_type_add('popupButtonMarker', {})
+" Marks the position of the Accept/Reject popup, that gets attached to a line
+call prop_type_add('OllamaPopupMarker', {})
+" Stores the ChangeId (index in g_changes array). Lines do not work, because
+" they can change when accepting/rejecting
+"call prop_type_add('OllamaChangeId', {})
 
 " expand does funky stuff inside of a function need to set it here
 let s:ollama_plugin_dir=expand('<sfile>:p:h:h')

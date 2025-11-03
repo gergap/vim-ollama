@@ -12,19 +12,19 @@ class OllamaCredentials:
 
     def GetApiKey(self, url: str, credentialname: None|str) -> str:
         # Check if UNIX pass exists (/usr/bin/pass) and is executable
-        if credentialname and os.path.isfile('/usr/bin/pass') and os.access('/usr/bin/pass', os.X_OK):
-            # Retrieve API key from pass store
-            try:
-                # redirect stdout, ignore stderr
-                pass_process = subprocess.Popen(['pass', 'show', credentialname], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                password_bytes, _ = pass_process.communicate()
-                password = password_bytes.decode('utf-8')  # Decode bytes to string using utf-8 encoding
-                # only use first line
-                password = password.split('\n')[0]
-                return password.strip()  # Remove any leading/trailing whitespace
-            except Exception as e:
-                print(f"Error retrieving password from password store: {e}")
-                return ""
+        #if credentialname and os.path.isfile('/usr/bin/pass') and os.access('/usr/bin/pass', os.X_OK):
+        #    # Retrieve API key from pass store
+        #    try:
+        #        # redirect stdout, ignore stderr
+        #        pass_process = subprocess.Popen(['pass', 'show', credentialname], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        #        password_bytes, _ = pass_process.communicate()
+        #        password = password_bytes.decode('utf-8')  # Decode bytes to string using utf-8 encoding
+        #        # only use first line
+        #        password = password.split('\n')[0]
+        #        return password.strip()  # Remove any leading/trailing whitespace
+        #    except Exception as e:
+        #        print(f"Error retrieving password from password store: {e}")
+        #        return ""
 
         # Get API key from env variable
         if url == '': # OpenAI

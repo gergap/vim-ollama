@@ -103,9 +103,17 @@ class FakeVimHelper:
         cls.calls.append(("ShowTextBelow", lineno, text))
 
     @classmethod
-    def HighlightLine(cls, lineno, propname, length, buf):
+    def HighlightLine(cls, lineno, propId, propname, length, buf):
         cls.highlights[lineno] = propname
         cls.calls.append(("HighlightLine", lineno, length))
+
+    @classmethod
+    def ClearHighlights(cls, propId, propname, buf):
+        pass
+
+    @classmethod
+    def ClearAllHighlights(cls, propname, buf):
+        pass
 
     # ---------------------------------------------------------------------
     # Render functions
@@ -295,10 +303,10 @@ def test_group_diff_line_numbers():
     diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
     assert len(groups) == 2
-    groups[0].get('start_line') == 2
-    groups[0].get('end_line') == 3
-    groups[1].get('start_line') == 5
-    groups[1].get('end_line') == 5
+    groups[0].start_line == 2
+    groups[0].end_line == 3
+    groups[1].start_line == 5
+    groups[1].end_line == 5
     # Delete two groups
     diff ="""
   line1
@@ -310,10 +318,10 @@ def test_group_diff_line_numbers():
     diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
     assert len(groups) == 2
-    groups[0].get('start_line') == 2
-    groups[0].get('end_line') == 2
-    groups[1].get('start_line') == 3
-    groups[1].get('end_line') == 3
+    groups[0].start_line == 2
+    groups[0].end_line == 2
+    groups[1].start_line == 3
+    groups[1].end_line == 3
     # Insert and delete
     diff ="""
   line1
@@ -326,10 +334,10 @@ def test_group_diff_line_numbers():
     diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
     assert len(groups) == 2
-    groups[0].get('start_line') == 2
-    groups[0].get('end_line') == 2
-    groups[1].get('start_line') == 4
-    groups[1].get('end_line') == 4
+    groups[0].start_line == 2
+    groups[0].end_line == 2
+    groups[1].start_line == 4
+    groups[1].end_line == 4
     # Delete and insert
     diff ="""
   line1
@@ -342,10 +350,10 @@ def test_group_diff_line_numbers():
     diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
     assert len(groups) == 2
-    groups[0].get('start_line') == 2
-    groups[0].get('end_line') == 2
-    groups[1].get('start_line') == 4
-    groups[1].get('end_line') == 4
+    groups[0].start_line == 2
+    groups[0].end_line == 2
+    groups[1].start_line == 4
+    groups[1].end_line == 4
     # Change lines
     diff ="""
   line1
@@ -359,14 +367,16 @@ def test_group_diff_line_numbers():
     diff = diff.strip().splitlines()
     groups = CodeEditor.group_diff(diff, starting_line=1)
     assert len(groups) == 2
-    groups[0].get('start_line') == 2
-    groups[0].get('end_line') == 2
-    groups[1].get('start_line') == 4
-    groups[1].get('end_line') == 4
+    groups[0].start_line == 2
+    groups[0].end_line == 2
+    groups[1].start_line == 4
+    groups[1].end_line == 4
 
 # When computing diff groups each group contains a start- and end_line number of the change.
 # These numbers are the numbers after the changes are applied.
 # When rejecting changes these numbers must be corrected.
+# When using RejectChangeLine this implicitly also tests index based RejectChange,
+# because the *Line functions are just wrappers.
 def test_apply_and_reject_forward():
     # create a diff with 3 inserts of different lengths
     old = ["a", "b", "c", "d", "e", "f"]
@@ -378,22 +388,22 @@ def test_apply_and_reject_forward():
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
-    # apply as inline diff
-    CodeEditor.apply_diff(diff, buf)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
     # we need to save this in CodeEditor to make things working
     CodeEditor.g_groups = groups
     vim.current.buffer = buf
+    # apply as inline diff
+    CodeEditor.apply_diff_groups(groups, buf)
 
     # Check for expected diff
     assert len(groups) == 3
     # reject first change on line 2
-    CodeEditor.RejectChange(2)
+    CodeEditor.RejectChangeLine(2)
     # reject second change on line 4 -> 3 after previous reject
-    CodeEditor.RejectChange(3)
+    CodeEditor.RejectChangeLine(3)
     # reject third change on line 8 -> 5 after previous rejects
-    CodeEditor.RejectChange(5)
+    CodeEditor.RejectChangeLine(5)
 
     assert buf == old
 
@@ -409,22 +419,22 @@ def test_apply_and_reject_reverse():
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
-    # apply as inline diff
-    CodeEditor.apply_diff(diff, buf)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
     # we need to save this in CodeEditor to make things working
     CodeEditor.g_groups = groups
     vim.current.buffer = buf
+    # apply as inline diff
+    CodeEditor.apply_diff_groups(groups, buf)
 
     # Check for expected diff
     assert len(groups) == 3
     # reject third change on line 8
-    CodeEditor.RejectChange(8)
+    CodeEditor.RejectChangeLine(8)
     # reject second change on line 4
-    CodeEditor.RejectChange(4)
+    CodeEditor.RejectChangeLine(4)
     # reject first change on line 2
-    CodeEditor.RejectChange(2)
+    CodeEditor.RejectChangeLine(2)
 
     assert buf == old
 
@@ -440,22 +450,22 @@ def test_apply_and_reject_mixed_order():
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
-    # apply as inline diff
-    CodeEditor.apply_diff(diff, buf)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
     # we need to save this in CodeEditor to make things working
     CodeEditor.g_groups = groups
     vim.current.buffer = buf
+    # apply as inline diff
+    CodeEditor.apply_diff_groups(groups, buf)
 
     # Check for expected diff
     assert len(groups) == 3
     # reject second change on line 4
-    CodeEditor.RejectChange(4)
+    CodeEditor.RejectChangeLine(4)
     # reject third change on line 8 -> 6
-    CodeEditor.RejectChange(6)
+    CodeEditor.RejectChangeLine(6)
     # reject first change on line 2
-    CodeEditor.RejectChange(2)
+    CodeEditor.RejectChangeLine(2)
 
     assert buf == old
 
@@ -474,58 +484,55 @@ def test_apply_and_reject_different_types():
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
-    # apply as inline diff
-    CodeEditor.apply_diff(diff, buf)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
     # we need to save this in CodeEditor to make things working
     CodeEditor.g_groups = groups
     vim.current.buffer = buf
+    # apply as inline diff
+    CodeEditor.apply_diff_groups(groups, buf)
 
     # Check for expected diff
     assert len(groups) == 3
     # reject first change on line 2
-    CodeEditor.RejectChange(2)
+    CodeEditor.RejectChangeLine(2)
     # reject second change on line 4 -> 3 (-1 due to reject insert 1)
-    CodeEditor.RejectChange(3) # rejecting changes does not modify the line numbers
+    CodeEditor.RejectChangeLine(3) # rejecting changes does not modify the line numbers
     # reject third change on line 7 -> 6 (due to -1 of 1st change)
-    CodeEditor.RejectChange(6)
+    CodeEditor.RejectChangeLine(6)
 
     assert buf == old
 
-#def test_group_diff_only_inserts():
-#    old = ["a", "b", "c", "d", "e", "f"]
-#    new = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
-#    diff = CodeEditor.compute_diff(old, new)
-#    groups = CodeEditor.group_diff(diff, starting_line=1)
-#
-#    # Expect at least two groups separated by unchanged lines
-#    assert len(groups) == 1
-#    for g in groups:
-#        assert 'changes' in g and g['changes']
-#
-#def test_group_diff_only_deletes():
-#    old = ["a", "b", "c", "d", "e", "f"]
-#    new = ["a", "b", "c"]
-#    diff = CodeEditor.compute_diff(old, new)
-#    groups = CodeEditor.group_diff(diff, starting_line=1)
-#
-#    # Expect at least two groups separated by unchanged lines
-#    assert len(groups) == 1
-#    g = groups[0]
-#    assert g.get('start_line') == 4
-#    assert g.get('end_line') == 6
-#
-#def test_multiple_groups_in_diff():
-#    old = ["a", "b", "c", "d", "e", "f"]
-#    new = ["a", "x", "c", "d", "y", "f"]
-#    diff = CodeEditor.compute_diff(old, new)
-#    groups = CodeEditor.group_diff(diff, starting_line=1)
-#
-#    # Expect at least two groups separated by unchanged lines
-#    assert len(groups) >= 2
-#    for g in groups:
-#        assert 'changes' in g and g['changes']
+def test_grouping_diff_only_inserts():
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
+    diff = CodeEditor.compute_diff(old, new)
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+
+    # Expect one group with inserts
+    assert len(groups) == 1
+    assert groups[0].changes
+
+def test_grouping_diff_only_deletes():
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "b", "c"]
+    diff = CodeEditor.compute_diff(old, new)
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+
+    # Expect one group with deletes
+    assert len(groups) == 1
+    assert groups[0].changes
+
+def test_multiple_groups_in_diff():
+    old = ["a", "b", "c", "d", "e", "f"]
+    new = ["a", "x", "c", "d", "y", "f"]
+    diff = CodeEditor.compute_diff(old, new)
+    groups = CodeEditor.group_diff(diff, starting_line=1)
+
+    # Expect two groups with inserts
+    assert len(groups) == 2
+    for g in groups:
+        assert g.changes
 
 def test_real_code():
     # Add missing include at start of file
@@ -555,8 +562,8 @@ int main(int argc, char *argv[])
     # Check for expected diff
     assert len(groups) == 1
     for g in groups:
-        assert g['changes']
-        cur_diff = "\n".join(g['changes'])
+        assert g.changes
+        cur_diff = "\n".join(g.changes)
         assert cur_diff == exp_diff
 
 #def test_apply_accept_and_reject():
@@ -604,9 +611,9 @@ int main(int argc, char *argv[])
 #    # Check for expected diff
 #    assert len(groups) == 2
 #    # accept first change on line 2
-#    CodeEditor.AcceptChange(2)
+#    CodeEditor.AcceptChangeLine(2)
 #    # reject second change on line 4
-#    CodeEditor.RejectChange(4)
+#    CodeEditor.RejectChangeLine(4)
 #
 #    # create output dir
 #    os.makedirs("output", exist_ok=True)
@@ -642,12 +649,12 @@ if os.path.isdir(EXAMPLES_DIR):
         def make_test(before, after, name=fname):
             def _test():
                 diff = CodeEditor.compute_diff(before, after)
+                groups = CodeEditor.group_diff(diff, starting_line=1)
+                assert len(groups) > 0
                 buf = FakeBuffer(before.copy())
                 FakeVimHelper.reset()
-                CodeEditor.apply_diff(diff, buf)
+                CodeEditor.apply_diff_groups(groups, buf)
                 assert buf == after
-                groups = CodeEditor.group_diff(diff, starting_line=1)
-                assert all('changes' in g and g['changes'] for g in groups)
                 text = FakeVimHelper.render_state(buf)
                 # create output dir
                 os.makedirs("output", exist_ok=True)

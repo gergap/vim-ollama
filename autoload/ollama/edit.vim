@@ -28,6 +28,9 @@ function! s:CreatePopupMarker(lnum, changeId) abort
     " get content at given line
     let content = getline(a:lnum)
     let length = strlen(content)
+    if length == 0
+        let length = 1
+    endif
     call ollama#logger#Debug('prop_add at line '..a:lnum..', id='..propId..', length='..length)
 "    let ret = prop_add(a:lnum, 1, #{type: 'OllamaPopupMarker', id: propId, length: length})
     let ret = prop_add(a:lnum, length, #{type: 'OllamaPopupMarker', id: propId})
@@ -88,29 +91,13 @@ function! s:ShowAcceptButtons(lnum, changeId) abort
             return 0
         endif
 
-        " get popup properties
-        let opts = popup_getoptions(a:winid)
-        " only process our popups
-        if !has_key(opts, 'textprop') || opts.textprop != 'OllamaPopupMarker'
-            call ollama#logger#Debug('not our textprop')
-            return 0
-        endif
-        let l:propid = opts.textpropid
-
-        " Only handle the popup which belongs to he correct propid
-        if !has_key(s:popups, l:propid) || s:popups[l:propid] != a:winid
-            call ollama#logger#Debug('ignore')
-            return 0
-        endif
-        call ollama#logger#Debug('PopupFilter winid='..a:winid..' propId='..l:propid)
-
 "        let hex = join(map(split(a:key, '\zs'), {idx, val -> printf('%02X', char2nr(val))}), ' ')
 "        call ollama#logger#Debug('PopupFilter:'..a:winid..' key='..hex)
 
         " handle raw terminal mouse codes
         if (a:key ==# "\x80\xFD\x2E") || a:key =~? '<LeftMouse>'
             let mp = getmousepos()
-            call ollama#logger#Debug('mp: winid='..mp.winid..' col='..mp.column..' line='.mp.line)
+"            call ollama#logger#Debug('mp: winid='..mp.winid..' col='..mp.column..' line='.mp.line)
             " only handle mouse clicks when on the correct line.
             " mp.col/line is relative to winid
             if mp.winid != a:winid || mp.line != 1 " our popup only has one line
@@ -207,12 +194,15 @@ try:
             vim.command(f'echom "Error updating progress: {errormsg}"')
             vim.command('call popup_notification("'+errormsg+'", #{ pos: "center"})')
         else:
-            # Success
+            # Done
             if groups and use_inline_diff:
                 for change_id, g in enumerate(groups):
                     start_line = g.start_line
                     if start_line > 0:
-                        vim.command(f'call s:ShowAcceptButtons({start_line}, {change_id})')
+                        vim.command(f'call ollama#edit#ShowAcceptButtons({start_line}, {change_id})')
+            else:
+                vim.command('call popup_notification("The LLM response did not contain any changes", #{ pos: "center"})')
+            vim.command('redraw!')
 
 except Exception as e:
     exc_type, exc_value, tb = sys.exc_info()
@@ -334,12 +324,11 @@ function! ollama#edit#AcceptChange(index)
         " remove menubar
         aunmenu WinBar
     endif
-    call s:DebugPrintPopups()
     python3 << EOF
 import vim
 try:
     index = vim.eval('a:index')
-    #CodeEditor.AcceptChange(int(index))
+    CodeEditor.AcceptChange(int(index))
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')
@@ -357,12 +346,11 @@ function! ollama#edit#RejectChange(index)
         " remove menubar
         aunmenu WinBar
     endif
-    call s:DebugPrintPopups()
     python3 << EOF
 import vim
 try:
     index = vim.eval('a:index')
-    #CodeEditor.RejectChange(int(index))
+    CodeEditor.RejectChange(int(index))
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')
@@ -387,7 +375,7 @@ function! ollama#edit#AcceptAll()
     python3 << EOF
 import vim
 try:
-    #CodeEditor.AcceptAllChanges()
+    CodeEditor.AcceptAllChanges()
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')
@@ -412,7 +400,7 @@ function! ollama#edit#RejectAll()
     python3 << EOF
 import vim
 try:
-    #CodeEditor.RejectAllChanges()
+    CodeEditor.RejectAllChanges()
 except Exception as e:
     # Handle or print the exception here.
     vim.command('echohl ErrorMsg')

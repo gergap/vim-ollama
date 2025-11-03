@@ -31,16 +31,19 @@ def DeleteLine(lineno, buffer = vim.current.buffer):
 # Sign edit functions
 ###############################
 def PlaceSign(lineno, signname, buf):
+    return
     sign_id=lineno
     bufno = buf.number
     vim.command(f'sign place {sign_id} line={lineno} name={signname} buffer={bufno}')
 
 def UnplaceSign(lineno, buf):
+    return
     sign_id=lineno
     bufno = buf.number
     vim.command(f'sign unplace {sign_id} buffer={bufno}')
 
 def SignClear(buf):
+    return
     bufno = buf.number
     vim.command(f'sign unplace * buffer={bufno}')
 
@@ -52,9 +55,19 @@ def PropertyTypeAdd(name, options):
     json_options = json.dumps(options)
     vim.command(f'call prop_type_add("{name}", {json_options})')
 
-def HighlightLine(lineno, propname, length, buf):
+def HighlightLine(lineno, propId, propname, length, buf):
     bufno = buf.number
-    vim.command(f'call prop_add({lineno}, 1, {{"type": "{propname}", "length": {length}, "bufnr": {bufno} }})')
+    vim.command(f'call prop_add({lineno}, 1, {{"type": "{propname}", "id": {propId}, "length": {length}, "bufnr": {bufno} }})')
+
+def ClearHighlights(propId, propname, buf):
+    bufno = buf.number
+    # remove all properties of given type AND id
+    vim.command(f'call prop_remove({{"type": "{propname}", "id": {propId}, "bufnr": {bufno}, "both": 1 }})')
+
+def ClearAllHighlights(propname, buf):
+    bufno = buf.number
+    # remove all properties of given type
+    vim.command(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}}})')
 
 def ShowTextAbove(lineno, propname, text, buf):
     """

@@ -9,6 +9,10 @@ from difflib import ndiff
 from ChatTemplate import ChatTemplate
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
+from dataclasses import dataclass
+from dataclasses import asdict
+from typing import Iterable
+from typing import Optional
 
 # create logger
 log = None
@@ -77,23 +81,27 @@ def compute_diff(old_lines, new_lines):
     diff = list(ndiff(old_lines, new_lines))
     return diff
 
-def group_diff(diff, starting_line=1):
+@dataclass
+class Group:
+    start_line: int
+    end_line: int
+    changes: list[str]
+
+def group_diff(diff: Iterable[str], starting_line: int = 1) -> list[Group]:
     """
     Group consecutive changes into chunks, excluding unchanged lines.
 
     Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        starting_line (int): Line number offset for the original code.
+        diff: The result of ndiff comparing old and new lines.
+        starting_line: Line number offset for the original code.
 
     Returns:
-        list: A list of dictionaries, where each dictionary contains:
-              - 'start_line': The starting line number of the group.
-              - 'end_line': The ending line number of the group.
-              - 'changes': A list of strings representing the changes in the group.
+        list[Group]: A list of Group objects, each representing a consecutive
+                     set of changes.
     """
-    grouped_diff = []
-    current_group = []
-    current_start_line = None
+    grouped_diff: list[Group] = []
+    current_group: list[str] = []
+    current_start_line: int | None = None
     line_number = starting_line
 
     for line in diff:
@@ -105,12 +113,14 @@ def group_diff(diff, starting_line=1):
         elif line.startswith('  '):
             # Unchanged line stops the current group
             if current_group:
-                grouped_diff.append({
-                    'start_line': current_start_line,
-                    'end_line': line_number,
-                    'changes': current_group
-                })
-                current_group = []
+                grouped_diff.append(
+                    Group(
+                        start_line=current_start_line,
+                        end_line=line_number,
+                        changes=current_group.copy(),
+                    )
+                )
+                current_group.clear()
         elif line.startswith('? '):
             # Context-only marker, skip it
             continue
@@ -121,15 +131,22 @@ def group_diff(diff, starting_line=1):
 
     # Add the remaining group if it has any lines
     if current_group:
-        grouped_diff.append({
-            'start_line': current_start_line,
-            'end_line': line_number - 1,
-            'changes': current_group
-        })
+        grouped_diff.append(
+            Group(
+                start_line=current_start_line,
+                end_line=line_number - 1,
+                changes=current_group.copy(),
+            )
+        )
 
     return grouped_diff
 
-def apply_diff(diff, buf, line_offset=1):
+
+def apply_diff_groups(groups, buf):
+    for index, g in enumerate(groups):
+        apply_diff(index, g.changes, buf, g.start_line)
+
+def apply_diff(changeId, diff, buf, line_offset):
     """
     Apply differences directly to a Vim buffer as inline diff.
 
@@ -149,7 +166,7 @@ def apply_diff(diff, buf, line_offset=1):
             lineno = line_offset
             content = line[2:].rstrip()
             VimHelper.InsertLine(lineno, content, buf)
-            VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
+            VimHelper.HighlightLine(lineno, changeId, 'OllamaDiffAdd', len(content), buf)
             if deleted_lines:
                 # Show the collected deleted lines above the current added line
                 for i, deleted_line in enumerate(deleted_lines):
@@ -274,9 +291,9 @@ def accept_changes(buffer):
     # Clear all signs in the buffer
     VimHelper.SignClear(buffer)
 
-    bufno = buffer.number
     # remove properties from all lines
-    vim.command(f"call prop_clear(1, line('$'))")
+    VimHelper.ClearAllHighlights('OllamaDiffAdd', buffer)
+    VimHelper.ClearAllHighlights('OllamaDiffDel', buffer)
     debug_print("Changes accepted: All annotations and signs removed.")
 
 def reject_changes(buffer, original_lines, start):
@@ -644,15 +661,15 @@ def get_job_status():
             return g_result, None, g_errormsg
 
         # Success:
-        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
-        if use_inline_diff:
-            apply_diff(g_diff, vim.current.buffer, g_start_line)
-        else:
-            apply_change(g_diff, vim.current.buffer, g_start_line)
-
         g_groups = group_diff(g_diff, g_start_line)
         log.debug(g_groups)
         g_change_index = 0
+
+        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
+        if use_inline_diff:
+            apply_diff_groups(g_groups, vim.current.buffer)
+        else:
+            apply_change(g_diff, vim.current.buffer, g_start_line)
 
         result = 'Done'
     except Exception as e:
@@ -668,87 +685,66 @@ def AcceptAllChanges():
 def RejectAllChanges():
     reject_changes(vim.current.buffer, g_original_content, g_start_line)
 
-def ShowAcceptDialog(dialog_callback, index):
-    global g_groups, g_dialog_callback
-    if not g_groups:
-        print("No groups, ignoring ShowAcceptDialog.")
-        return
+def FindGroupForLine(line: int) -> tuple[int, Optional[Group]]:
+    """
+    Find the group whose start_line matches the given line number.
 
-    # get current group
-    group = g_groups[index]
-    start_line = group.get('start_line', 1)
+    Args:
+        line: The line number to search for.
 
-    # move cursor to line lineno
-    vim.command(f'execute "normal! {start_line}G"')
-    # move cursor to col 0
-    vim.command(f'execute "normal! 0"')
-    vim.command(f'redraw')
-
-    # save callback for later calls
-    g_dialog_callback = dialog_callback
-    count = len(g_groups)
-    msg = f"Accept change {index+1} of {count}? y/n"
-    # show popup
-    vim.command(f'call popup_dialog("{msg}", {{ "line": {start_line}, "filter": "popup_filter_yesno", "callback": "{dialog_callback}", "padding": [2, 4, 2, 4] }})')
-
-def DialogCallback(id, result):
-    global g_change_index, g_groups
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring callback.")
-        return
-
-    # Handle based on result
-    if result == 1:  # 'y' pressed, meaning accept
-        AcceptChange(g_change_index)
-    elif result == 0:  # 'n' pressed, meaning reject
-        RejectChange(g_change_index)
-    else:
-        print(f"Unexpected result: {result}")
-    NextChange()
-
-def NextChange():
-    global g_change_index, g_groups, g_dialog_callback
-    count = len(g_groups)
-    if (count == 0):
-        # no more changes left
-        return
-
-    # update index
-    g_change_index += 1
-    if (g_change_index >= len(g_groups)):
-        # not more changes
-        g_groups = None
-        g_change_index = -1
-        VimHelper.SignClear(vim.current.buffer)
-        print("No more changes.")
-        return
-
-    ShowAcceptDialog(g_dialog_callback, g_change_index)
-
-def FindGroupForLine(line):
+    Returns:
+        A tuple (index, Group) if found, otherwise (0, None).
+    """
     global g_groups
     log.debug(f"FindGroupForLine line={line}")
-    if g_groups:
-        for i, g in enumerate(g_groups):
-            start_line = int(g.get('start_line', 0))
-            log.debug(f"{i}: start_line={start_line}")
-            if start_line == int(line):
-                return i, g
+
+    if not g_groups:
+        return 0, None
+
+    for i, g in enumerate(g_groups):
+        log.debug(f"{i}: start_line={g.start_line}")
+        if g.start_line == line:
+            return i, g
+
     return 0, None
 
-def AcceptChange(line):
-    log.debug("AcceptChange")
+def GetGroup(index: int) -> Optional[Group]:
+    global g_groups
+
+    # check range
+    if index < 0 or index >= len(g_groups):
+        log.debug(f'GetGroup: index {index} out of range')
+        return None
+
+    return g_groups[index]
+
+def AcceptChangeLine(line: int) -> None:
+    log.debug(f"AcceptChangeLine at line {line}")
 
     index, group = FindGroupForLine(line)
     # sanity check
     if not group:
-        print(f'AcceptChange: group for line {line} not found')
+        log.error(f"AcceptChangeLine: group for line {line} not found")
         return
 
-    log.debug("diff group: " +json.dumps(group, indent=4))
+    AcceptChange(index)
+
+
+def AcceptChange(index: int) -> None:
+    log.debug(f"AcceptChange at {index}")
+
+    group = GetGroup(index)
+    # sanity check
+    if not group:
+        log.error(f"AcceptChange: group for index {index} not found")
+        return
+
+    # Convert dataclass to dict for logging
+    log.debug("diff group: " + json.dumps(group.__dict__, indent=4))
+
     # compute start and end lines
-    start_line = group.get('start_line', 1)
-    end_line = group.get('end_line', 1)
+    start_line = group.start_line
+    end_line = group.end_line
     buf = vim.current.buffer
 
     log.debug(f"remove signs from {start_line} to {end_line}")
@@ -758,57 +754,75 @@ def AcceptChange(line):
 
     # remove abovetext
     log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
+    VimHelper.ClearHighlights(index, 'OllamaDiffAdd', buf)
+    VimHelper.ClearHighlights(index, 'OllamaDiffDel', buf)
 
-def RejectChange(line):
-    log.debug("RejectChange")
-    restored_lines = 0
+def RejectChangeLine(line: int) -> None:
+    log.debug(f"RejectChangeLine at line {line}")
 
     index, group = FindGroupForLine(line)
     # sanity check
     if not group:
-        print(f'RejectChange: group for line {line} not found')
+        log.error(f"RejectChangeLine: group for line {line} not found")
         return
 
-    log.debug("diff group: " +json.dumps(group, indent=4))
+    RejectChange(index)
+
+
+def RejectChange(index: int) -> None:
+    log.debug(f"RejectChange at {index}")
+    restored_lines = 0
+
+    group = GetGroup(index)
+    # sanity check
+    if not group:
+        log.error(f"RejectChange: group for index {index} not found")
+        return
+
+    log.debug("diff group: " + json.dumps(asdict(group), indent=4))
+
     # compute start and end lines
-    start_line = group.get('start_line', 1)
-    end_line = group.get('end_line', 1)
+    start_line = group.start_line
+    end_line = group.end_line
     buf = vim.current.buffer
 
     # remove any abovetext
     log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
+    VimHelper.ClearHighlights(index, 'OllamaDiffAdd', buf)
+    VimHelper.ClearHighlights(index, 'OllamaDiffDel', buf)
 
     # undo all changes of current group
     lineno = start_line
-    for line in group.get('changes'):
+    for line in group.changes:
         log.debug(f"remove signs from line {lineno}")
         VimHelper.UnplaceSign(lineno, buf)
-        # undo change
-        if (line.startswith('- ')):
+
+        if line.startswith('- '):
             content = line[2:]
             # restore deleted line
             log.debug(f"restore line {lineno}")
             VimHelper.InsertLine(lineno, content, buf)
             lineno += 1
             restored_lines += 1
-        elif (line.startswith('+ ')):
+
+        elif line.startswith('+ '):
             content = line[2:]
             # remove added line
             log.debug(f"delete line {lineno}")
             old_content = VimHelper.DeleteLine(lineno, buf)
             if old_content != content:
-                raise Exception(f"error: diff does not apply to restore deleted line {lineno}: {content} != {old_content}")
+                raise Exception(
+                    f"error: diff does not apply to restore deleted line {lineno}: {content!r} != {old_content!r}"
+                )
             restored_lines -= 1
 
     log.debug(f"restored_lines={restored_lines}")
 
-    # correct lines of remaining changes: index+1 and above
-    for i in range(index+1, len(group)):
+    # correct lines of remaining groups: index+1 and above
+    for i in range(index + 1, len(g_groups)):
         g = g_groups[i]
-        g['start_line'] += restored_lines
-        g['end_line'] += restored_lines
+        g.start_line += restored_lines
+        g.end_line += restored_lines
 
 # Main entry point
 if __name__ == "__main__":
