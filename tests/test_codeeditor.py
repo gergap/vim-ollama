@@ -27,7 +27,8 @@ class FakeVimHelper:
     calls = []
 
     @classmethod
-    def reset(cls):
+    def reset(cls, buf):
+        vim.current.buffer =buf
         cls.calls.clear()
         cls._reset_state()
 
@@ -222,26 +223,26 @@ def test_no_changes():
 def test_single_line_addition():
     diff = ["+ c"]
     buf = FakeBuffer(["a", "b"])
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     # apply at start of buffer
     CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["c", "a", "b"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply in the middle
     buf = FakeBuffer(["a", "b"])
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 2)
     assert buf == ["a", "c", "b"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply at end of buffer
     buf = FakeBuffer(["a", "b"])
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["a", "b", "c"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
     # apply on empty buffer
     buf = FakeBuffer([])
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["c"]
     assert any(call[0] == "InsertLine" for call in FakeVimHelper.calls)
@@ -250,35 +251,35 @@ def test_single_line_deletion():
     # delete first line
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- a"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["b", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete middle line
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- b"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 2)
     assert buf == ["a", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete middle line with unchanged context
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["  a", "- b", "  c"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 1)
     assert buf == ["a", "c"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # delete last line
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- c"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf, 3)
     assert buf == ["a", "b"]
     assert any(call[0] == "DeleteLine" for call in FakeVimHelper.calls)
     # test not matching diff
     buf = FakeBuffer(["a", "b", "c"])
     diff = ["- d"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     try:
         CodeEditor.apply_change(diff, buf, 3)
     except Exception as e:
@@ -287,7 +288,7 @@ def test_single_line_deletion():
 def test_single_line_change():
     buf = FakeBuffer(["x", "y", "z"])
     diff = ["  x", "- y", "+ Y", "  z"]
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
     CodeEditor.apply_change(diff, buf)
     assert buf == ["x", "Y", "z"]
 
@@ -398,15 +399,12 @@ def test_apply_and_reject_forward():
 
     # prepare fake buffer
     buf = FakeBuffer(old.copy())
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
-    # we need to save this in CodeEditor to make things working
-    CodeEditor.g_groups = groups
-    vim.current.buffer = buf
     # apply as inline diff
     CodeEditor.apply_diff_groups(groups, buf)
 
@@ -429,15 +427,12 @@ def test_apply_and_reject_reverse():
 
     # prepare fake buffer
     buf = FakeBuffer(old.copy())
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
-    # we need to save this in CodeEditor to make things working
-    CodeEditor.g_groups = groups
-    vim.current.buffer = buf
     # apply as inline diff
     CodeEditor.apply_diff_groups(groups, buf)
 
@@ -460,15 +455,12 @@ def test_apply_and_reject_mixed_order():
 
     # prepare fake buffer
     buf = FakeBuffer(old.copy())
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
-    # we need to save this in CodeEditor to make things working
-    CodeEditor.g_groups = groups
-    vim.current.buffer = buf
     # apply as inline diff
     CodeEditor.apply_diff_groups(groups, buf)
 
@@ -494,15 +486,12 @@ def test_apply_and_reject_different_types():
 
     # prepare fake buffer
     buf = FakeBuffer(old.copy())
-    FakeVimHelper.reset()
+    FakeVimHelper.reset(buf)
 
     # compute the diff
     diff = CodeEditor.compute_diff(old, new)
     # compute groups
     groups = CodeEditor.group_diff(diff, starting_line=1)
-    # we need to save this in CodeEditor to make things working
-    CodeEditor.g_groups = groups
-    vim.current.buffer = buf
     # apply as inline diff
     CodeEditor.apply_diff_groups(groups, buf)
 
@@ -610,7 +599,7 @@ int main(int argc, char *argv[])
 #    exp = exp_result.strip().splitlines()
 #    # prepare fake buffer
 #    buf = FakeBuffer(old.copy())
-#    FakeVimHelper.reset()
+#    FakeVimHelper.reset(buf)
 #
 #    # compute the diff
 #    diff = CodeEditor.compute_diff(old, new)
@@ -618,9 +607,6 @@ int main(int argc, char *argv[])
 #    CodeEditor.apply_diff(diff, buf)
 #    # compute groups
 #    groups = CodeEditor.group_diff(diff, starting_line=1)
-#    # we need to save this in CodeEditor to make things working
-#    CodeEditor.g_groups = groups
-#    vim.current.buffer = buf
 #
 #    # Check for expected diff
 #    assert len(groups) == 2
@@ -666,7 +652,7 @@ if os.path.isdir(EXAMPLES_DIR):
                 groups = CodeEditor.group_diff(diff, starting_line=1)
                 assert len(groups) > 0
                 buf = FakeBuffer(before.copy())
-                FakeVimHelper.reset()
+                FakeVimHelper.reset(buf)
                 CodeEditor.apply_diff_groups(groups, buf)
                 assert buf == after
                 text = FakeVimHelper.render_state(buf)
