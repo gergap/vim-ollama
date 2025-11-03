@@ -49,26 +49,6 @@ def DeleteLine(lineno, buffer = vim.current.buffer):
     return oldcontent
 
 ###############################
-# Sign edit functions
-###############################
-def PlaceSign(lineno, signname, buf):
-    return
-    sign_id=lineno
-    bufno = buf.number
-    vim.command(f'sign place {sign_id} line={lineno} name={signname} buffer={bufno}')
-
-def UnplaceSign(lineno, buf):
-    return
-    sign_id=lineno
-    bufno = buf.number
-    vim.command(f'sign unplace {sign_id} buffer={bufno}')
-
-def SignClear(buf):
-    return
-    bufno = buf.number
-    vim.command(f'sign unplace * buffer={bufno}')
-
-###############################
 # Line property edit functions
 ###############################
 

@@ -179,9 +179,6 @@ def apply_diff(changeId, diff, buf, line_offset):
                 for i, deleted_line in enumerate(deleted_lines):
                     VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'ChangedLine', buf)
-            else:
-                VimHelper.PlaceSign(lineno, 'NewLine', buf)
 
             line_offset += 1
 
@@ -208,7 +205,6 @@ def apply_diff(changeId, diff, buf, line_offset):
                 for i, deleted_line in enumerate(deleted_lines):
                     VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
 
             old_content = VimHelper.GetLine(lineno, buf)
             debug_print(f"line {lineno}: '{old_content}'")
@@ -726,11 +722,6 @@ def AcceptChange(index: int) -> None:
     start_line = group.start_line
     end_line = group.end_line
     buf = vim.current.buffer
-
-    log.debug(f"remove signs from {start_line} to {end_line}")
-    # remove signs
-    for line in range(start_line, end_line + 1):
-        VimHelper.UnplaceSign(line, buf)
 
     # remove abovetext
     log.debug(f"remove abovetext from {start_line} to {end_line}")
