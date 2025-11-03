@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import sys, os, types, pytest
 
+g_log = None
+
 # -----------------------------------------------------------------------------
 # Fake vim + VimHelper setup
 # -----------------------------------------------------------------------------
@@ -35,6 +37,18 @@ class FakeVimHelper:
         cls.above_text = {}
         cls.below_text = {}
         cls.highlights = {}
+
+
+    @classmethod
+    def SetLogger(cls, log):
+        global g_log
+        g_log = log
+
+    @classmethod
+    def debug_log(cls, msg):
+        if g_log == None:
+            return
+        g_log.debug(msg)
 
     # ---------------------------------------------------------------------
     # Basic VimHelper methods

@@ -55,6 +55,7 @@ def CreateLogger():
     global log
     log = OllamaLogger('/tmp/logs', 'edit.log')
     log.setLevel(0)
+    VimHelper.SetLogger(log)
 
 def SetLogLevel(level):
     if log == None:
