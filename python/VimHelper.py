@@ -57,41 +57,54 @@ def PropertyTypeAdd(name, options):
     vim.command(f'call prop_type_add("{name}", {json_options})')
 
 def HighlightLine(lineno, propId, propname, length, buf):
-    debug_log(f'HighlightLine {lineno}, {propId}, {propname}')
     bufno = buf.number
+    debug_log(f'call prop_add({lineno}, 1, {{"type": "{propname}", "id": {propId}, "length": {length}, "bufnr": {bufno} }})')
     vim.command(f'call prop_add({lineno}, 1, {{"type": "{propname}", "id": {propId}, "length": {length}, "bufnr": {bufno} }})')
 
 def ClearHighlights(propId, propname, buf):
-    debug_log(f'ClearHighlights: prop_remove {propname}, {propId}')
     bufno = buf.number
+    debug_log(f'call prop_remove({{"type": "{propname}", "id": {propId}, "bufnr": {bufno}, "both": 1, "all": 1 }})')
     # remove all properties of given type AND id
-    vim.command(f'call prop_remove({{"type": "{propname}", "id": {propId}, "bufnr": {bufno}, "both": 1 }})')
+    vim.command(f'call prop_remove({{"type": "{propname}", "id": {propId}, "bufnr": {bufno}, "both": 1, "all": 1 }})')
 
 def ClearAllHighlights(propname, buf):
-    debug_log(f'ClearAllHighlights: prop_remove {propname}')
     bufno = buf.number
+    debug_log(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}, "all": 1}})')
     # remove all properties of given type
-    vim.command(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}}})')
+    vim.command(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}, "all": 1}})')
 
-def ShowTextAbove(lineno, propname, text, buf):
+def ClearTextAbove(start_line, end_line, propname, buf):
+    """
+    Removes all above text and below text on the fiven line.
+    Note: text proprety cannot be combined with id, so we need to use line numbers to remove them!
+    """
+    bufno = buf.number
+    debug_log(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}, "all": 1 }}, {start_line}, {end_line})')
+    vim.command(f'call prop_remove({{"type": "{propname}", "bufnr": {bufno}, "all": 1 }}, {start_line}, {end_line})')
+
+def ShowTextAbove(lineno, propId, propname, text, buf):
     """
     Show text above the given line with specified property type.
+    Note: text proprety cannot be combined with id, so we need to use line numbers to remove them!
     """
     bufno = buf.number
     # Escape for insertion as a literal single quotes string.
     escaped_text = text.replace("'", "''")
+    debug_log(f"call prop_add({lineno}, 0, {{'type': '{propname}', 'id': {propId}, 'text': '{escaped_text}', 'text_align': 'above', 'bufnr': {bufno}}})")
     vim.command(
-        f"call prop_add({lineno}, 0, {{'type': '{propname}', 'text': '{escaped_text}', 'text_align': 'above', 'bufnr': {bufno}}})"
+        f"call prop_add({lineno}, 0, {{'type': '{propname}', 'id': {propId}, 'text': '{escaped_text}', 'text_align': 'above', 'bufnr': {bufno}}})"
     )
 
-def ShowTextBelow(lineno, propname, text, buf):
+def ShowTextBelow(lineno, propId, propname, text, buf):
     """
     Show text below the given line with specified property type.
+    Note: text proprety cannot be combined with id, so we need to use line numbers to remove them!
     """
     bufno = buf.number
     # Escape for insertion as a literal single quotes string.
     escaped_text = text.replace("'", "''")
+    debug_log(f"call prop_add({lineno}, 0, {{'type': '{propname}', 'id': {propId}, 'text': '{escaped_text}', 'text_align': 'below', 'bufnr': {bufno}}})")
     vim.command(
-        f"call prop_add({lineno}, 0, {{'type': '{propname}', 'text': '{escaped_text}', 'text_align': 'below', 'bufnr': {bufno}}})"
+        f"call prop_add({lineno}, 0, {{'type': '{propname}', 'id': {propId}, 'text': '{escaped_text}', 'text_align': 'below', 'bufnr': {bufno}}})"
     )
 

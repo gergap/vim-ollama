@@ -177,7 +177,7 @@ def apply_diff(changeId, diff, buf, line_offset):
             if deleted_lines:
                 # Show the collected deleted lines above the current added line
                 for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', deleted_line, buf)
+                    VimHelper.ShowTextAbove(lineno, changeId, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
 
             line_offset += 1
@@ -203,7 +203,7 @@ def apply_diff(changeId, diff, buf, line_offset):
             if deleted_lines:
                 # Show the collected deleted lines above the current unchanged line
                 for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
+                    VimHelper.ShowTextAbove(line_offset, changeId, 'OllamaDiffDel', deleted_line, buf)
                 deleted_lines = []  # Reset deleted lines
 
             old_content = VimHelper.GetLine(lineno, buf)
@@ -224,11 +224,11 @@ def apply_diff(changeId, diff, buf, line_offset):
     if line_offset >= len(buf):
         if deleted_lines:
             for i, deleted_line in enumerate(deleted_lines):
-                VimHelper.ShowTextBelow(line_offset-1, 'OllamaDiffDel', deleted_line, buf)
+                VimHelper.ShowTextBelow(line_offset-1, changeId, 'OllamaDiffDel', deleted_line, buf)
     else:
         if deleted_lines:
             for i, deleted_line in enumerate(deleted_lines):
-                VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
+                VimHelper.ShowTextAbove(line_offset, changeId, 'OllamaDiffDel', deleted_line, buf)
 
 def apply_change(diff, buf, line_offset=1):
     """
@@ -725,8 +725,8 @@ def AcceptChange(index: int) -> None:
 
     # remove abovetext
     log.debug(f"remove abovetext from {start_line} to {end_line}")
-    VimHelper.ClearHighlights(index, 'OllamaDiffAdd', buf)
-    VimHelper.ClearHighlights(index, 'OllamaDiffDel', buf)
+    VimHelper.ClearTextAbove(start_line, end_line, 'OllamaDiffAdd', buf)
+    VimHelper.ClearTextAbove(start_line, end_line, 'OllamaDiffDel', buf)
 
 def RejectChangeLine(line: int) -> None:
     log.debug(f"RejectChangeLine at line {line}")
@@ -759,14 +759,12 @@ def RejectChange(index: int) -> None:
 
     # remove any abovetext
     log.debug(f"remove abovetext from {start_line} to {end_line}")
-    VimHelper.ClearHighlights(index, 'OllamaDiffAdd', buf)
-    VimHelper.ClearHighlights(index, 'OllamaDiffDel', buf)
+    VimHelper.ClearTextAbove(start_line, end_line, 'OllamaDiffAdd', buf)
+    VimHelper.ClearTextAbove(start_line, end_line, 'OllamaDiffDel', buf)
 
     # undo all changes of current group
     lineno = start_line
-    for line in group.changes:
-        log.debug(f"remove signs from line {lineno}")
-        VimHelper.UnplaceSign(lineno, buf)
+    for i, line in enumerate(group.changes):
 
         if line.startswith('- '):
             content = line[2:]
