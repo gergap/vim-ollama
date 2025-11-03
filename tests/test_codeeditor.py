@@ -654,6 +654,7 @@ if os.path.isdir(EXAMPLES_DIR):
                 buf = FakeBuffer(before.copy())
                 FakeVimHelper.reset(buf)
                 CodeEditor.apply_diff_groups(groups, buf)
+                # test diff apply
                 assert buf == after
                 text = FakeVimHelper.render_state(buf)
                 # create output dir
@@ -664,6 +665,15 @@ if os.path.isdir(EXAMPLES_DIR):
                 # save html to file
                 with open(f"output/test_{name}.html", 'w') as f:
                     f.write(html)
+                # test accept
+                CodeEditor.AcceptAllChanges()
+                assert buf == after
+                # test reject
+                buf = FakeBuffer(before.copy())
+                FakeVimHelper.reset(buf)
+                CodeEditor.apply_diff_groups(groups, buf)
+                CodeEditor.RejectAllChanges()
+                assert buf == before
 
             _test.__name__ = f"test_example_{name.replace('.', '_')}"
             return _test
