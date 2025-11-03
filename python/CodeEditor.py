@@ -518,6 +518,7 @@ def vim_edit_code(request, firstline, lastline, settings, credentialname):
     global g_original_content
     global g_new_code_lines
     global g_diff
+    code_lines = ''
     new_code_lines = ''
     diff = ''
     result = ''
@@ -769,20 +770,21 @@ def RejectChange(index: int) -> None:
         if line.startswith('- '):
             content = line[2:]
             # restore deleted line
-            log.debug(f"restore line {lineno}")
+#            log.debug(f"restore line {lineno}")
             VimHelper.InsertLine(lineno, content, buf)
-            lineno += 1
+            lineno += 1 # increment lineno for next change
             restored_lines += 1
 
         elif line.startswith('+ '):
             content = line[2:]
             # remove added line
-            log.debug(f"delete line {lineno}")
+#            log.debug(f"delete line {lineno}")
             old_content = VimHelper.DeleteLine(lineno, buf)
             if old_content != content:
                 raise Exception(
                     f"error: diff does not apply to restore deleted line {lineno}: {content!r} != {old_content!r}"
                 )
+            # keep lineno for next change after removing a line
             restored_lines -= 1
 
     log.debug(f"restored_lines={restored_lines}")
