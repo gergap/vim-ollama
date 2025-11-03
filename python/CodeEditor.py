@@ -286,46 +286,6 @@ def apply_change(diff, buf, line_offset=1):
             debug_print(f"other: '{line}'")
             line_offset += 1
 
-def accept_changes(buffer):
-    """
-    Apply accepted changes to the Vim buffer.
-
-    Args:
-        buffer (list): The original Vim buffer as a list.
-        diff (list): The computed diff (ndiff output).
-        start (int): The starting line number.
-    """
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
-
-    # remove properties from all lines
-    VimHelper.ClearAllHighlights('OllamaDiffAdd', buffer)
-    VimHelper.ClearAllHighlights('OllamaDiffDel', buffer)
-    debug_print("Changes accepted: All annotations and signs removed.")
-
-def reject_changes(buffer, original_lines, start):
-    """
-    Revert to the original lines.
-
-    Args:
-        buffer (list): The Vim buffer as a list.
-        original_lines (list): The original lines to restore.
-        start (int): The starting line number.
-    """
-#    line_offset = start - 1  # Adjust to 0-based index
-#    debug_print(f"Reverting changes starting from line {start}")
-#
-#    # Compute the range to replace in the buffer
-#    num_lines_to_replace = len(original_lines)
-#    buffer[line_offset:line_offset + num_lines_to_replace] = original_lines
-
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
-
-    # simply undo last change
-    vim.command(f"undo")
-    debug_print("Changes rejected. Original content restored.")
-
 def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
     """
     Creates a prompt for the LLM based on the given parameters.
@@ -688,10 +648,22 @@ def get_job_status():
     return result, groups, g_errormsg
 
 def AcceptAllChanges():
-    accept_changes(vim.current.buffer)
+    global g_groups
+    g_groups = None
+    buf = vim.current.buffer
+    VimHelper.ClearAllHighlights('OllamaDiffAdd', buf)
+    VimHelper.ClearAllHighlights('OllamaDiffDel', buf)
 
 def RejectAllChanges():
-    reject_changes(vim.current.buffer, g_original_content, g_start_line)
+    global g_groups
+    log.debug(f"RejectAllChanges")
+    if not g_groups:
+        log.debug("RejectAllChanges called, but g_groups is None")
+        return
+    groups = g_groups
+    g_groups = None
+    for i, g in enumerate(groups):
+        RejectChange(i)
 
 def FindGroupForLine(line: int) -> tuple[int, Optional[Group]]:
     """
