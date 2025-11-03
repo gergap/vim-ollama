@@ -340,6 +340,7 @@ EOF
 endfunction
 
 function! ollama#edit#RejectChange(index)
+    echom 'ollama#edit#RejectChange()'
     call s:DeletePopupMarker(a:index)
     if len(s:popups) == 0
         call ollama#logger#Debug('all popups closed')
@@ -365,49 +366,26 @@ endfunction
 " Accept All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#AcceptAll()
-    " iterate over all popups
+    " iterate over all popups and accept them
     for [changeId, winId] in items(s:popups)
         call popup_close(winId, 0)
     endfor
     let s:popup = {}
     " remove menubar
     aunmenu WinBar
-    python3 << EOF
-import vim
-try:
-    CodeEditor.AcceptAllChanges()
-except Exception as e:
-    # Handle or print the exception here.
-    vim.command('echohl ErrorMsg')
-    vim.command('echo "Error accepting changes: ' + str(e) + '"')
-    vim.command('echon ""')  # To display a newline.
-finally:
-    pass
-EOF
 endfunction
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Reject All Changes
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! ollama#edit#RejectAll()
-    " iterate over all popups
+    echom 'ollama#edit#RejectAll()'
+    " iterate over all popups and reject them
     for [changeId, winId] in items(s:popups)
         call popup_close(winId, 1)
     endfor
     let s:popup = {}
     " remove menubar
     aunmenu WinBar
-    python3 << EOF
-import vim
-try:
-    CodeEditor.RejectAllChanges()
-except Exception as e:
-    # Handle or print the exception here.
-    vim.command('echohl ErrorMsg')
-    vim.command('echo "Error rejecting changes: ' + str(e) + '"')
-    vim.command('echon ""')  # To display a newline.
-finally:
-    pass
-EOF
 endfunction
 
