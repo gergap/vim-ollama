@@ -97,7 +97,7 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
 
     log.debug('Using OpenAI completion endpoint')
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(endpoint, credentialname)
+    api_key = cred.GetApiKey('openai', credentialname)
     # don't trace API keys in production, just a development helper
     #log.debug(f'api_key={api_key}')
 

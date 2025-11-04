@@ -410,7 +410,7 @@ def generate_code_completion_openai(prompt, baseurl='', model='', options=None, 
 
     log.debug('Using OpenAI completion endpoint')
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(baseurl, credentialname)
+    api_key = cred.GetApiKey('openai', credentialname)
 
     if baseurl:
         log.info('Using OpenAI endpoint '+baseurl)

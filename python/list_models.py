@@ -39,7 +39,7 @@ def list_openai_models(base_url, credentialname):
         base_url = 'https://api.mistral.ai/v1'
 
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(base_url, credentialname)
+    api_key = cred.GetApiKey('openai', credentialname)
 
     url = f"{base_url}/models"
     headers = {

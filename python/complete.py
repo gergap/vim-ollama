@@ -156,7 +156,7 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
         baseurl = 'https://api.mistral.ai/'
 
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(baseurl, credentialname)
+    api_key = cred.GetApiKey('mistral', credentialname)
     log.debug('Using Mistral API')
     client = Mistral(api_key=api_key)
 
@@ -215,7 +215,7 @@ def generate_code_completion_openai(prompt, baseurl, model, options, credentialn
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(baseurl, credentialname)
+    api_key = cred.GetApiKey('openai', credentialname)
 
     log.debug('Using OpenAI chat completion endpoint (prompt engineering)')
     if baseurl:
@@ -300,7 +300,7 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
 
     log.debug('Using OpenAI legacy completion endpoint (FIM support)')
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey(baseurl, credentialname)
+    api_key = cred.GetApiKey('openai', credentialname)
 
     if baseurl:
         log.debug(f'baseurl={baseurl}')
