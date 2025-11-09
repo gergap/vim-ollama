@@ -21,6 +21,12 @@ let s:prop_id = -1
 " suppress internally trigger reschedules due to inserts
 " only when the user types text we want a reschedule
 let s:ignore_schedule = 0
+" API key cache in sccript local variable. This way we can get the API keys
+" once from UNIX pass and then set it as env variable for child processes
+" without accessing the pass manager again or the need of storing the key 
+" in a plain text file.
+let s:openai_api_key = ''
+let s:mistral_api_key = ''
 
 let s:vim_minimum_version = '9.0.0185'
 let s:has_vim_ghost_text = has('patch-' .. s:vim_minimum_version) && has('textprop')
@@ -39,6 +45,56 @@ else
     echom "warning: Vim " .. s:vim_minimum_version
           \ .. " or newer is required to support ghost text (textprop)"
 endif
+
+" Gets the Mistral API key from UNIX pass and caches it as a script local
+" variable
+function! s:GetMistralApiKey() abort
+    if exists('s:mistral_api_key') && s:mistral_api_key !=# ''
+        return s:mistral_api_key
+    endif
+
+    " Run Python once to retrieve and store the key
+    python3 << EOF
+import vim
+from OllamaCredentials import OllamaCredentials
+
+credentialname = vim.eval('get(g:, "ollama_mistral_credentialname", "")')
+key = ""
+try:
+    key = OllamaCredentials().GetApiKey("mistral", credentialname)
+except Exception as e:
+    vim.command(f'echom "Failed to get Mistral key: {e}"')
+if key:
+    vim.command(f'let s:mistral_api_key = "{key}"')
+EOF
+
+    return s:mistral_api_key
+endfunction
+
+" Gets the OpenAI API key from UNIX pass and caches it as a script local
+" variable
+function! s:GetOpenAIApiKey() abort
+    if exists('s:openai_api_key') && s:openai_api_key !=# ''
+        return s:openai_api_key
+    endif
+
+    " Run Python once to retrieve and store the key
+    python3 << EOF
+import vim
+from OllamaCredentials import OllamaCredentials
+
+credentialname = vim.eval('get(g:, "ollama_openai_credentialname", "")')
+key = ""
+try:
+    key = OllamaCredentials().GetApiKey("openai", credentialname)
+except Exception as e:
+    vim.command(f'echom "Failed to get Mistral key: {e}"')
+if key:
+    vim.command(f'let s:openai_api_key = "{key}"')
+EOF
+
+    return s:openai_api_key
+endfunction
 
 function! ollama#TriggerCompletion()
     call ollama#logger#Debug("TriggerCompletion...")
@@ -199,6 +255,16 @@ function! ollama#GetSuggestion(timer)
         \ 'err_cb': function('s:HandleError'),
         \ 'exit_cb': function('s:HandleExit')
         \ }
+
+    " set API keys as env variable
+    let l:job_env = {}
+    if g:ollama_model_provider ==# 'mistral'
+        let l:job_env['MISTRAL_API_KEY'] = s:GetMistralApiKey()
+    elseif g:ollama_model_provider =~# '^openai'
+        let l:job_env['OPENAI_API_KEY'] = s:GetOpenAIApiKey()
+    endif
+    " add the env dict to job options
+    let l:job_options.env = l:job_env
 
     if (s:prompt == l:prompt)
         call ollama#logger#Debug("Ignoring search for '" .. l:prompt .. "'."
