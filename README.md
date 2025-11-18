@@ -169,7 +169,7 @@ The most important variables: (see `:help vim-ollama` for more information)
 |-----------------------|--------------------------|----------------------------------------|
 | `g:ollama_host`       | `http://localhost:11434` | The URL of the Ollama server.          |
 | `g:ollama_model`      | `starcoder2:3b`         | The LLM for code completions.         |
-| `g:ollama_edit_model` | `qwen2.5-coder:3b`      | The LLM for code editing tasks.       |
+| `g:ollama_edit_model` | `qwen2.5-coder:7b`      | The LLM for code editing tasks.       |
 | `g:ollama_chat_model` | `llama3.1:8b`           | The LLM for chat conversations.       |
 
 When adding new unsupported code completion models, you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`. Simply add this missing file and create a merge request to get it included upstream. Consult the model's documentation to find out the correct tokens.
