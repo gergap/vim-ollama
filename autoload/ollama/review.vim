@@ -114,6 +114,7 @@ function! s:StartChat(lines) abort
         setlocal bufhidden=delete
 
         call append(line("$"), a:msg)
+        stopinsert
     endfunc
 
     " Function handling the shell exits: close the window.
@@ -140,13 +141,18 @@ function! s:StartChat(lines) abort
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+    let l:base_url = g:ollama_host
+    if g:ollama_chat_provider == 'openai'
+        let l:base_url = g:ollama_openai_baseurl
+    endif
 
     let l:script_path = printf('%s/python/chat.py', g:ollama_plugin_dir)
     " Create the Python command
     let l:command = [ g:ollama_python_interpreter,
                 \ l:script_path,
+                \ '-p', g:ollama_chat_provider,
                 \ '-m', g:ollama_chat_model,
-                \ '-u', g:ollama_host,
+                \ '-u', l:base_url,
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
@@ -154,6 +160,11 @@ function! s:StartChat(lines) abort
     if g:ollama_chat_systemprompt != ''
          " add system prompt option
         let l:command += [ '-s', g:ollama_chat_systemprompt ]
+    endif
+    " Add optional credentialname for looking up the API key
+    if g:ollama_openai_credentialname != ''
+         " add system prompt option
+        let l:command += [ '-k', g:ollama_openai_credentialname ]
     endif
 
     " Redirect job's IO to buffer
@@ -211,10 +222,12 @@ function! s:StartChat(lines) abort
     endif
 
     " Add a title to the chat buffer
-    call append(0, "Chat with Bot (type 'quit' to exit, press CTRL-C to interrupt output)")
-    call append(1, "-------------")
+    let l:title = "Chat with '" .. g:ollama_chat_model .. "' (via " .. g:ollama_chat_provider .. ")"
+    call append(0, l:title)
+    call append(1, repeat('-', len(l:title)))
+    call append(2, "(type 'quit' to exit, press CTRL-C to interrupt output)")
     if a:lines isnot v:null
-        call append(2, a:lines)
+        call append(3, a:lines)
         call ch_sendraw(s:job, join(a:lines, "\n") .. "\n")
     endif
 

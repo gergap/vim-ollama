@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
-import requests
-import argparse
 import json
 import os
-import time
+import requests
 import threading
 from difflib import ndiff
 from ChatTemplate import ChatTemplate
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 # create logger
 log = None
 
+# Try to import OpenAI SDK
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
+DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = 'qwen2.5-coder:14b'
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+# default options if missing
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+# default parameters if options is given, but missing these entries
+DEFAULT_TEMPERATURE = 0
+DEFAULT_MAX_TOKENS = 5000
 CONTEXT_LINES = 10
 
 # Shared variable to indicate whether the editing thread is active
@@ -25,6 +36,7 @@ g_thread_lock = threading.Lock()
 g_editing_thread = None
 # We bring the worker thread results into the main thread using these variables
 g_result = None
+g_errormsg = ''
 g_start_line = 0 # start line of edit
 g_end_line = 0 # end line of edit
 g_restored_lines = 0 # number of restored lines (undone deletes)
@@ -287,7 +299,7 @@ def reject_changes(buffer, original_lines, start):
 
 def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
     """
-    Creates a prompt for the OpenAI API based on the given parameters.
+    Creates a prompt for the LLM based on the given parameters.
 
     Args:
         request (str): The request to be satisfied by the translation.
@@ -297,7 +309,7 @@ def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
         ft (str): The file type of the code block.
 
     Returns:
-        str: The prompt for the OpenAI API.
+        str: The prompt for the code editing task.
     """
 
     # Get the directory where the Python script resides
@@ -314,7 +326,7 @@ f"""```{ft}
 <STOP_EDIT_HERE>
 {postamble}
 ```
-Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified text.
+Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified raw text. Don't surrend it with markdown backticks.
 """}
     ]
 
@@ -332,7 +344,7 @@ def generate_code_completion(prompt, baseurl, model, options):
     Calls the Ollama REST API with the given prompt.
 
     Args:
-        prompt (str): The prompt for the OpenAI API.
+        prompt (str): The prompt for Ollama model.
         baseurl (str): The base URL of the Ollama server.
         model (str): The name of the model to use.
         options (dict): Additional options for the API call.
@@ -348,6 +360,12 @@ def generate_code_completion(prompt, baseurl, model, options):
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
 
+    if model is None:
+        model = DEFAULT_MODEL
+    if options is None:
+        options = json.loads(DEFAULT_OPTIONS)
+
+    log.debug('model: ' + str(model))
     data = {
         'model': model,
         'prompt': prompt,
@@ -361,8 +379,11 @@ def generate_code_completion(prompt, baseurl, model, options):
 
     if response.status_code == 200:
         json_response = response.json()
-#        log.debug('response: ' + json.dumps(json_response, indent=4))
+        log.debug('response: ' + json.dumps(json_response, indent=4))
         completion = response.json().get('response')
+        if completion is None:
+            error = response.json().get('error', 'no response')
+            raise Exception(f"Error: {error}")
 
         log.debug(completion)
         # find index of sub string
@@ -376,9 +397,73 @@ def generate_code_completion(prompt, baseurl, model, options):
     else:
         raise Exception(f"Error: {response.status_code} - {response.text}")
 
-def edit_code(request, preamble, code, postamble, ft, settings):
+def generate_code_completion_openai(prompt, baseurl='', model='', options=None, credentialname=None):
     """
-    Edit code with Ollama LLM.
+    Calls OpenAI API with the given prompt.
+    Returns the raw completion text.
+    """
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Install via `pip install openai`.")
+
+    if model is None:
+        model = DEFAULT_OPENAI_MODEL
+
+    log.debug('Using OpenAI completion endpoint')
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('openai', credentialname)
+
+    if baseurl:
+        log.info('Using OpenAI endpoint '+baseurl)
+        client = OpenAI(base_url=baseurl, api_key=api_key)
+    else:
+        log.info('Using official OpenAI endpoint')
+        client = OpenAI(api_key=api_key)
+
+    # Extract options
+    if options is None:
+        options = json.loads(DEFAULT_OPTIONS)
+
+    temperature = options.get("temperature", DEFAULT_TEMPERATURE)
+    max_tokens = options.get("max_tokens", DEFAULT_MAX_TOKENS)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    response = client.chat.completions.create(
+        model=model or DEFAULT_OPENAI_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    # OpenAI returns a list of choices
+    completion = response.choices[0].message.content
+    log.debug(completion)
+    # convert response to lines
+    lines = completion.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        completion = "\n".join(lines)
+    completion = completion.strip()
+    log.debug(completion)
+
+    # Strip any end markers
+    for end_marker in ["<|endoftext|>", "<STOP_EDIT_HERE>", "<EOT>"]:
+        idx = completion.find(end_marker)
+        if idx != -1:
+            completion = completion[:idx]
+
+    return completion.rstrip()
+
+def edit_code(request, preamble, code, postamble, ft, settings, credentialname):
+    """
+    Edit code with Ollama or OpenAI LLM.
 
     Args:
         request (str): The request to be satisfied by the translation.
@@ -391,16 +476,21 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         Array of lines containing the changed code.
     """
 
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+
     if settings.get('simulate', 0):
         response = settings['response']
     else:
         # TODO: choose correct template based on selected model
         prompt = create_prompt('chatml.jinja', request, preamble, code, postamble, ft)
-        url = settings.get('url', DEFAULT_HOST)
-        model = settings.get('model', DEFAULT_MODEL)
-        options = settings.get('options', DEFAULT_OPTIONS)
+        url = settings.get('url', None)
+        model = settings.get('model', None)
+        options = settings.get('options', None)
         options = json.loads(options)
-        response = generate_code_completion(prompt, url, model, options)
+        if provider == "openai":
+            response = generate_code_completion_openai(prompt, url, model, options, credentialname)
+        else:
+            response = generate_code_completion(prompt, url, model, options)
 
     # check if we got a valid response
     if response is None or len(response) == 0:
@@ -426,7 +516,7 @@ def edit_code(request, preamble, code, postamble, ft, settings):
         lines.append(last_line)
     return lines
 
-def vim_edit_code(request, firstline, lastline, settings):
+def vim_edit_code(request, firstline, lastline, settings, credentialname):
     """
     Vim function to edit a selected range of code.
 
@@ -439,12 +529,14 @@ def vim_edit_code(request, firstline, lastline, settings):
     This function extracts the selected range, adds context lines, calls edit_code, and replaces the selection with the result.
     """
     global g_result
+    global g_errormsg
     global g_original_content
     global g_new_code_lines
     global g_diff
     new_code_lines = ''
     diff = ''
     result = ''
+    errormsg = ''
     try:
         buffer = vim.current.buffer
         filetype = vim.eval('&filetype')
@@ -469,7 +561,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         log.debug('postamble: ' + postamble)
 
         # Edit the code
-        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings)
+        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings, credentialname)
 
         # Produce diff
         diff = compute_diff(code_lines, new_code_lines)
@@ -480,6 +572,7 @@ def vim_edit_code(request, firstline, lastline, settings):
         log.error(f"Error in vim_edit_code: {e}")
         # Finish operation with error
         result = 'Error'
+        errormsg = str(e)
 
     # write results to global vars
     with g_thread_lock:
@@ -490,11 +583,13 @@ def vim_edit_code(request, firstline, lastline, settings):
         # save diff and result
         g_diff = diff
         g_result = result
+        g_errormsg = errormsg
 
-def start_vim_edit_code(request, firstline, lastline, settings):
+def start_vim_edit_code(request, firstline, lastline, settings, credentialname):
     global log
     global g_editing_thread
     global g_result
+    global g_errormsg
     global g_start_line
     global g_end_line
 
@@ -502,11 +597,12 @@ def start_vim_edit_code(request, firstline, lastline, settings):
         CreateLogger()
     log.debug(f'*** vim_edit_code: request={request}')
 
+    g_errormsg =''
     g_result = 'InProgress'
     g_start_line = int(firstline)
     g_end_line = int(lastline)
     # Start the thread
-    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings))
+    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings, credentialname))
     g_editing_thread.start()
 
 def get_job_status():
@@ -518,6 +614,7 @@ def get_job_status():
     """
     global g_editing_thread
     global g_result
+    global g_errormsg
     global g_start_line
     global g_end_line
     global g_restored_lines
@@ -535,11 +632,12 @@ def get_job_status():
                 is_runining = g_editing_thread.is_alive()
 
         if (is_running):
-            return "InProgress", None
+            return "InProgress", None, ''
 
         # Job Complete
         if g_result != 'Done':
-            return g_result, None
+            # Error
+            return g_result, None, g_errormsg
 
         # Success:
         use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
@@ -556,9 +654,10 @@ def get_job_status():
         result = 'Done'
     except Exception as e:
         log.error(f"Error in get_job_status: {e}")
+        g_errormsg = str(e)
         result = 'Error'
 
-    return result, g_groups
+    return result, g_groups, g_errormsg
 
 def AcceptAllChanges():
     accept_changes(vim.current.buffer)

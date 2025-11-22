@@ -21,6 +21,12 @@ let s:prop_id = -1
 " suppress internally trigger reschedules due to inserts
 " only when the user types text we want a reschedule
 let s:ignore_schedule = 0
+" API key cache in sccript local variable. This way we can get the API keys
+" once from UNIX pass and then set it as env variable for child processes
+" without accessing the pass manager again or the need of storing the key 
+" in a plain text file.
+let s:openai_api_key = ''
+let s:mistral_api_key = ''
 
 let s:vim_minimum_version = '9.0.0185'
 let s:has_vim_ghost_text = has('patch-' .. s:vim_minimum_version) && has('textprop')
@@ -39,6 +45,56 @@ else
     echom "warning: Vim " .. s:vim_minimum_version
           \ .. " or newer is required to support ghost text (textprop)"
 endif
+
+" Gets the Mistral API key from UNIX pass and caches it as a script local
+" variable
+function! s:GetMistralApiKey() abort
+    if exists('s:mistral_api_key') && s:mistral_api_key !=# ''
+        return s:mistral_api_key
+    endif
+
+    " Run Python once to retrieve and store the key
+    python3 << EOF
+import vim
+from OllamaCredentials import OllamaCredentials
+
+credentialname = vim.eval('get(g:, "ollama_mistral_credentialname", "")')
+key = ""
+try:
+    key = OllamaCredentials().GetApiKey("mistral", credentialname)
+except Exception as e:
+    vim.command(f'echom "Failed to get Mistral key: {e}"')
+if key:
+    vim.command(f'let s:mistral_api_key = "{key}"')
+EOF
+
+    return s:mistral_api_key
+endfunction
+
+" Gets the OpenAI API key from UNIX pass and caches it as a script local
+" variable
+function! s:GetOpenAIApiKey() abort
+    if exists('s:openai_api_key') && s:openai_api_key !=# ''
+        return s:openai_api_key
+    endif
+
+    " Run Python once to retrieve and store the key
+    python3 << EOF
+import vim
+from OllamaCredentials import OllamaCredentials
+
+credentialname = vim.eval('get(g:, "ollama_openai_credentialname", "")')
+key = ""
+try:
+    key = OllamaCredentials().GetApiKey("openai", credentialname)
+except Exception as e:
+    vim.command(f'echom "Failed to get OpenAI key: {e}"')
+if key:
+    vim.command(f'let s:openai_api_key = "{key}"')
+EOF
+
+    return s:openai_api_key
+endfunction
 
 function! ollama#TriggerCompletion()
     call ollama#logger#Debug("TriggerCompletion...")
@@ -89,9 +145,8 @@ endfunction
 function! s:HandleError(job, data)
     call ollama#logger#Debug("Received stderr: " .. a:data)
     if !empty(a:data)
-        echohl ErrorMsg
         echom "Error: " .. a:data
-        echohl None
+        call popup_notification(a:data, #{ pos: "center", time: 3000 })
     endif
 endfunction
 
@@ -102,7 +157,13 @@ function! s:HandleExit(job, exit_code)
         if a:job isnot s:kill_job
             echohl ErrorMsg
             echom "Process exited with code: " .. a:exit_code
-            echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            if g:ollama_model_provider =~ '^openai'
+                echom "Check if g:ollama_openai_baseurl=" .. g:ollama_openai_baseurl .. " is correct."
+            elseif g:ollama_model_provider == 'mistral'
+                echom "Check if g:ollama_mistral_baseurl=" .. g:ollama_mistral_baseurl .. " is correct."
+            else
+                echom "Check if g:ollama_host=" .. g:ollama_host .. " is correct."
+            endif
             echohl None
         else
             let s:kill_job = v:null
@@ -150,22 +211,43 @@ function! ollama#GetSuggestion(timer)
 
     let l:prompt = s:ConstructPrompt()
 
+    " Clone global model options and add the current filetype
+    let l:model_options_dict = copy(g:ollama_model_options)
+    let l:model_options_dict['lang'] = &filetype
+
     let l:model_options =
-          \ substitute(json_encode(g:ollama_model_options), "\"", "\\\"", "g")
+          \ substitute(json_encode(l:model_options_dict), "\"", "\\\"", "g")
     call ollama#logger#Debug(
           \ "Connecting to Ollama on " .. g:ollama_host
           \ .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
+    let l:base_url = g:ollama_host
+    if g:ollama_model_provider =~ '^openai'
+        let l:base_url = g:ollama_openai_baseurl
+    endif
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
         \ g:ollama_plugin_dir .. "/python/complete.py",
+        \ "-p", g:ollama_model_provider,
         \ "-m", g:ollama_model,
-        \ "-u", g:ollama_host,
+        \ "-u", l:base_url,
         \ "-o", l:model_options,
         \ "-l", l:log_level
         \ ]
+    " Add optional credentialname for looking up the API key
+    if g:ollama_model_provider =~ '^openai'
+        if g:ollama_openai_credentialname != ''
+            " add credentialname option for OpenAI
+            let l:command += [ '-k', g:ollama_openai_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'mistral'
+        if g:ollama_mistral_credentialname != ''
+            " add credentialname option for Mistral
+            let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',
@@ -173,6 +255,16 @@ function! ollama#GetSuggestion(timer)
         \ 'err_cb': function('s:HandleError'),
         \ 'exit_cb': function('s:HandleExit')
         \ }
+
+    " set API keys as env variable
+    let l:job_env = {}
+    if g:ollama_model_provider ==# 'mistral'
+        let l:job_env['MISTRAL_API_KEY'] = s:GetMistralApiKey()
+    elseif g:ollama_model_provider =~# '^openai'
+        let l:job_env['OPENAI_API_KEY'] = s:GetOpenAIApiKey()
+    endif
+    " add the env dict to job options
+    let l:job_options.env = l:job_env
 
     if (s:prompt == l:prompt)
         call ollama#logger#Debug("Ignoring search for '" .. l:prompt .. "'."
@@ -248,7 +340,7 @@ function! s:KillTimer()
         if s:timer_id != -1
             call ollama#logger#Debug("Killing existing timer.")
             call timer_stop(s:timer_id)
-            let s:timer = -1
+            let s:timer_id = -1
         endif
     catch
         call ollama#logger#Error("KillTimer failed")

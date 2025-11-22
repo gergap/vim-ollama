@@ -1,0 +1,6 @@
+{
+    "pre": "<|fim_prefix|>",
+    "middle": "<|fim_middle|>",
+    "suffix": "<|fim_suffix|>",
+    "eot": "<|endoftext|>"
+}
