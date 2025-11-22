@@ -88,7 +88,7 @@ key = ""
 try:
     key = OllamaCredentials().GetApiKey("openai", credentialname)
 except Exception as e:
-    vim.command(f'echom "Failed to get Mistral key: {e}"')
+    vim.command(f'echom "Failed to get OpenAI key: {e}"')
 if key:
     vim.command(f'let s:openai_api_key = "{key}"')
 EOF
@@ -340,7 +340,7 @@ function! s:KillTimer()
         if s:timer_id != -1
             call ollama#logger#Debug("Killing existing timer.")
             call timer_stop(s:timer_id)
-            let s:timer = -1
+            let s:timer_id = -1
         endif
     catch
         call ollama#logger#Error("KillTimer failed")
