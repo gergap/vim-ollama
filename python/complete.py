@@ -172,25 +172,38 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
 
     temperature = options.get('temperature', 0)
 #    min_tokens = options.get('min_tokens', 1)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
     log.debug('prompt: ' + str(prompt))
     log.debug('suffix: ' + str(suffix))
     log.debug('stops: ' + str(stops))
 
     try:
-        response = client.fim.complete(
-            model=model,
-            prompt=prompt,
-            suffix=suffix,
-            temperature=temperature,
-    #        min_tokens=min_tokens,
-            max_tokens=max_tokens,
-            stop=stops
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'prompt': prompt,
+            'suffix': suffix,
+            'temperature': temperature,
+            'stop': stops
+        }
+        
+        # Decide which parameter to use based on configuration
+        if max_completion_tokens is not None:
+            request_params['max_completion_tokens'] = max_completion_tokens
+        elif max_tokens is not None:
+            request_params['max_tokens'] = max_tokens
+        else:
+            # Default to max_tokens 300 (FIM typically needs fewer tokens)
+            request_params['max_tokens'] = 300
+        
+        response = client.fim.complete(**request_params)
         response = response.choices[0].message.content
         log.debug('response: ' + response)
     except Exception as e:
@@ -256,21 +269,49 @@ AFTER:
     stop_marker = extract_stop_marker(after)
     stops = [stop_marker] if stop_marker else []
 
+    # Detect models that don't support custom temperature parameter
+    # o1 series, gpt-5 and other reasoning models have this restriction
+    model_lower = (model or '').lower()
+    is_reasoning_model = any([
+        'o1-preview' in model_lower,
+        'o1-mini' in model_lower,
+        model_lower.startswith('o1'),
+        'gpt-5' in model_lower,
+        'reasoning' in model_lower,
+    ])
+
     temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
     log.debug('stops: ' + str(stops))
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": full_prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stop=stops
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'messages': [{"role": "user", "content": full_prompt}],
+            'stop': stops
+        }
+        
+        # Reasoning models don't support temperature, add this for other models
+        if not is_reasoning_model:
+            request_params['temperature'] = temperature
+        
+        # Decide which parameter to use based on configuration
+        if max_completion_tokens is not None:
+            request_params['max_completion_tokens'] = max_completion_tokens
+        elif max_tokens is not None:
+            request_params['max_tokens'] = max_tokens
+        else:
+            # Default to max_completion_tokens (for new models)
+            request_params['max_completion_tokens'] = 300
+        
+        response = client.chat.completions.create(**request_params)
         response = response.choices[0].message.content.strip()
         log.debug('response: ' + response)
     except Exception as e:
@@ -319,17 +360,32 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     log.debug('full_prompt: ' + full_prompt)
 
     temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
-    response = client.completions.create(
-        model=model,
-        prompt=full_prompt,
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
+    
+    # Build request parameters
+    request_params = {
+        'model': model,
+        'prompt': full_prompt,
+        'temperature': temperature,
+    }
+    
+    # Legacy endpoint typically uses max_tokens
+    if max_completion_tokens is not None:
+        request_params['max_completion_tokens'] = max_completion_tokens
+    elif max_tokens is not None:
+        request_params['max_tokens'] = max_tokens
+    else:
+        # Default to max_tokens (legacy endpoint)
+        request_params['max_tokens'] = 300
+    
+    response = client.completions.create(**request_params)
     response = response.choices[0].text
     log.debug('response: ' + response)
 

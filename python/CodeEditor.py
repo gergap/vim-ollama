@@ -423,20 +423,48 @@ def generate_code_completion_openai(prompt, baseurl='', model='', options=None, 
     if options is None:
         options = json.loads(DEFAULT_OPTIONS)
 
+    # Detect models that don't support custom temperature parameter
+    # o1 series, gpt-5 and other reasoning models have this restriction
+    model_lower = (model or '').lower()
+    is_reasoning_model = any([
+        'o1-preview' in model_lower,
+        'o1-mini' in model_lower,
+        model_lower.startswith('o1'),
+        'gpt-5' in model_lower,
+        'reasoning' in model_lower,
+    ])
+
     temperature = options.get("temperature", DEFAULT_TEMPERATURE)
-    max_tokens = options.get("max_tokens", DEFAULT_MAX_TOKENS)
+    
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get("max_completion_tokens", None)
+    max_tokens = options.get("max_tokens", None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
-    response = client.chat.completions.create(
-        model=model or DEFAULT_OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-
-    # OpenAI returns a list of choices
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
+    
+    # Build request parameters
+    request_params = {
+        'model': model or DEFAULT_OPENAI_MODEL,
+        'messages': [{"role": "user", "content": prompt}],
+    }
+    
+    # Reasoning models don't support temperature, add this for other models
+    if not is_reasoning_model:
+        request_params['temperature'] = temperature
+    
+    # Decide which parameter to use based on configuration
+    if max_completion_tokens is not None:
+        request_params['max_completion_tokens'] = max_completion_tokens
+    elif max_tokens is not None:
+        request_params['max_tokens'] = max_tokens
+    else:
+        # Neither set, use default max_completion_tokens (for new models)
+        request_params['max_completion_tokens'] = DEFAULT_MAX_TOKENS
+    
+    response = client.chat.completions.create(**request_params)    # OpenAI returns a list of choices
     completion = response.choices[0].message.content
     log.debug(completion)
     # convert response to lines
