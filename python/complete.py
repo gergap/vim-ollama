@@ -23,6 +23,12 @@ try:
 except ImportError:
     Mistral = None
 
+# try to load Anthropic package if it exists
+try:
+    from anthropic import Anthropic  # type: ignore
+except ImportError:
+    Anthropic = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
@@ -30,6 +36,7 @@ DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -334,6 +341,85 @@ AFTER:
 
     return response
 
+def generate_code_completion_claude(prompt, baseurl, model, options, credentialname):
+    """Generate code completion using Anthropic Claude API"""
+    if Anthropic is None:
+        raise ImportError("Anthropic package not found. Please install via 'pip install anthropic'.")
+
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('anthropic', credentialname)
+
+    log.debug('Using Anthropic Claude API')
+    if baseurl:
+        log.debug(f'baseurl={baseurl}')
+        client = Anthropic(api_key=api_key, base_url=baseurl)
+    else:
+        log.debug(f'Using default Anthropic URL')
+        client = Anthropic(api_key=api_key)
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker for Claude mode.")
+        sys.exit(1)
+    before = parts[0]
+    after = parts[1]
+
+    lang = options.get('lang', 'C')
+    # Claude doesn't support Fill-in-the-middle, use prompt engineering
+    full_prompt = f"""Fill in the missing code between the markers below.
+
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
+
+Language: {lang}
+
+BEFORE:
+{before}
+
+AFTER:
+{after}
+"""
+    log.debug('full_prompt: ' + full_prompt)
+
+    temperature = options.get('temperature', 0)
+    max_tokens = options.get('max_tokens', 300)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    
+    try:
+        response = client.messages.create(
+            model=model or DEFAULT_CLAUDE_MODEL,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": full_prompt}]
+        )
+        
+        response_text = response.content[0].text.strip()
+        log.debug('response: ' + response_text)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
+
+    # convert response to lines
+    lines = response_text.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        response_text = "\n".join(lines)
+
+    return response_text
+
 def generate_code_completion_openai_legacy(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
@@ -395,7 +481,7 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
         parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
-                            help="LLM provider: 'ollama' (default), 'mistral' or 'openai'")
+                            help="LLM provider: 'ollama' (default), 'openai', 'mistral', or 'claude'")
         parser.add_argument('-m', '--model', type=str, default=None,
                             help="Model name (Ollama or OpenAI).")
         parser.add_argument('-u', '--url', type=str, default=None,
@@ -455,6 +541,13 @@ if __name__ == "__main__":
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
             response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options, args.keyname)
+        elif args.provider == "claude":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_CLAUDE_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_claude(prompt, baseurl, modelname, options, args.keyname)
         else:
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)
