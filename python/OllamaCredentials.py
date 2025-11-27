@@ -18,6 +18,7 @@ class OllamaCredentials:
           - 'openai'         → use OPENAI_API_KEY env var or pass entry
           - 'openai_legacy'  → same as 'openai', kept for compatibility
           - 'mistral'        → use MISTRAL_API_KEY env var or pass entry
+          - 'anthropic'      → use ANTHROPIC_API_KEY env var or pass entry
 
         Priority:
           1. Environment variable override
@@ -36,6 +37,8 @@ class OllamaCredentials:
             env_var = "OPENAI_API_KEY"
         elif provider == "mistral":
             env_var = "MISTRAL_API_KEY"
+        elif provider == "anthropic":
+            env_var = "ANTHROPIC_API_KEY"
         else:
             raise ValueError(f"Unknown provider: {provider}")
 

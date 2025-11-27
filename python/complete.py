@@ -23,6 +23,12 @@ try:
 except ImportError:
     Mistral = None
 
+# try to load Anthropic package if it exists
+try:
+    from anthropic import Anthropic  # type: ignore
+except ImportError:
+    Anthropic = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
@@ -30,6 +36,7 @@ DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -172,25 +179,38 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
 
     temperature = options.get('temperature', 0)
 #    min_tokens = options.get('min_tokens', 1)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
     log.debug('prompt: ' + str(prompt))
     log.debug('suffix: ' + str(suffix))
     log.debug('stops: ' + str(stops))
 
     try:
-        response = client.fim.complete(
-            model=model,
-            prompt=prompt,
-            suffix=suffix,
-            temperature=temperature,
-    #        min_tokens=min_tokens,
-            max_tokens=max_tokens,
-            stop=stops
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'prompt': prompt,
+            'suffix': suffix,
+            'temperature': temperature,
+            'stop': stops
+        }
+        
+        # Decide which parameter to use based on configuration
+        if max_completion_tokens is not None:
+            request_params['max_completion_tokens'] = max_completion_tokens
+        elif max_tokens is not None:
+            request_params['max_tokens'] = max_tokens
+        else:
+            # Default to max_tokens 300 (FIM typically needs fewer tokens)
+            request_params['max_tokens'] = 300
+        
+        response = client.fim.complete(**request_params)
         response = response.choices[0].message.content
         log.debug('response: ' + response)
     except Exception as e:
@@ -256,21 +276,49 @@ AFTER:
     stop_marker = extract_stop_marker(after)
     stops = [stop_marker] if stop_marker else []
 
+    # Detect models that don't support custom temperature parameter
+    # o1 series, gpt-5 and other reasoning models have this restriction
+    model_lower = (model or '').lower()
+    is_reasoning_model = any([
+        'o1-preview' in model_lower,
+        'o1-mini' in model_lower,
+        model_lower.startswith('o1'),
+        'gpt-5' in model_lower,
+        'reasoning' in model_lower,
+    ])
+
     temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
     log.debug('stops: ' + str(stops))
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": full_prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stop=stops
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'messages': [{"role": "user", "content": full_prompt}],
+            'stop': stops
+        }
+        
+        # Reasoning models don't support temperature, add this for other models
+        if not is_reasoning_model:
+            request_params['temperature'] = temperature
+        
+        # Decide which parameter to use based on configuration
+        if max_completion_tokens is not None:
+            request_params['max_completion_tokens'] = max_completion_tokens
+        elif max_tokens is not None:
+            request_params['max_tokens'] = max_tokens
+        else:
+            # Default to max_completion_tokens (for new models)
+            request_params['max_completion_tokens'] = 300
+        
+        response = client.chat.completions.create(**request_params)
         response = response.choices[0].message.content.strip()
         log.debug('response: ' + response)
     except Exception as e:
@@ -292,6 +340,85 @@ AFTER:
         response = "\n".join(lines)
 
     return response
+
+def generate_code_completion_claude(prompt, baseurl, model, options, credentialname):
+    """Generate code completion using Anthropic Claude API"""
+    if Anthropic is None:
+        raise ImportError("Anthropic package not found. Please install via 'pip install anthropic'.")
+
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('anthropic', credentialname)
+
+    log.debug('Using Anthropic Claude API')
+    if baseurl:
+        log.debug(f'baseurl={baseurl}')
+        client = Anthropic(api_key=api_key, base_url=baseurl)
+    else:
+        log.debug(f'Using default Anthropic URL')
+        client = Anthropic(api_key=api_key)
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker for Claude mode.")
+        sys.exit(1)
+    before = parts[0]
+    after = parts[1]
+
+    lang = options.get('lang', 'C')
+    # Claude doesn't support Fill-in-the-middle, use prompt engineering
+    full_prompt = f"""Fill in the missing code between the markers below.
+
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
+
+Language: {lang}
+
+BEFORE:
+{before}
+
+AFTER:
+{after}
+"""
+    log.debug('full_prompt: ' + full_prompt)
+
+    temperature = options.get('temperature', 0)
+    max_tokens = options.get('max_tokens', 300)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    
+    try:
+        response = client.messages.create(
+            model=model or DEFAULT_CLAUDE_MODEL,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": full_prompt}]
+        )
+        
+        response_text = response.content[0].text.strip()
+        log.debug('response: ' + response_text)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
+
+    # convert response to lines
+    lines = response_text.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        response_text = "\n".join(lines)
+
+    return response_text
 
 def generate_code_completion_openai_legacy(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
@@ -319,17 +446,32 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     log.debug('full_prompt: ' + full_prompt)
 
     temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
-    response = client.completions.create(
-        model=model,
-        prompt=full_prompt,
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
+    log.debug('max_completion_tokens: ' + str(max_completion_tokens))
+    
+    # Build request parameters
+    request_params = {
+        'model': model,
+        'prompt': full_prompt,
+        'temperature': temperature,
+    }
+    
+    # Legacy endpoint typically uses max_tokens
+    if max_completion_tokens is not None:
+        request_params['max_completion_tokens'] = max_completion_tokens
+    elif max_tokens is not None:
+        request_params['max_tokens'] = max_tokens
+    else:
+        # Default to max_tokens (legacy endpoint)
+        request_params['max_tokens'] = 300
+    
+    response = client.completions.create(**request_params)
     response = response.choices[0].text
     log.debug('response: ' + response)
 
@@ -339,7 +481,7 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
         parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
-                            help="LLM provider: 'ollama' (default), 'mistral' or 'openai'")
+                            help="LLM provider: 'ollama' (default), 'openai', 'mistral', or 'claude'")
         parser.add_argument('-m', '--model', type=str, default=None,
                             help="Model name (Ollama or OpenAI).")
         parser.add_argument('-u', '--url', type=str, default=None,
@@ -399,6 +541,13 @@ if __name__ == "__main__":
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
             response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options, args.keyname)
+        elif args.provider == "claude":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_CLAUDE_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_claude(prompt, baseurl, modelname, options, args.keyname)
         else:
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)

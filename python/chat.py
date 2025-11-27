@@ -109,19 +109,50 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
         client = AsyncOpenAI(api_key=api_key)
     assistant_message = ""
 
+    # Detect models that don't support custom temperature/top_p parameters
+    # o1 series, gpt-5 and other reasoning models have this restriction
+    model_lower = (model or '').lower()
+    is_reasoning_model = any([
+        'o1-preview' in model_lower,
+        'o1-mini' in model_lower,
+        model_lower.startswith('o1'),
+        'gpt-5' in model_lower,
+        'reasoning' in model_lower,
+    ])
+
     temperature = options.get('temperature', DEFAULT_TEMPERATURE)
-    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
     top_p = options.get('top_p', 1.0)
 
+    # New OpenAI models use max_completion_tokens, old models use max_tokens
+    # Check if either parameter is explicitly set
+    max_completion_tokens = options.get('max_completion_tokens', None)
+    max_tokens = options.get('max_tokens', None)
+
     try:
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            stream=True,
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'messages': messages,
+            'stream': True,
+        }
+        
+        # Reasoning models don't support temperature and top_p, add these for other models
+        if not is_reasoning_model:
+            request_params['temperature'] = temperature
+            request_params['top_p'] = top_p
+        
+        # Decide which parameter to use based on configuration parameter to use based on configuration
+        if max_completion_tokens is not None:
+            # Explicitly set max_completion_tokens, use it (new models)
+            request_params['max_completion_tokens'] = max_completion_tokens
+        elif max_tokens is not None:
+            # Explicitly set max_tokens, use it (old models)
+            request_params['max_tokens'] = max_tokens
+        else:
+            # Neither set, use default max_completion_tokens (for new models)
+            request_params['max_completion_tokens'] = DEFAULT_MAX_TOKENS
+        
+        stream = await client.chat.completions.create(**request_params)
 
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:

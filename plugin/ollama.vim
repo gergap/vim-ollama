@@ -67,6 +67,10 @@ if !exists('g:ollama_openai_credentialname')
     " UNIX Pass credential name to lookup API key for OpenAI service
     let g:ollama_openai_credentialname = ''
 endif
+if !exists('g:ollama_claude_credentialname')
+    " UNIX Pass credential name to lookup API key for Anthropic Claude service
+    let g:ollama_claude_credentialname = ''
+endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
