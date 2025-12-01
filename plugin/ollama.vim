@@ -98,6 +98,10 @@ if !exists('g:ollama_model_options')
                 \ 'max_tokens': 500
                 \ }
 endif
+if !exists('g:ollama_model_sampling_denylist')
+    " default model sampling denylist
+  let g:ollama_model_sampling_denylist = []
+endif
 " Chat specific settings
 if !exists('g:ollama_chat_provider')
     " Provider for chat models: 'ollama' or 'openai'

@@ -136,8 +136,17 @@ function! s:StartChat(lines) abort
     endfunc
 
     let l:model_options = json_encode(g:ollama_chat_options)
-    call ollama#logger#Debug("Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
+    call ollama#logger#Debug("Chat Connecting to Ollama on " .. g:ollama_host .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
+
+    if exists('g:ollama_model_sampling_denylist')
+            \ && len(g:ollama_model_sampling_denylist) > 0
+            \ && index(g:ollama_model_sampling_denylist, g:ollama_chat_model) >= 0
+        let l:sampling_enabled = 0
+    else
+        let l:sampling_enabled = 1
+    endif
+    call ollama#logger#Debug("sampling_enabled=" .. l:sampling_enabled)
 
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
@@ -154,6 +163,7 @@ function! s:StartChat(lines) abort
                 \ '-m', g:ollama_chat_model,
                 \ '-u', l:base_url,
                 \ '-o', l:model_options,
+                \ "-se", l:sampling_enabled,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
     " Check if a system prompt was configured
@@ -205,7 +215,7 @@ function! s:StartChat(lines) abort
         silent execute 'new' l:bufname
     endif
     " Set the filetype to ollama-chat
-"    setlocal filetype=ollama-chat
+    " setlocal filetype=ollama-chat
     setlocal filetype=markdown
     setlocal buftype=prompt
     " enable BufDelete event when closing buffer usig :q!
