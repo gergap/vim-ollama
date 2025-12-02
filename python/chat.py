@@ -63,7 +63,9 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                             if "message" in message and "content" in message["message"]:
                                 content = message["message"]["content"]
                                 assistant_message += content
-                                print(content, end="", flush=True)
+                                # Print each token followed by newline so Vim's out_cb receives it immediately
+                                # VimScript will need to handle concatenating tokens on the same line
+                                print(content, flush=True)
 
                                 # If <EOT> is detected, stop processing
                                 if "<EOT>" in content:
@@ -135,7 +137,9 @@ async def stream_chat_message_openai(messages, endpoint, model, options, samplin
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
                 assistant_message += token
-                print(token, end="", flush=True)
+                # Print each token followed by newline so Vim's out_cb receives it immediately
+                # VimScript will need to handle concatenating tokens on the same line
+                print(token, flush=True)
 
         print("<EOT>", flush=True)
 

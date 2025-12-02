@@ -56,6 +56,9 @@ function! s:FindBufferWindow(bufnr)
 endfunction
 
 function! s:StartChat(lines) abort
+    " Counter for reducing redraw frequency
+    let s:token_count = 0
+
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
         call ollama#logger#Debug("TextEntered: " .. a:text)
@@ -65,12 +68,13 @@ function! s:StartChat(lines) abort
         endif
         " Send the text to a shell with Enter appended.
         call ch_sendraw(s:job, a:text .. "\n")
+        " Reset token count for new request
+        let s:token_count = 0
     endfunc
 
-    " Function handling output from the shell: Add it above the prompt.
-    func! GotOutput(channel, msg)
+    " OLD VERSION: Append each token as a new line (non-streaming)
+    func! GotOutputOld(channel, msg)
         call ollama#logger#Debug("GotOutput: " .. a:msg)
-
         " append lines
         let l:lines = split(a:msg, "\n")
         for l:line in l:lines
@@ -94,6 +98,91 @@ function! s:StartChat(lines) abort
                 endif
             endif
         endfor
+    endfunc
+
+    " NEW VERSION: Stream tokens on the same line with real-time cursor tracking
+    func! GotOutputNew(channel, msg)
+        " call ollama#logger#Debug("GotOutput: [" .. a:msg .. "]")
+
+        " Check for <EOT> marker
+        let l:idx = stridx(a:msg, "<EOT>")
+        let l:is_eot = l:idx != -1
+        let l:content = l:is_eot ? strpart(a:msg, 0, l:idx) : a:msg
+
+        " Append content to the last line for streaming effect
+        let l:updated_line_num = 0
+        let l:updated_line_content = ""
+        let l:line_count = 0
+
+        if !empty(l:content)
+            " Get buffer line count efficiently
+            let l:buf_info = getbufinfo(s:buf)[0]
+            let l:line_count = l:buf_info.linecount
+            " call ollama#logger#Debug("line_count=" .. l:line_count)
+
+            if l:line_count == 0
+                " Buffer is empty, append as new line
+                " call ollama#logger#Debug("Buffer empty, appending first line")
+                call appendbufline(s:buf, 0, l:content)
+                let l:updated_line_num = 1
+                let l:updated_line_content = l:content
+            else
+                " Get only the last line (much faster than getting all lines)
+                let l:last_line = getbufline(s:buf, l:line_count, l:line_count)[0]
+                let l:updated_line_content = l:last_line .. l:content
+                " call ollama#logger#Debug("Appending to line " .. l:line_count .. ": '" .. l:last_line .. "' + '" .. l:content .. "'")
+                call setbufline(s:buf, l:line_count, l:updated_line_content)
+                let l:updated_line_num = l:line_count
+            endif
+        endif
+
+        " When streaming is done, add a new line for the next input
+        if l:is_eot
+            " call ollama#logger#Debug("EOT received, adding newline")
+            call appendbufline(s:buf, "$", "")
+            " Reuse line_count if we already got it, otherwise fetch
+            if l:line_count > 0
+                let l:updated_line_num = l:line_count + 1
+            else
+                let l:buf_info = getbufinfo(s:buf)[0]
+                let l:updated_line_num = l:buf_info.linecount
+            endif
+            let l:updated_line_content = ""
+        endif
+
+        " Update cursor position if this is the active chat window
+        if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
+            let l:winid = bufwinid(s:buf)
+            if l:winid != -1 && l:updated_line_num > 0
+                " Set cursor position directly (much faster than feedkeys)
+                let l:col = len(l:updated_line_content) + 1
+                call win_execute(l:winid, 'call cursor(' . l:updated_line_num . ', ' . l:col . ')')
+
+                " Increment token counter and only redraw every N tokens (or always for EOT)
+                let s:token_count += 1
+                if l:is_eot || s:token_count % 5 == 0
+                    redraw
+                endif
+
+                if l:is_eot
+                    " Streaming done, enter insert mode
+                    if mode() == 'i'
+                        call feedkeys("\<Esc>")
+                    endif
+                    call feedkeys("a")
+                endif
+            endif
+        endif
+    endfunc
+
+    " Wrapper function that delegates to new version by default
+    " To use old version, set g:ollama_use_old_output = 1
+    func! GotOutput(channel, msg)
+        if exists('g:ollama_use_old_output') && g:ollama_use_old_output
+            call GotOutputOld(a:channel, a:msg)
+        else
+            call GotOutputNew(a:channel, a:msg)
+        endif
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
