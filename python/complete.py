@@ -219,6 +219,36 @@ def extract_stop_marker(after: str) -> str | None:
             return line.rstrip()  # preserve indentation
     return None
 
+def _build_fim_prompt(before: str, after: str, lang: str = 'C') -> str:
+    """Build fill-in-the-middle prompt for models that don't support native FIM."""
+    return f"""Fill in the missing code between the markers below.
+
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
+
+Language: {lang}
+
+BEFORE:
+{before}
+
+AFTER:
+{after}
+"""
+
+def _strip_code_fences(text: str) -> str:
+    """Remove markdown code fence markers (```) from beginning and end of text."""
+    lines = text.splitlines()
+    if lines:
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        if lines and lines[-1].startswith("```"):
+            lines.pop()
+        return "\n".join(lines)
+    return text
+
 def generate_code_completion_openai(prompt, baseurl, model, options, sampling_enabled, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
@@ -298,19 +328,8 @@ AFTER:
         log.error(str(e))
         sys.exit(1)
 
-    # convert response to lines
-    lines = response.splitlines()
-    if lines:
-        # remove 1st element from array if it starts with ```
-        if lines[0].startswith("```"):
-            lines.pop(0)
-        # remove last element from array if it starts with ```
-        if lines[-1].startswith("```"):
-            lines.pop()
-
-        response = "\n".join(lines)
-
-    return response
+    # Remove markdown code fences if present
+    return _strip_code_fences(response)
 
 def generate_code_completion_claude(prompt, baseurl, model, options, credentialname):
     """Generate code completion using Anthropic Claude API"""
@@ -332,27 +351,10 @@ def generate_code_completion_claude(prompt, baseurl, model, options, credentialn
     if len(parts) != 2:
         log.error("Prompt must contain <FILL_IN_HERE> marker for Claude mode.")
         sys.exit(1)
-    before = parts[0]
-    after = parts[1]
 
+    # Build FIM prompt using helper function
     lang = options.get('lang', 'C')
-    # Claude doesn't support Fill-in-the-middle, use prompt engineering
-    full_prompt = f"""Fill in the missing code between the markers below.
-
-Rules:
-- Do NOT repeat any code that appears in the AFTER section.
-- Return only the exact code that fits between BEFORE and AFTER.
-- Do NOT add explanations or comments.
-- Output the missing code only.
-
-Language: {lang}
-
-BEFORE:
-{before}
-
-AFTER:
-{after}
-"""
+    full_prompt = _build_fim_prompt(parts[0], parts[1], lang)
     log.debug('full_prompt: ' + full_prompt)
 
     temperature = options.get('temperature', DEFAULT_TEMPERATURE)
@@ -377,19 +379,8 @@ AFTER:
         log.error(str(e))
         sys.exit(1)
 
-    # convert response to lines
-    lines = response_text.splitlines()
-    if lines:
-        # remove 1st element from array if it starts with ```
-        if lines[0].startswith("```"):
-            lines.pop(0)
-        # remove last element from array if it starts with ```
-        if lines[-1].startswith("```"):
-            lines.pop()
-
-        response_text = "\n".join(lines)
-
-    return response_text
+    # Remove markdown code fences if present
+    return _strip_code_fences(response_text)
 
 def generate_code_completion_openai_legacy(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
@@ -433,140 +424,87 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
 
     return response.rstrip()
 
+def _extract_output_text_from_message(item):
+    """Extract output_text from a message item in OpenAI responses format"""
+    if item.get('type') == 'message' and item.get('status') == 'completed':
+        content = item.get('content', [])
+        for content_item in content:
+            if content_item.get('type') == 'output_text':
+                return content_item.get('text', '')
+    return None
+
 def generate_code_completion_openai_responses(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's /v1/responses endpoint for GPT-5.1-Codex"""
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
     log.debug('Using OpenAI responses endpoint (for GPT-5.1-Codex)')
+
+    # Get API credentials
     cred = OllamaCredentials()
     api_key = cred.GetApiKey('openai', credentialname)
+    endpoint = f"{baseurl}/v1/responses" if baseurl else "https://api.openai.com/v1/responses"
 
-    if baseurl:
-        endpoint = f"{baseurl}/v1/responses"
-    else:
-        endpoint = "https://api.openai.com/v1/responses"
-
-    log.debug(f'endpoint: {endpoint}')
-
+    # Parse prompt
     parts = prompt.split('<FILL_IN_HERE>')
     if len(parts) != 2:
         log.error("Prompt must contain <FILL_IN_HERE> marker.")
         sys.exit(1)
 
-    # For code completion, we just use the before part as input
-    before = parts[0]
-    after = parts[1]
-
-    # Build the input prompt for code completion
-    # Use similar structure as Claude prompt for better results
+    # Build FIM prompt using helper function
     lang = options.get('lang', 'C')
+    full_input = _build_fim_prompt(parts[0], parts[1], lang)
 
-    full_input = f"""Fill in the missing code between the markers below.
-
-Rules:
-- Do NOT repeat any code that appears in the AFTER section.
-- Return only the exact code that fits between BEFORE and AFTER.
-- Do NOT add explanations or comments.
-- Output the missing code only.
-
-Language: {lang}
-
-BEFORE:
-{before}
-
-AFTER:
-{after}
-"""
-
-    # Use higher token limit for gpt-5.1-codex which uses reasoning tokens
     max_output_tokens = options.get('max_completion_tokens', options.get('max_tokens', DEFAULT_MAX_TOKENS))
+    log.debug(f'endpoint: {endpoint}, model: {model}, max_output_tokens: {max_output_tokens}')
 
-    log.debug('model: ' + str(model))
-    log.debug('max_output_tokens: ' + str(max_output_tokens))
-    log.debug('input: ' + full_input)
-
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-
-    data = {
-        'model': model,
-        'input': full_input,
-        'max_output_tokens': max_output_tokens
-    }
-
+    # Make API request
     try:
-        response = requests.post(endpoint, headers=headers, json=data)
+        response = requests.post(
+            endpoint,
+            headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+            json={'model': model, 'input': full_input, 'max_output_tokens': max_output_tokens}
+        )
+
         if response.status_code != 200:
             log.error(f'API error: {response.text}')
         response.raise_for_status()
+
         result = response.json()
         log.debug('response: ' + json.dumps(result, indent=2))
 
-        # Extract the completion from the response
-        # The responses endpoint can return different formats
+        # Extract completion from response (supports both list and dict formats)
         completion = None
+        output_items = result.get('output', []) if isinstance(result, dict) else result if isinstance(result, list) else []
 
-        # Check if response has the new format with 'output' array
-        if 'output' in result and isinstance(result['output'], list):
-            log.debug(f'Result has output array with {len(result["output"])} items')
-            # Look for message type items in the output array
-            for idx, item in enumerate(result['output']):
-                log.debug(f'Output item {idx}: type={item.get("type")}')
-                if item.get('type') == 'message' and item.get('status') == 'completed':
-                    content = item.get('content', [])
-                    log.debug(f'Message content has {len(content)} items')
-                    for content_idx, content_item in enumerate(content):
-                        log.debug(f'Content {content_idx}: type={content_item.get("type")}')
-                        if content_item.get('type') == 'output_text':
-                            completion = content_item.get('text', '')
-                            log.debug(f'Found output_text: {completion}')
-                            break
-                    if completion:
-                        break
+        for item in output_items:
+            completion = _extract_output_text_from_message(item)
+            if completion:
+                break
 
-            # If no message found, log the incomplete status
-            if not completion and result.get('status') == 'incomplete':
-                log.warning(f'Response incomplete: {result.get("incomplete_details")}')
-                # For incomplete responses with only reasoning, we might need to handle differently
-                log.error('No message output found, only reasoning. Model may need different prompt.')
-
-        # Handle list format (old format)
-        elif isinstance(result, list):
-            log.debug(f'Result is a list with {len(result)} items')
-            for idx, item in enumerate(result):
-                log.debug(f'Item {idx}: type={item.get("type")}, status={item.get("status")}')
-                if item.get('type') == 'message' and item.get('status') == 'completed':
-                    content = item.get('content', [])
-                    log.debug(f'Message content has {len(content)} items')
-                    for content_idx, content_item in enumerate(content):
-                        log.debug(f'Content {content_idx}: type={content_item.get("type")}')
-                        if content_item.get('type') == 'output_text':
-                            completion = content_item.get('text', '')
-                            log.debug(f'Found output_text: {completion}')
-                            break
-                    if completion:
-                        break
+        # Check for incomplete responses
+        if not completion and isinstance(result, dict) and result.get('status') == 'incomplete':
+            log.warning(f'Response incomplete: {result.get("incomplete_details")}')
 
         # Fallback for other formats
-        elif 'text' in result:
-            completion = result['text']
-        elif 'choices' in result and len(result['choices']) > 0:
-            completion = result['choices'][0].get('text', result['choices'][0].get('message', {}).get('content', ''))
+        if not completion:
+            if isinstance(result, dict):
+                if 'text' in result:
+                    completion = result['text']
+                elif 'choices' in result and result['choices']:
+                    choice = result['choices'][0]
+                    completion = choice.get('text') or choice.get('message', {}).get('content')
 
         if not completion:
             log.error('Could not extract completion from response')
-            log.error('Response structure: ' + json.dumps(result, indent=2))
             return ""
 
         # Ensure completion is a string
         if not isinstance(completion, str):
-            log.error(f'Completion is not a string, type: {type(completion)}')
-            completion = str(completion)
+            log.error(f'Completion is not a string, type: {type(completion)}, value: {completion}')
+            return ""
 
-        log.debug('Final completion: ' + completion)
+        log.debug(f'Final completion: {completion}')
         return completion.strip()
 
     except Exception as e:
