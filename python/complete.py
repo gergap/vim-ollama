@@ -459,13 +459,25 @@ def generate_code_completion_openai_responses(prompt, baseurl, model, options, c
     after = parts[1]
 
     # Build the input prompt for code completion
-    # gpt-5.1-codex seems to work better with explicit instructions
-    if after.strip():
-        # Fill-in-the-middle style completion
-        full_input = f"Complete the code at <FILL>:\n\n{before}<FILL>{after}\n\nProvide ONLY the code that replaces <FILL>, nothing else."
-    else:
-        # End-of-file completion
-        full_input = f"Continue this code:\n\n{before}\n\nProvide ONLY the next line(s) of code, nothing else."
+    # Use similar structure as Claude prompt for better results
+    lang = options.get('lang', 'C')
+
+    full_input = f"""Fill in the missing code between the markers below.
+
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
+
+Language: {lang}
+
+BEFORE:
+{before}
+
+AFTER:
+{after}
+"""
 
     # Use higher token limit for gpt-5.1-codex which uses reasoning tokens
     max_output_tokens = options.get('max_completion_tokens', options.get('max_tokens', DEFAULT_MAX_TOKENS))
