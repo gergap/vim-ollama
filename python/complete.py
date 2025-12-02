@@ -30,6 +30,7 @@ DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -396,7 +397,7 @@ if __name__ == "__main__":
             if args.model:
                 modelname = args.model
             else:
-                modelname = DEFAULT_OPENAI_MODEL
+                modelname = DEFAULT_OPENAI_LEGACY_MODEL
             baseurl = args.url or None
             response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options, args.keyname)
         else:
