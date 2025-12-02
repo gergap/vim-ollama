@@ -63,7 +63,9 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                             if "message" in message and "content" in message["message"]:
                                 content = message["message"]["content"]
                                 assistant_message += content
-                                print(content, end="", flush=True)
+                                # Print each token followed by newline so Vim's out_cb receives it immediately
+                                # VimScript will need to handle concatenating tokens on the same line
+                                print(content, flush=True)
 
                                 # If <EOT> is detected, stop processing
                                 if "<EOT>" in content:
@@ -90,7 +92,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def stream_chat_message_openai(messages, endpoint, model, options, credentialname):
+async def stream_chat_message_openai(messages, endpoint, model, options, sampling_enabled, credentialname):
     """Stream chat responses from OpenAI API."""
     if AsyncOpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
@@ -114,20 +116,30 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
     top_p = options.get('top_p', 1.0)
 
     try:
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=top_p,
-            stream=True,
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'messages': messages,
+            'stream': True,
+        }
+
+        # Check if model supports sampling parameters
+        if sampling_enabled:
+            request_params['temperature'] = temperature
+            request_params['top_p'] = top_p
+            request_params['max_tokens'] = max_tokens
+        else:
+            request_params['max_completion_tokens'] = max_tokens
+
+        stream = await client.chat.completions.create(**request_params)
 
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
                 assistant_message += token
-                print(token, end="", flush=True)
+                # Print each token followed by newline so Vim's out_cb receives it immediately
+                # VimScript will need to handle concatenating tokens on the same line
+                print(token, flush=True)
 
         print("<EOT>", flush=True)
 
@@ -139,7 +151,7 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def main(provider, endpoint, model, options, systemprompt, timeout, credentialname):
+async def main(provider, endpoint, model, options, sampling_enabled, systemprompt, timeout, credentialname):
     conversation_history = []
     log.debug("endpoint: " + str(endpoint))
 
@@ -169,7 +181,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, sampling_enabled, credentialname)
                         )
                     await task
                 else:
@@ -189,7 +201,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, sampling_enabled, credentialname)
                         )
                     await task
 
@@ -213,6 +225,7 @@ if __name__ == "__main__":
                         help="Base endpoint URL.")
     parser.add_argument("-o", "--options", type=str, default=DEFAULT_OPTIONS,
                         help="Ollama REST API options.")
+    parser.add_argument("-se", "--sampling-enabled", type=int, default=1, help="Enable or disable sampling.")
     parser.add_argument("-s", "--system-prompt", type=str, default="", help="Specify system prompt.")
     parser.add_argument("-t", "--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout in seconds.")
     parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
@@ -243,7 +256,7 @@ if __name__ == "__main__":
     try:
         while True:
             try:
-                asyncio.run(main(args.provider, endpoint, model, options, args.system_prompt, args.timeout, args.keyname))
+                asyncio.run(main(args.provider, endpoint, model, options, args.sampling_enabled, args.system_prompt, args.timeout, args.keyname))
             except KeyboardInterrupt:
                 print("Canceled.")
                 break

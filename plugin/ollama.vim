@@ -67,6 +67,10 @@ if !exists('g:ollama_openai_credentialname')
     " UNIX Pass credential name to lookup API key for OpenAI service
     let g:ollama_openai_credentialname = ''
 endif
+if !exists('g:ollama_claude_credentialname')
+    " UNIX Pass credential name to lookup API key for Anthropic Claude service
+    let g:ollama_claude_credentialname = ''
+endif
 " Tab completion specific settings
 if !exists('g:ollama_debounce_time')
     let g:ollama_debounce_time = 500
@@ -97,6 +101,10 @@ if !exists('g:ollama_model_options')
                 \ 'num_predict': 128,
                 \ 'max_tokens': 500
                 \ }
+endif
+if !exists('g:ollama_model_sampling_denylist')
+    " default model sampling denylist
+  let g:ollama_model_sampling_denylist = []
 endif
 " Chat specific settings
 if !exists('g:ollama_chat_provider')
