@@ -236,6 +236,9 @@ function! ollama#GetSuggestion(timer)
     let l:base_url = g:ollama_host
     if g:ollama_model_provider =~ '^openai'
         let l:base_url = g:ollama_openai_baseurl
+    elseif g:ollama_model_provider == 'claude'
+        " Claude uses default Anthropic API, don't set base_url
+        let l:base_url = ''
     endif
     " Adjust the command to use the prompt as stdin input
     let l:command = [ g:ollama_python_interpreter,
@@ -257,6 +260,11 @@ function! ollama#GetSuggestion(timer)
         if g:ollama_mistral_credentialname != ''
             " add credentialname option for Mistral
             let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'claude'
+        if exists('g:ollama_claude_credentialname') && g:ollama_claude_credentialname != ''
+            " add credentialname option for Claude
+            let l:command += [ '-k', g:ollama_claude_credentialname ]
         endif
     endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))

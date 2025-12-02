@@ -23,13 +23,23 @@ try:
 except ImportError:
     Mistral = None
 
+# try to load Anthropic package if it exists
+try:
+    from anthropic import Anthropic  # type: ignore
+except ImportError:
+    Anthropic = None
+
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
 DEFAULT_MODEL = 'codellama:code'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_TEMPERATURE = 0
+DEFAULT_MAX_TOKENS = 300
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
+DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-5.1-codex'
+DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -170,9 +180,9 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
     stop_marker = extract_stop_marker(suffix)
     stops = [stop_marker] if stop_marker else []
 
-    temperature = options.get('temperature', 0)
-#    min_tokens = options.get('min_tokens', 1)
-    max_tokens = options.get('max_tokens', 300)
+    temperature = options.get('temperature', DEFAULT_TEMPERATURE)
+    # min_tokens = options.get('min_tokens', 1)
+    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
@@ -256,13 +266,14 @@ AFTER:
     stop_marker = extract_stop_marker(after)
     stops = [stop_marker] if stop_marker else []
 
-    temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    temperature = options.get('temperature', DEFAULT_TEMPERATURE)
+    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
     log.debug('max_tokens: ' + str(max_tokens))
     log.debug('stops: ' + str(stops))
+    log.debug('sampling_enabled: ' + str(sampling_enabled))
     try:
         # Build request parameters
         request_params = {
@@ -301,6 +312,85 @@ AFTER:
 
     return response
 
+def generate_code_completion_claude(prompt, baseurl, model, options, credentialname):
+    """Generate code completion using Anthropic Claude API"""
+    if Anthropic is None:
+        raise ImportError("Anthropic package not found. Please install via 'pip install anthropic'.")
+
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('anthropic', credentialname)
+
+    log.debug('Using Anthropic Claude API')
+    if baseurl:
+        log.debug(f'baseurl={baseurl}')
+        client = Anthropic(api_key=api_key, base_url=baseurl)
+    else:
+        log.debug(f'Using default Anthropic URL')
+        client = Anthropic(api_key=api_key)
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker for Claude mode.")
+        sys.exit(1)
+    before = parts[0]
+    after = parts[1]
+
+    lang = options.get('lang', 'C')
+    # Claude doesn't support Fill-in-the-middle, use prompt engineering
+    full_prompt = f"""Fill in the missing code between the markers below.
+
+Rules:
+- Do NOT repeat any code that appears in the AFTER section.
+- Return only the exact code that fits between BEFORE and AFTER.
+- Do NOT add explanations or comments.
+- Output the missing code only.
+
+Language: {lang}
+
+BEFORE:
+{before}
+
+AFTER:
+{after}
+"""
+    log.debug('full_prompt: ' + full_prompt)
+
+    temperature = options.get('temperature', DEFAULT_TEMPERATURE)
+    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
+
+    log.debug('model: ' + str(model))
+    log.debug('temperature: ' + str(temperature))
+    log.debug('max_tokens: ' + str(max_tokens))
+    
+    try:
+        response = client.messages.create(
+            model=model or DEFAULT_CLAUDE_MODEL,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": full_prompt}]
+        )
+        
+        response_text = response.content[0].text.strip()
+        log.debug('response: ' + response_text)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
+
+    # convert response to lines
+    lines = response_text.splitlines()
+    if lines:
+        # remove 1st element from array if it starts with ```
+        if lines[0].startswith("```"):
+            lines.pop(0)
+        # remove last element from array if it starts with ```
+        if lines[-1].startswith("```"):
+            lines.pop()
+
+        response_text = "\n".join(lines)
+
+    return response_text
+
 def generate_code_completion_openai_legacy(prompt, baseurl, model, options, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
@@ -326,8 +416,8 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     full_prompt = fill_in_the_middle(config, prompt)
     log.debug('full_prompt: ' + full_prompt)
 
-    temperature = options.get('temperature', 0)
-    max_tokens = options.get('max_tokens', 300)
+    temperature = options.get('temperature', DEFAULT_TEMPERATURE)
+    max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
 
     log.debug('model: ' + str(model))
     log.debug('temperature: ' + str(temperature))
@@ -342,6 +432,135 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
     log.debug('response: ' + response)
 
     return response.rstrip()
+
+def generate_code_completion_openai_responses(prompt, baseurl, model, options, credentialname):
+    """Generate code completion using OpenAI's /v1/responses endpoint for GPT-5.1-Codex"""
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
+
+    log.debug('Using OpenAI responses endpoint (for GPT-5.1-Codex)')
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('openai', credentialname)
+
+    if baseurl:
+        endpoint = f"{baseurl}/v1/responses"
+    else:
+        endpoint = "https://api.openai.com/v1/responses"
+
+    log.debug(f'endpoint: {endpoint}')
+
+    parts = prompt.split('<FILL_IN_HERE>')
+    if len(parts) != 2:
+        log.error("Prompt must contain <FILL_IN_HERE> marker.")
+        sys.exit(1)
+
+    # For code completion, we just use the before part as input
+    before = parts[0]
+    after = parts[1]
+
+    # Build the input prompt for code completion
+    # gpt-5.1-codex seems to work better with explicit instructions
+    if after.strip():
+        # Fill-in-the-middle style completion
+        full_input = f"Complete the code at <FILL>:\n\n{before}<FILL>{after}\n\nProvide ONLY the code that replaces <FILL>, nothing else."
+    else:
+        # End-of-file completion
+        full_input = f"Continue this code:\n\n{before}\n\nProvide ONLY the next line(s) of code, nothing else."
+
+    # Use higher token limit for gpt-5.1-codex which uses reasoning tokens
+    max_output_tokens = options.get('max_completion_tokens', options.get('max_tokens', DEFAULT_MAX_TOKENS))
+
+    log.debug('model: ' + str(model))
+    log.debug('max_output_tokens: ' + str(max_output_tokens))
+    log.debug('input: ' + full_input)
+
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json'
+    }
+
+    data = {
+        'model': model,
+        'input': full_input,
+        'max_output_tokens': max_output_tokens
+    }
+
+    try:
+        response = requests.post(endpoint, headers=headers, json=data)
+        if response.status_code != 200:
+            log.error(f'API error: {response.text}')
+        response.raise_for_status()
+        result = response.json()
+        log.debug('response: ' + json.dumps(result, indent=2))
+
+        # Extract the completion from the response
+        # The responses endpoint can return different formats
+        completion = None
+
+        # Check if response has the new format with 'output' array
+        if 'output' in result and isinstance(result['output'], list):
+            log.debug(f'Result has output array with {len(result["output"])} items')
+            # Look for message type items in the output array
+            for idx, item in enumerate(result['output']):
+                log.debug(f'Output item {idx}: type={item.get("type")}')
+                if item.get('type') == 'message' and item.get('status') == 'completed':
+                    content = item.get('content', [])
+                    log.debug(f'Message content has {len(content)} items')
+                    for content_idx, content_item in enumerate(content):
+                        log.debug(f'Content {content_idx}: type={content_item.get("type")}')
+                        if content_item.get('type') == 'output_text':
+                            completion = content_item.get('text', '')
+                            log.debug(f'Found output_text: {completion}')
+                            break
+                    if completion:
+                        break
+
+            # If no message found, log the incomplete status
+            if not completion and result.get('status') == 'incomplete':
+                log.warning(f'Response incomplete: {result.get("incomplete_details")}')
+                # For incomplete responses with only reasoning, we might need to handle differently
+                log.error('No message output found, only reasoning. Model may need different prompt.')
+
+        # Handle list format (old format)
+        elif isinstance(result, list):
+            log.debug(f'Result is a list with {len(result)} items')
+            for idx, item in enumerate(result):
+                log.debug(f'Item {idx}: type={item.get("type")}, status={item.get("status")}')
+                if item.get('type') == 'message' and item.get('status') == 'completed':
+                    content = item.get('content', [])
+                    log.debug(f'Message content has {len(content)} items')
+                    for content_idx, content_item in enumerate(content):
+                        log.debug(f'Content {content_idx}: type={content_item.get("type")}')
+                        if content_item.get('type') == 'output_text':
+                            completion = content_item.get('text', '')
+                            log.debug(f'Found output_text: {completion}')
+                            break
+                    if completion:
+                        break
+
+        # Fallback for other formats
+        elif 'text' in result:
+            completion = result['text']
+        elif 'choices' in result and len(result['choices']) > 0:
+            completion = result['choices'][0].get('text', result['choices'][0].get('message', {}).get('content', ''))
+
+        if not completion:
+            log.error('Could not extract completion from response')
+            log.error('Response structure: ' + json.dumps(result, indent=2))
+            return ""
+
+        # Ensure completion is a string
+        if not isinstance(completion, str):
+            log.error(f'Completion is not a string, type: {type(completion)}')
+            completion = str(completion)
+
+        log.debug('Final completion: ' + completion)
+        return completion.strip()
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        log.error(str(e))
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:
@@ -408,6 +627,20 @@ if __name__ == "__main__":
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
             response = generate_code_completion_openai_legacy(prompt, baseurl, modelname, options, args.keyname)
+        elif args.provider == "claude":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_CLAUDE_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_claude(prompt, baseurl, modelname, options, args.keyname)
+        elif args.provider == "openai_responses":
+            if args.model:
+                modelname = args.model
+            else:
+                modelname = DEFAULT_OPENAI_RESPONSES_MODEL
+            baseurl = args.url or None
+            response = generate_code_completion_openai_responses(prompt, baseurl, modelname, options, args.keyname)
         else:
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)
