@@ -339,7 +339,7 @@ if __name__ == "__main__":
     try:
         parser = argparse.ArgumentParser(description="Complete code using Ollama or OpenAI LLM.")
         parser.add_argument('-p', '--provider', type=str, default=DEFAULT_PROVIDER,
-                            help="LLM provider: 'ollama' (default), 'mistral' or 'openai'")
+                            help="LLM provider: 'ollama' (default), 'mistral', 'openai' or 'openai_legacy'")
         parser.add_argument('-m', '--model', type=str, default=None,
                             help="Model name (Ollama or OpenAI).")
         parser.add_argument('-u', '--url', type=str, default=None,
