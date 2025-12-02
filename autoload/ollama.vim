@@ -221,6 +221,16 @@ function! ollama#GetSuggestion(timer)
           \ "Connecting to Ollama on " .. g:ollama_host
           \ .. " using model " .. g:ollama_model)
     call ollama#logger#Debug("model_options=" .. l:model_options)
+
+    if exists('g:ollama_model_sampling_denylist')
+            \ && len(g:ollama_model_sampling_denylist) > 0
+            \ && index(g:ollama_model_sampling_denylist, g:ollama_model) >= 0
+        let l:sampling_enabled = 0
+    else
+        let l:sampling_enabled = 1
+    endif
+    call ollama#logger#Debug("sampling_enabled=" .. l:sampling_enabled)
+
     " Convert plugin debug level to python logger levels
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
     let l:base_url = g:ollama_host
@@ -234,6 +244,7 @@ function! ollama#GetSuggestion(timer)
         \ "-m", g:ollama_model,
         \ "-u", l:base_url,
         \ "-o", l:model_options,
+        \ "-se", l:sampling_enabled,
         \ "-l", l:log_level
         \ ]
     " Add optional credentialname for looking up the API key

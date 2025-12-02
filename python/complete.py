@@ -209,7 +209,7 @@ def extract_stop_marker(after: str) -> str | None:
             return line.rstrip()  # preserve indentation
     return None
 
-def generate_code_completion_openai(prompt, baseurl, model, options, credentialname):
+def generate_code_completion_openai(prompt, baseurl, model, options, sampling_enabled, credentialname):
     """Generate code completion using OpenAI's official Python SDK"""
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
@@ -264,13 +264,21 @@ AFTER:
     log.debug('max_tokens: ' + str(max_tokens))
     log.debug('stops: ' + str(stops))
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": full_prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            stop=stops
-        )
+        # Build request parameters
+        request_params = {
+            'model': model,
+            'messages': [{"role": "user", "content": full_prompt}],
+        }
+
+        # Check if model supports sampling parameters
+        if sampling_enabled:
+            request_params['temperature'] = temperature
+            request_params['max_tokens'] = max_tokens
+            request_params['stop'] = stops
+        else:
+            request_params['max_completion_tokens'] = max_tokens
+
+        response = client.chat.completions.create(**request_params)
         response = response.choices[0].message.content.strip()
         log.debug('response: ' + response)
     except Exception as e:
@@ -346,6 +354,7 @@ if __name__ == "__main__":
                             help="Base endpoint URL (for Ollama only).")
         parser.add_argument('-o', '--options', type=str, default=DEFAULT_OPTIONS,
                             help="Ollama REST API options (JSON string).")
+        parser.add_argument("-se", "--sampling-enabled", type=int, default=1, help="Enable or disable sampling.")
         parser.add_argument('-l', '--log-level', type=int, default=OllamaLogger.ERROR,
                             help="Specify log level")
         parser.add_argument('-f', '--log-filename', type=str, default="complete.log",
@@ -391,7 +400,7 @@ if __name__ == "__main__":
             else:
                 modelname = DEFAULT_OPENAI_MODEL
             baseurl = args.url or None
-            response = generate_code_completion_openai(prompt, baseurl, modelname, options, args.keyname)
+            response = generate_code_completion_openai(prompt, baseurl, modelname, options, args.sampling_enabled, args.keyname)
         elif args.provider == "openai_legacy":
             if args.model:
                 modelname = args.model
