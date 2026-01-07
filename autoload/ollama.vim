@@ -493,19 +493,23 @@ function ollama#IsEnabled() abort
         return 0
     endif
 
-    " If whitelist is set, it limits the types of files that are covered.
-    if exists('g:ollama_completion_allowlist_filetype')
-                \ && len(g:ollama_completion_allowlist_filetype) > 0
-                \ && index(g:ollama_completion_allowlist_filetype, &filetype) < 0
-        return 0
-    endif
-
+    " Denylist check: disables even if allowlist allows it
     if exists('g:ollama_completion_denylist_filetype')
                 \ && len(g:ollama_completion_denylist_filetype) > 0
                 \ && index(g:ollama_completion_denylist_filetype, &filetype) >= 0
+        " file is in deny list -> disabled
         return 0
     endif
 
+    " Allowlist check: enable only if in allowlist
+    if exists('g:ollama_completion_allowlist_filetype')
+                \ && len(g:ollama_completion_allowlist_filetype) > 0
+                \ && index(g:ollama_completion_allowlist_filetype, &filetype) < 0
+        " allow list exists, but file is not listed -> disable
+        return 0
+    endif
+
+    " Enabled by default if not disabled by any other logic
     return 1
 endfunction
 
@@ -520,7 +524,7 @@ endfunction
 " Disables the plugin. If it is already disabled, does nothing.
 function ollama#Disable() abort
     if exists('g:ollama_enabled') && g:ollama_enabled == 1
-        unlet g:ollama_enabled
+        let g:ollama_enabled = 0
         echo "Vim-Ollama is disabled."
     endif
 endfunction
