@@ -16,7 +16,7 @@ class ChatTemplate:
             chat_template = chat_template.replace('    ', '').replace('\n', '')
             self.template = Template(chat_template)
 
-    def render(self, messages, bos_token=None, eos_token=None, add_generation_prompt=False):
+    def render(self, messages, bos_token='', eos_token=None, add_generation_prompt=False):
         return self.template.render(
             messages=messages,
             bos_token=bos_token,
