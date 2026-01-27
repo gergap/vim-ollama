@@ -164,22 +164,9 @@ endfunction
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Popup edit prompt, instead of Edit command
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-function! ollama#edit#EditPrompt()
-    " Initialize line numbers
-    let l:firstline = 0
-    let l:lastline = 0
-
-    if mode() ==# 'v' || mode() ==# 'V' || mode() ==# "\<C-V>"
-        " Get the first and last line of the selection
-        let l:firstline = line("'<")
-        let l:lastline = line("'>")
-    else
-        let l:firstline = 1
-        let l:lastline = line('$')
-    endif
-
+function! ollama#edit#EditPrompt() range
     " Extract the selected text or the whole file content
-    let l:selected_text = join(getline(l:firstline, l:lastline), "\n")
+    let l:selected_text = join(getline(a:firstline, a:lastline), "\n")
 
     " Show a prompt to enter the user request
     let l:prompt = input('Enter prompt: ', '', 'file')
@@ -190,7 +177,7 @@ function! ollama#edit#EditPrompt()
     endif
 
     " Call the ollama#edit#EditCodeInternal function with the request and selected context
-    call s:EditCodeInternal(l:prompt, l:firstline, l:lastline)
+    call s:EditCodeInternal(l:prompt, a:firstline, a:lastline)
 endfunction
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
