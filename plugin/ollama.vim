@@ -204,14 +204,14 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
     inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
-    vnoremap <Plug>(ollama-review)         <Cmd>call ollama#review#Review()<CR>
+    vnoremap <Plug>(ollama-review)         :call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
     nnoremap <Plug>(ollama-accept-changes) <Cmd>call ollama#edit#AcceptCurrent()<CR>
     nnoremap <Plug>(ollama-reject-changes) <Cmd>call ollama#edit#RejectCurrent()<CR>
     nnoremap <Plug>(ollama-accept-all-changes) <Cmd>call ollama#edit#AcceptAll()<CR>
     nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
-    nnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
-    vnoremap <Plug>(ollama-edit)           <Cmd>call ollama#edit#EditPrompt()<CR>
+    nnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
+    vnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
 
     if !exists('g:ollama_no_tab_map')
         " Save the existing <Tab> mapping in insert mode
