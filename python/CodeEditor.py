@@ -333,7 +333,7 @@ Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HER
     prompt = chat_template.render(messages=chat, add_generation_prompt=True)
     # Start the answer of the assistant to set it on the right path...
     prompt += f"""Sure! Here's the rewritten code block:
-```c
+```{ft}
 {preamble}
 <START_EDIT_HERE>"""
     debug_print(prompt)
