@@ -5,7 +5,6 @@
 # This class can generate model specific chats for different roles
 # using the tags use for training the model.
 # This way we can generate model agnostic conversations.
-import json
 from jinja2 import Template
 
 # apply template using Jinja2 template specified in config.chat_template
@@ -16,7 +15,7 @@ class ChatTemplate:
             chat_template = chat_template.replace('    ', '').replace('\n', '')
             self.template = Template(chat_template)
 
-    def render(self, messages, bos_token=None, eos_token=None, add_generation_prompt=False):
+    def render(self, messages, bos_token='', eos_token='', add_generation_prompt=False):
         return self.template.render(
             messages=messages,
             bos_token=bos_token,
