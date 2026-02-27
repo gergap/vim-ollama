@@ -7,9 +7,10 @@
 # or can be retrieved from UNIX Pass tool.
 import os
 import subprocess
+from typing import Optional
 
 class OllamaCredentials:
-    def GetApiKey(self, provider: str, credentialname: str | None) -> str:
+    def GetApiKey(self, provider: str, credentialname: Optional[str]) -> str:
         """
         Retrieve the API key for the given provider.
 

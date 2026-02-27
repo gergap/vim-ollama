@@ -8,6 +8,7 @@ import sys
 import argparse
 import json
 import os
+from typing import Optional
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
 
@@ -202,7 +203,7 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
 
     return response
 
-def extract_stop_marker(after: str) -> str | None:
+def extract_stop_marker(after: str) -> Optional[str]:
     """Return the first meaningful line of `after` to use as a stop marker."""
     for line in after.splitlines():
         s = line.strip()
