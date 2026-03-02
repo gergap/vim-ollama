@@ -629,7 +629,7 @@ def get_job_status():
         is_running = False
         if g_editing_thread:
             with g_thread_lock:
-                is_runining = g_editing_thread.is_alive()
+                is_running = g_editing_thread.is_alive()
 
         if (is_running):
             return "InProgress", None, ''
