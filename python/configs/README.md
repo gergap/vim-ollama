@@ -25,6 +25,18 @@ is correct and will not work the other way around!
 The answer often contains an ` <EOT>` (end-of-text) marker that needs to be removed
 by _vim-ollama_. If the model does not use such a marker simply omit it in the config.
 
+## Config File Lookup Logic
+
+The plugin searches for config files in `python/configs/`:
+
+1. Strip suffix after `:` and prefix before `/` from model name
+2. Try `{modelname}.json`, then progressively strip trailing parts:
+   - Remove part after last `-`, OR
+   - Remove trailing digits/dots
+3. Repeat until a match is found
+
+**Example:** `hhao/qwen2.5-coder-tools:32b` → `qwen2.5-coder-tools.json` → `qwen2.5-coder.json` → `qwen2.5.json` → `qwen.json`
+
 ## Example config
 
 This is a configuration for codellama. The spaces inside the strings are **important**!
