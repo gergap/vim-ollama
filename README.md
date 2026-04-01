@@ -174,6 +174,8 @@ The most important variables: (see `:help vim-ollama` for more information)
 
 When adding new unsupported code completion models, you will see an error like `ERROR - Config file .../python/configs/foobar.json not found.`. Simply add this missing file and create a merge request to get it included upstream. Consult the model's documentation to find out the correct tokens.
 
+See `python/configs/README.md` for details on the config file lookup logic.
+
 ### Credential Storage
 
 Commercial REST APIs typically require an API key for authentication. While you can store these keys as environment

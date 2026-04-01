@@ -8,6 +8,7 @@ import sys
 import argparse
 import json
 import os
+import re
 from typing import Optional
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
@@ -39,21 +40,44 @@ DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
 USE_CUSTOM_TEMPLATE = True
 log = None
 
+# Module-level constants for path and compiled regex
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_DIR = os.path.join(_SCRIPT_DIR, "configs")
+_TRAILING_NUMBER_PATTERN = re.compile(r'[\d.]+$')
+
 
 def load_config(modelname):
     # strip suffix (e.g ':7b-code') from modelname
     modelname = modelname.rsplit(':', 1)[0]
-    # Get the directory where the Python script resides
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the full path to the config file relative to the script directory
-    config_path = os.path.join(script_dir, "configs", f"{modelname}.json")
-    try:
-        with open(config_path, 'r') as file:
-            config = json.load(file)
-            return config
-    except FileNotFoundError:
-        log.error(f"Config file {config_path} not found.")
-        sys.exit(1)
+    modelname = modelname.split('/', 1)[-1]
+
+    original_modelname = modelname
+
+    # Try exact match first, then progressively strip trailing parts
+    current = modelname
+    while True:
+        config_path = os.path.join(_CONFIG_DIR, f"{current}.json")
+        try:
+            with open(config_path, 'r') as file:
+                config = json.load(file)
+                return config
+        except FileNotFoundError:
+            pass
+        except json.JSONDecodeError:
+            log.error(f"Invalid JSON in config file: {config_path}")
+            sys.exit(1)
+
+        # Strip trailing part: first by '-', then strip trailing digits
+        if '-' in current:
+            next_current = current.rsplit('-', 1)[0]
+        else:
+            next_current = _TRAILING_NUMBER_PATTERN.sub('', current)
+        if next_current == current:
+            break
+        current = next_current
+
+    log.error(f"Config file not found for {original_modelname}")
+    sys.exit(1)
 
 # config.json example:
 # {
