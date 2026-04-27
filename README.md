@@ -88,6 +88,14 @@ If you're using a Debian-based distribution, you can install the required librar
 sudo apt install python3-httpx python3-jinja2 python3-requests
 ```
 
+When using the built-in venv support of the plugin you should install at least this:
+
+```sh
+sudo apt install python3-venv
+```
+
+All other dependencies will be installed in Vim-Ollama's venv directory.
+
 ### Other Systems
 
 System-wide installation using `pip install` is not recommended; use a virtual environment instead.
