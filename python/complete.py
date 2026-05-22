@@ -106,13 +106,21 @@ def fill_in_the_middle(config, prompt):
 
     return newprompt
 
-def generate_code_completion(config, prompt, baseurl, model, options):
+def generate_code_completion(config, prompt, baseurl, model, options, credentialname):
     """ Code completion using Ollama REST API """
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('ollama', credentialname)
+    # don't trace API keys in production, just a development helper
+    log.debug(f'api_key={api_key}')
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',
         'Host': baseurl.split('//')[1].split('/')[0]
     }
+
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
 
@@ -403,7 +411,7 @@ if __name__ == "__main__":
                 modelname = DEFAULT_MODEL
             baseurl = args.url or DEFAULT_HOST
             config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
-            response = generate_code_completion(config, prompt, baseurl, modelname, options)
+            response = generate_code_completion(config, prompt, baseurl, modelname, options, args.keyname)
         elif args.provider == "mistral":
             if args.model:
                 modelname = args.model

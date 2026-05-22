@@ -28,15 +28,18 @@ class OllamaCredentials:
 
         provider = provider.lower().strip()
 
-        # 1. Ollama doesn't require authentication
+        # 1. Ollama (local) doesn't require authentication
         if provider == "ollama":
-            return ""
+            if not credentialname:
+                return ""
 
         # Determine environment variable
         if provider in ("openai", "openai_legacy"):
             env_var = "OPENAI_API_KEY"
         elif provider == "mistral":
             env_var = "MISTRAL_API_KEY"
+        elif provider == "ollama":
+            env_var = "OLLAMA_API_KEY"
         else:
             raise ValueError(f"Unknown provider: {provider}")
 

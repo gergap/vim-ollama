@@ -46,6 +46,31 @@ else
           \ .. " or newer is required to support ghost text (textprop)"
 endif
 
+" Gets the Ollama API key from UNIX pass and caches it as a script local
+" variable
+function! s:GetOllamaApiKey() abort
+    if exists('s:ollama_api_key') && s:ollama_api_key !=# ''
+        return s:ollama_api_key
+    endif
+
+    " Run Python once to retrieve and store the key
+    python3 << EOF
+import vim
+from OllamaCredentials import OllamaCredentials
+
+credentialname = vim.eval('get(g:, "ollama_ollama_credentialname", "")')
+key = ""
+try:
+    key = OllamaCredentials().GetApiKey("ollama", credentialname)
+except Exception as e:
+    vim.command(f'echom "Failed to get Ollama key: {e}"')
+if key:
+    vim.command(f'let s:ollama_api_key = "{key}"')
+EOF
+
+    return s:ollamal_api_key
+endfunction
+
 " Gets the Mistral API key from UNIX pass and caches it as a script local
 " variable
 function! s:GetMistralApiKey() abort
@@ -246,6 +271,11 @@ function! ollama#GetSuggestion(timer)
         if g:ollama_mistral_credentialname != ''
             " add credentialname option for Mistral
             let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'ollama'
+        if g:ollama_ollama_credentialname != ''
+            " add credentialname option for Ollama
+            let l:command += [ '-k', g:ollama_ollama_credentialname ]
         endif
     endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
