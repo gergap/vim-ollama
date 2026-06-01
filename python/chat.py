@@ -35,13 +35,20 @@ DEFAULT_MAX_TOKENS = 5000
 
 log = None
 
-async def stream_chat_message_ollama(messages, endpoint, model, options, timeout):
+async def stream_chat_message_ollama(messages, endpoint, model, options, timeout, credentialname):
     """Stream chat responses from Ollama API."""
+    cred = OllamaCredentials()
+    api_key = cred.GetApiKey('ollama', credentialname)
+    # don't trace API keys in production, just a development helper
+    log.debug(f'api_key={api_key}')
     headers = {
         "Content-Type": "application/json",
         "Accept": "*/*",
         "Host": endpoint.split("//")[1].split("/")[0],
     }
+
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
 
     data = {
         "model": model,
@@ -165,7 +172,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
 
                     if provider == "ollama":
                         task = asyncio.create_task(
-                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout)
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname)
                         )
                     else:
                         task = asyncio.create_task(
@@ -185,14 +192,13 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                     conversation_history.append({"role": "user", "content": user_message})
                     if provider == "ollama":
                         task = asyncio.create_task(
-                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout)
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname)
                         )
                     else:
                         task = asyncio.create_task(
                             stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname)
                         )
                     await task
-
         except KeyboardInterrupt:
             print("\nStreaming interrupted. Showing prompt again...")
             if "task" in locals():

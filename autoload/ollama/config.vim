@@ -11,6 +11,7 @@ let s:fetched = 0
 let s:help_text = {
 \ 'ollama_use_venv': 'Use Python virtual environment',
 \ 'ollama_host': 'Ollama API host URL (default=http://localhost:11434).',
+\ 'ollama_ollama_credentialname': 'Credential name to lookup the Ollama API key in password store',
 \ 'ollama_mistral_baseurl': 'Mistral base URL (default='', which uses the official Mistral API).',
 \ 'ollama_mistral_credentialname': 'Credential name to lookup the Mistral API key in password store',
 \ 'ollama_openai_baseurl': 'OpenAI base URL (default='', which uses the official OpenAI API).',
@@ -87,6 +88,11 @@ function! ollama#config#FetchModels(type) abort
         if g:ollama_mistral_credentialname != ''
             " add credentialname option for Mistral
             let l:command += [ '-k', g:ollama_mistral_credentialname ]
+        endif
+    elseif g:ollama_model_provider == 'ollama'
+        if g:ollama_ollama_credentialname != ''
+            " add credentialname option for Ollama
+            let l:command += [ '-k', g:ollama_ollama_credentialname ]
         endif
     endif
 

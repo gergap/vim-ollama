@@ -165,6 +165,9 @@ function! s:StartChat(lines) abort
     if g:ollama_openai_credentialname != ''
          " add system prompt option
         let l:command += [ '-k', g:ollama_openai_credentialname ]
+    elseif g:ollama_ollama_credentialname != ''
+         " add system prompt option
+        let l:command += [ '-k', g:ollama_ollama_credentialname ]
     endif
 
     " Redirect job's IO to buffer

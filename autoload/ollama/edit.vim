@@ -123,6 +123,8 @@ if provider.startswith('openai'):
 elif provider == 'mistral':
     baseurl = vim.eval('g:ollama_mistral_baseurl')
     credentialname = vim.eval('g:ollama_mistral_credentialname')
+elif provider == 'ollama':
+    credentialname = vim.eval('g:ollama_ollama_credentialname')
 # Access global Vim variables
 settings = {
     'url': baseurl,
