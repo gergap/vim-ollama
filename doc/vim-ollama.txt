@@ -289,6 +289,16 @@ g:ollama_openai_credentialname
 >
         let g:ollama_openai_credentialname = 'api-tokens/openai'
 <
+                                                      *g:ollama_ollama_credentialname*
+g:ollama_ollama_credentialname
+    - Description: Sets the credentialname for loading the API-key from the
+      UNIX password manager. This avoids setting the OLLAMA_API_KEY as
+      environment variable.
+    - Default: ''
+    - Example:
+>
+        let g:ollama_ollama_credentialname = 'api-tokens/ollama'
+<
                                                       *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.
