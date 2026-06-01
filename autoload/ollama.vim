@@ -21,7 +21,7 @@ let s:prop_id = -1
 " suppress internally trigger reschedules due to inserts
 " only when the user types text we want a reschedule
 let s:ignore_schedule = 0
-" API key cache in sccript local variable. This way we can get the API keys
+" API key cache in script local variable. This way we can get the API keys
 " once from UNIX pass and then set it as env variable for child processes
 " without accessing the pass manager again or the need of storing the key 
 " in a plain text file.
@@ -471,7 +471,7 @@ function! ollama#InsertNextLine()
     call ollama#logger#Debug("firstline=" .. json_encode(l:firstline))
     call ollama#logger#Debug("new suggestion=" .. json_encode(s:suggestion))
 
-    " check if remaingin suggestion contains more non-white space charaters
+    " check if remaining suggestion contains more non-white space characters
     if (matchstr(s:suggestion, '\S') == "")
         let s:suggestion = ''
         let morelines=0
