@@ -21,7 +21,7 @@ except ImportError:
 
 # try to load Mistral package if it exists
 try:
-    from mistralai import Mistral
+    from mistralai.client import Mistral
 except ImportError:
     Mistral = None
 
