@@ -469,6 +469,10 @@ endfunction
 function! ollama#setup#Init() abort
     let l:ollama_config = expand('$HOME/.vim/config/ollama.vim')
 
+    if exists('g:ollama_skip_setup') && g:ollama_skip_setup
+        return
+    endif
+
     " check if config file exists
     if !filereadable(l:ollama_config)
         echon "Welcome to Vim-Ollama!\n"
