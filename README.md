@@ -309,3 +309,9 @@ don't want to use the complete suggestion.
 To disable the default mappings, use `:Ollama config` and change `g:ollama_no_maps` and/or `g:ollama_no_tab_map`.
 
 See `:help vim-ollama` for more information.
+
+## Disclaimer
+
+This project is a hobby project developed in my spare time.
+
+It is provided "as is", without warranty of any kind. There is no guarantee of security updates, maintenance, or support. Use it at your own risk.
