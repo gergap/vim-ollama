@@ -17,7 +17,7 @@ def list_ollama_models(base_url):
     url = f"{base_url}/api/tags"
     try:
         log.debug(f'url={url}')
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         if response.status_code != 200:
             print(f"Failed to retrieve models (status {response.status_code})", file=sys.stderr)
             sys.exit(1)
