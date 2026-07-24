@@ -56,7 +56,8 @@ function! ollama#config#FetchModels(type) abort
     if (s:fetched)
         return
     endif
-    "let s:fetched = 1
+    let s:fetched = 1
+    let s:new_models = []
 
     " Construct the shell command to call list_models.py with the provided URL
     let l:script_path = printf('%s/python/list_models.py', g:ollama_plugin_dir)
@@ -89,17 +90,17 @@ function! ollama#config#FetchModels(type) abort
     echo "baseurl="..l:baseurl
     let l:command = [ g:ollama_python_interpreter, l:script_path, '-u', l:baseurl, '-p', l:provider, '-l', l:log_level]
     " Add optional credentialname for looking up the API key
-    if g:ollama_model_provider =~ '^openai'
+    if l:provider =~ '^openai'
         if g:ollama_openai_credentialname != ''
             " add credentialname option for OpenAI
             let l:command += [ '-k', g:ollama_openai_credentialname ]
         endif
-    elseif g:ollama_model_provider == 'mistral'
+    elseif l:provider == 'mistral'
         if g:ollama_mistral_credentialname != ''
             " add credentialname option for Mistral
             let l:command += [ '-k', g:ollama_mistral_credentialname ]
         endif
-    elseif g:ollama_model_provider == 'ollama'
+    elseif l:provider == 'ollama'
         if g:ollama_ollama_credentialname != ''
             " add credentialname option for Ollama
             let l:command += [ '-k', g:ollama_ollama_credentialname ]

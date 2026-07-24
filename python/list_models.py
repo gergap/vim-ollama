@@ -33,13 +33,16 @@ def list_ollama_models(base_url):
         print(f"Error contacting Ollama: {e}", file=sys.stderr)
         sys.exit(1)
 
-def list_openai_models(base_url, credentialname):
-    """List models available to the current OpenAI API key."""
+def list_openai_models(provider, base_url, credentialname):
+    """List models available to the current provider API key."""
     if not base_url:
-        base_url = 'https://api.mistral.ai/v1'
+        if provider == 'mistral':
+            base_url = 'https://api.mistral.ai/v1'
+        else:
+            base_url = 'https://api.openai.com/v1'
 
     cred = OllamaCredentials()
-    api_key = cred.GetApiKey('openai', credentialname)
+    api_key = cred.GetApiKey(provider, credentialname)
 
     url = f"{base_url}/models"
     headers = {
@@ -93,7 +96,7 @@ def main():
             args.url = DEFAULT_OLLAMA_URL
         list_ollama_models(args.url)
     elif args.provider == "openai" or args.provider == "openai_legacy" or args.provider == "mistral":
-        list_openai_models(args.url, args.keyname)
+        list_openai_models(args.provider, args.url, args.keyname)
     else:
         print(f"Unknown provider: {args.provider}", file=sys.stderr)
         sys.exit(1)
