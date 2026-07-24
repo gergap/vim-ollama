@@ -51,8 +51,6 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
     """
     cred = OllamaCredentials()
     api_key = cred.GetApiKey('ollama', credentialname)
-    # don't trace API keys in production, just a development helper
-    log.debug(f'api_key={api_key}')
     headers = {
         "Content-Type": "application/json",
         "Accept": "*/*",

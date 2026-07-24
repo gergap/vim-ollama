@@ -112,8 +112,6 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
     """ Code completion using Ollama REST API """
     cred = OllamaCredentials()
     api_key = cred.GetApiKey('ollama', credentialname)
-    # don't trace API keys in production, just a development helper
-    log.debug(f'api_key={api_key}')
     headers = {
         'Content-Type': 'application/json',
         'Accept': '*/*',

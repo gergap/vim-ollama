@@ -52,81 +52,6 @@ else
           \ .. " or newer is required to support ghost text (textprop)"
 endif
 
-" Gets the Ollama API key from UNIX pass and caches it as a script local
-" variable
-function! s:GetOllamaApiKey() abort
-    if exists('s:ollama_api_key') && s:ollama_api_key !=# ''
-        return s:ollama_api_key
-    endif
-
-    " Run Python once to retrieve and store the key
-    python3 << EOF
-import vim
-from OllamaCredentials import OllamaCredentials
-
-credentialname = vim.eval('get(g:, "ollama_ollama_credentialname", "")')
-key = ""
-try:
-    key = OllamaCredentials().GetApiKey("ollama", credentialname)
-except Exception as e:
-    vim.command(f'echom "Failed to get Ollama key: {e}"')
-if key:
-    vim.command(f'let s:ollama_api_key = "{key}"')
-EOF
-
-    return s:ollamal_api_key
-endfunction
-
-" Gets the Mistral API key from UNIX pass and caches it as a script local
-" variable
-function! s:GetMistralApiKey() abort
-    if exists('s:mistral_api_key') && s:mistral_api_key !=# ''
-        return s:mistral_api_key
-    endif
-
-    " Run Python once to retrieve and store the key
-    python3 << EOF
-import vim
-from OllamaCredentials import OllamaCredentials
-
-credentialname = vim.eval('get(g:, "ollama_mistral_credentialname", "")')
-key = ""
-try:
-    key = OllamaCredentials().GetApiKey("mistral", credentialname)
-except Exception as e:
-    vim.command(f'echom "Failed to get Mistral key: {e}"')
-if key:
-    vim.command(f'let s:mistral_api_key = "{key}"')
-EOF
-
-    return s:mistral_api_key
-endfunction
-
-" Gets the OpenAI API key from UNIX pass and caches it as a script local
-" variable
-function! s:GetOpenAIApiKey() abort
-    if exists('s:openai_api_key') && s:openai_api_key !=# ''
-        return s:openai_api_key
-    endif
-
-    " Run Python once to retrieve and store the key
-    python3 << EOF
-import vim
-from OllamaCredentials import OllamaCredentials
-
-credentialname = vim.eval('get(g:, "ollama_openai_credentialname", "")')
-key = ""
-try:
-    key = OllamaCredentials().GetApiKey("openai", credentialname)
-except Exception as e:
-    vim.command(f'echom "Failed to get OpenAI key: {e}"')
-if key:
-    vim.command(f'let s:openai_api_key = "{key}"')
-EOF
-
-    return s:openai_api_key
-endfunction
-
 function! ollama#TriggerCompletion()
     call ollama#logger#Debug("TriggerCompletion...")
     " get current buffer type
@@ -309,16 +234,6 @@ function! ollama#GetSuggestion(timer)
         \ 'err_cb': function('s:HandleError'),
         \ 'exit_cb': function('s:HandleExit')
         \ }
-
-    " set API keys as env variable
-    let l:job_env = {}
-    if g:ollama_model_provider ==# 'mistral'
-        let l:job_env['MISTRAL_API_KEY'] = s:GetMistralApiKey()
-    elseif g:ollama_model_provider =~# '^openai'
-        let l:job_env['OPENAI_API_KEY'] = s:GetOpenAIApiKey()
-    endif
-    " add the env dict to job options
-    let l:job_options.env = l:job_env
 
     if (s:prompt == l:prompt)
         call ollama#logger#Debug("Ignoring search for '" .. l:prompt .. "'."

@@ -48,7 +48,6 @@ def list_openai_models(base_url, credentialname):
 
     try:
         log.debug(f'url={url}')
-        log.debug(f'headers={headers}')
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             print(f"Failed to retrieve OpenAI models (status {response.status_code})", file=sys.stderr)
