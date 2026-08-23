@@ -530,7 +530,7 @@ g:ollama_use_venv
 >
         let g:ollama_use_venv = 1
 <
-                                                    *g:ollama_split_vertically*
+                                                     *g:ollama_split_vertically*
 g:ollama_split_vertically
     - Description: When this variable is defined and set to 1 the OllamaChat
       command will create a vertical split, otherwise a horizontal split is
@@ -540,8 +540,19 @@ g:ollama_split_vertically
         " prefer horizontal split
         let g:ollama_split_vertically = 0
 <
+                                                       *g:ollama_hidethinking*
+g:ollama_hidethinking
+    - Description: When set to 'true', hides the thinking output from the 
+      model's response. Useful models may include reasoning or thinking 
+      steps that you may not want to display in the chat window.
+    - Default: 'false'
+    - Example:
+>
+        " hide thinking output in chat
+        let g:ollama_hidethinking = 'true'
+<
 
-==============================================================================
+=============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
 You can enable logging by specifying the following variables.

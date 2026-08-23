@@ -155,6 +155,7 @@ function! s:StartChat(lines) abort
                 \ '-u', l:base_url,
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
+                \ '-n', g:ollama_hidethinking,
                 \ '-l', l:log_level ]
     " Check if a system prompt was configured
     if g:ollama_chat_systemprompt != ''
