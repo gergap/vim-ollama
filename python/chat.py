@@ -65,9 +65,9 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
     log.debug("request: " + json.dumps(data, indent=4))
 
     assistant_message = ""
-    prefix_reasoning = " > "
-    reasoning_message_cur = prefix_reasoning + "REASONING:  \n" + prefix_reasoning
-    content_message_cur = ""
+    prefix_reasoning = "> "
+    flag_first_print_message_reasoning = True
+    flag_first_print_message_content = True
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -88,20 +88,19 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                         reasoning = message["message"]["thinking"]
 
                                     if reasoning:
-                                        reasoning  = reasoning.replace("\n", "\n" + prefix_reasoning)
-                                        reasoning_message_cur += reasoning
-                                        if "\n" in reasoning or "\r" in reasoning:
-                                            print(reasoning_message_cur, flush=True, end="")
-                                            reasoning_message_cur = ""
+                                        if flag_first_print_message_reasoning:
+                                            flag_first_print_message_reasoning = False
+                                            print(prefix_reasoning + "Thinking...\n" + prefix_reasoning, flush=True, end="")
+                                        print(reasoning.replace("\n", "\n" + prefix_reasoning), flush=True, end="")
 
                                 if "content" in message["message"]:
                                     content = message["message"]["content"]
-                                    assistant_message += content
-                                    #  print(content, end="", flush=True)
-                                    content_message_cur += content
-                                    if "<EOT>" in content or "\n" in content or "\r" in content:
-                                        print("\n" + content_message_cur, flush=True, end="")
-                                        content_message_cur = ""
+                                    if content:
+                                        assistant_message += content
+                                        if flag_first_print_message_content:
+                                            flag_first_print_message_content = False
+                                            print("\n" + prefix_reasoning + "...done thinking.\n \n", flush=True, end="")
+                                        print(content, end="", flush=True)
 
                                     # If <EOT> is detected, stop processing
                                     if "<EOT>" in content:
@@ -109,8 +108,6 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
 
                             # Stop if response contains an indication of completion
                             if message.get("done", False):
-                                print("\n" + content_message_cur, flush=True, end="")
-                                content_message_cur = ""
                                 print("<EOT>", flush=True)
                                 break
                 else:
