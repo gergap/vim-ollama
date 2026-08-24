@@ -72,7 +72,7 @@ function! s:StartChat(lines) abort
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
         " append lines
-        let l:lines = split(a:msg, "\n")
+        let l:lines = split(a:msg, "\n", 1)
         for l:line in l:lines
             " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
