@@ -90,7 +90,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                     if reasoning:
                                         if flag_first_print_message_reasoning:
                                             flag_first_print_message_reasoning = False
-                                            print(prefix_reasoning + "Thinking...\n" + prefix_reasoning, flush=True, end="")
+                                            print("\n" + prefix_reasoning + "Thinking...\n" + prefix_reasoning, flush=True, end="")
                                         print(reasoning.replace("\n", "\n" + prefix_reasoning), flush=True, end="")
 
                                 if "content" in message["message"]:
