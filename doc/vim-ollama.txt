@@ -542,14 +542,13 @@ g:ollama_split_vertically
 <
                                                        *g:ollama_hidethinking*
 g:ollama_hidethinking
-    - Description: When set to 'true', hides the thinking output from the 
-      model's response. Useful models may include reasoning or thinking 
-      steps that you may not want to display in the chat window.
-    - Default: 'false'
+    - Description: When set to v:true, hides the thinking output from the
+      model's response while retaining the Thinking... and Done. status.
+    - Default: v:false
     - Example:
 >
         " hide thinking output in chat
-        let g:ollama_hidethinking = 'true'
+        let g:ollama_hidethinking = v:true
 <
 
 =============================================================================
@@ -602,4 +601,3 @@ information, see the LICENSE file in the repository.
 
 ==============================================================================
 vim:tw=78:et:ft=help:norl:
-

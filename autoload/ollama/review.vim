@@ -155,8 +155,10 @@ function! s:StartChat(lines) abort
                 \ '-u', l:base_url,
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
-                \ '-n', g:ollama_hidethinking,
                 \ '-l', l:log_level ]
+    if g:ollama_hidethinking ==# v:true
+        let l:command += [ '-n' ]
+    endif
     " Check if a system prompt was configured
     if g:ollama_chat_systemprompt != ''
          " add system prompt option

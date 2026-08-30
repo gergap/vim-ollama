@@ -185,7 +185,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
     multiline_input = False
     multiline_message = []
 
-    flag_hidethinking = args.hidethinking == "true"
+    flag_hidethinking = args.hidethinking
 
     if systemprompt:
         if provider == "ollama":
@@ -255,7 +255,7 @@ if __name__ == "__main__":
                         help="Ollama REST API options.")
     parser.add_argument("-s", "--system-prompt", type=str, default="", help="Specify system prompt.")
     parser.add_argument("-t", "--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout in seconds.")
-    parser.add_argument("-n", "--hidethinking", type=str, choices=["true", "false"], default="false", help="Hide thinking output (if provided by the model).")
+    parser.add_argument("-n", "--hidethinking", action="store_true", help="Hide thinking output (if provided by the model).")
     parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
     parser.add_argument("-f", "--log-filename", type=str, default="chat.log", help="Log filename.")
     parser.add_argument("-d", "--log-dir", type=str, default="/tmp/logs", help="Log file directory.")
