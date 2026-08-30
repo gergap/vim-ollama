@@ -254,6 +254,9 @@ function! s:StartChat(lines) abort
       autocmd! TextChangedI <buffer> setlocal nomodified
     augroup END
 
+    " Highlight the reasoning/thinking output (lines starting with '> ') in italics
+    call matchadd('OllamaThinking', '^> .*$')
+
     " start accepting shell commands
     startinsert
 endfunction

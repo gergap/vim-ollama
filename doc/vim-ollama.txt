@@ -550,6 +550,11 @@ g:ollama_hidethinking
         " hide thinking output in chat
         let g:ollama_hidethinking = v:true
 <
+    - The thinking output (shown when not hidden) is rendered in italics via
+      the |OllamaThinking| highlight group, which can be customized, e.g.:
+>
+        highlight OllamaThinking gui=italic ctermfg=DarkGray
+<
 
 =============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*

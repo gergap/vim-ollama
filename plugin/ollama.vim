@@ -287,6 +287,8 @@ sign define ChangedLine text=~ texthl=DiffChange
 sign define DeletedLine text=- texthl=DiffDelete
 " Define inline diff property types
 highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
+" Italic rendering for the reasoning/thinking output in the chat buffer
+highlight default OllamaThinking term=italic cterm=italic gui=italic
 call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
 call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
 call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
