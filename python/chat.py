@@ -73,7 +73,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", endpoint, headers=headers, json=data) as response:
                 if response.status_code == 200:
-                    print("Thinking...", flush=True)
+                    print("#StartThinking", flush=True)
                     async for line in response.aiter_lines():
                         if line:
                             message = json.loads(line)
@@ -98,7 +98,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                 if content:
                                     if not flag_thinking_done:
                                         flag_thinking_done = True
-                                        print("\nDone.\n\n", flush=True, end="")
+                                        print("\n#EndThinking\n", flush=True, end="")
                                     assistant_message += content
                                     print(content, end="", flush=True)
 
@@ -110,7 +110,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                             if message.get("done", False):
                                 break
                     if not flag_thinking_done:
-                        print("\nDone.", flush=True)
+                        print("\n#EndThinking", flush=True)
                     print("<EOT>", flush=True)
                 else:
                     await response.aread()

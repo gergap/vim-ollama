@@ -542,8 +542,9 @@ g:ollama_split_vertically
 <
                                                        *g:ollama_hidethinking*
 g:ollama_hidethinking
-    - Description: When set to v:true, hides the thinking output from the
-      model's response while retaining the Thinking... and Done. status.
+                                                       *OllamaThinking*
+    - Description: When set to v:true, hides the thinking reasoning lines from
+      the model's response. The thinking block is still folded (see below).
     - Default: v:false
     - Example:
 >
@@ -554,6 +555,14 @@ g:ollama_hidethinking
       the |OllamaThinking| highlight group, which can be customized, e.g.:
 >
         highlight OllamaThinking gui=italic ctermfg=DarkGray
+<
+    - The chat script wraps the thinking block in #StartThinking and
+      #EndThinking marker lines, which are folded automatically, closed by
+      default. Expand the fold with `zo` and collapse it with `zc`. The
+      markers themselves are hidden while the fold is closed. To disable
+      marker folding in the chat buffer use:
+>
+        setlocal foldmethod=manual
 <
 
 =============================================================================

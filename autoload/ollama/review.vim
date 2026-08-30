@@ -256,9 +256,35 @@ function! s:StartChat(lines) abort
 
     " Highlight the reasoning/thinking output (lines starting with '> ') in italics
     call matchadd('OllamaThinking', '^> .*$')
+    call matchadd('OllamaThinking', '^#\(StartThinking\|EndThinking\)$')
+
+    " Fold the reasoning/thinking output, closed by default
+    " The Python script wraps the thinking block in #StartThinking/#EndThinking markers
+    setlocal foldmethod=marker
+    setlocal foldmarker=#StartThinking,#EndThinking
+    setlocal foldtext=ollama#review#ChatFoldText()
+    setlocal foldlevel=0
+    setlocal foldcolumn=1
 
     " start accepting shell commands
     startinsert
+endfunction
+
+" Compact fold label for the marker-folded thinking output
+function! ollama#review#ChatFoldText() abort
+    let l:count = 0
+    let l:ln = v:foldstart + 1
+    while l:ln < v:foldend
+        let l:line = getline(l:ln)
+        if l:line =~# '^> '
+            let l:count += 1
+        endif
+        let l:ln = l:ln + 1
+    endwhile
+    if l:count == 0
+        return "Thinking..."
+    endif
+    return "+-- Thinking (" .. l:count .. " lines): "
 endfunction
 
 " Creates a chat window with the given prompt and copies the current selection
