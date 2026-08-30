@@ -80,6 +80,8 @@ function! s:StartChat(lines) abort
                 call ollama#logger#Debug("idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
+            " remove trailing spaces from line
+            let l:line = substitute(l:line, '\s*$', '', '')
             call appendbufline(s:buf, "$", l:line)
             if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
                 " check if in insert mode
