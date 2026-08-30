@@ -67,12 +67,13 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
     assistant_message = ""
     prefix_reasoning = "> "
     flag_first_print_message_reasoning = True
-    flag_first_print_message_content = True
+    flag_thinking_done = False
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", endpoint, headers=headers, json=data) as response:
                 if response.status_code == 200:
+                    print("Thinking...", flush=True)
                     async for line in response.aiter_lines():
                         if line:
                             message = json.loads(line)
@@ -90,26 +91,27 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                     if reasoning:
                                         if flag_first_print_message_reasoning:
                                             flag_first_print_message_reasoning = False
-                                            print("\n" + prefix_reasoning + "Thinking...\n" + prefix_reasoning, flush=True, end="")
+                                            print("\n" + prefix_reasoning, flush=True, end="")
                                         print(reasoning.replace("\n", "\n" + prefix_reasoning), flush=True, end="")
 
-                                if "content" in message["message"]:
-                                    content = message["message"]["content"]
-                                    if content:
-                                        assistant_message += content
-                                        if flag_first_print_message_content:
-                                            flag_first_print_message_content = False
-                                            print("\n" + prefix_reasoning + "...done thinking.\n \n", flush=True, end="")
-                                        print(content, end="", flush=True)
+                                content = message["message"].get("content", "")
+                                if content:
+                                    if not flag_thinking_done:
+                                        flag_thinking_done = True
+                                        print("\nDone.\n\n", flush=True, end="")
+                                    assistant_message += content
+                                    print(content, end="", flush=True)
 
-                                    # If <EOT> is detected, stop processing
-                                    if "<EOT>" in content:
-                                        break
+                                # If <EOT> is detected, stop processing
+                                if "<EOT>" in content:
+                                    break
 
                             # Stop if response contains an indication of completion
                             if message.get("done", False):
-                                print("<EOT>", flush=True)
                                 break
+                    if not flag_thinking_done:
+                        print("\nDone.", flush=True)
+                    print("<EOT>", flush=True)
                 else:
                     await response.aread()
                     raise Exception(f"Error: {response.status_code} - {response.text}")
