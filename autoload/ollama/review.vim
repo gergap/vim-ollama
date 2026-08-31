@@ -3,6 +3,8 @@
 let s:job = v:null
 let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
+let s:response_line = -1
+let s:response_started = v:false
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -11,18 +13,19 @@ endif
 func! ollama#review#KillChatBot()
     call ollama#logger#Debug("KillChatBot")
 
-    " Stop the job if it exists
+    " Interrupt the current request but keep the chat process alive.
     if exists("s:job") && type(s:job) == v:t_job
-        call ch_sendraw(s:job, "quit\n")
-        call job_stop(s:job)
-        while job_status(s:job) == 'run'
-            sleep 1
-        endwhile
-        let s:buf = -1
+        call job_stop(s:job, 'int')
     else
         call ollama#logger#Debug("No job to kill")
     endif
 endfunc
+
+function! s:StopChatBot() abort
+    if exists("s:job") && type(s:job) == v:t_job
+        call job_stop(s:job, 'term')
+    endif
+endfunction
 
 func! s:BufReallyDelete(buf)
     call ollama#logger#Debug("BufReallyDelete " .. a:buf)
@@ -34,7 +37,7 @@ func! ollama#review#BufDelete(buf)
     if a:buf == s:buf
         call ollama#logger#Debug("Deleting buffer " .. a:buf)
         " The buffer was closed by :quit or :q!
-        call ollama#review#KillChatBot()
+        call s:StopChatBot()
         " Undo 'buftype=prompt' and make buffer deletable
         if bufexists(s:buf)
             setlocal buftype=
@@ -56,6 +59,9 @@ function! s:FindBufferWindow(bufnr)
 endfunction
 
 function! s:StartChat(lines) abort
+    let s:response_line = -1
+    let s:response_started = v:false
+
     " Function handling a line of text that has been typed.
     func! TextEntered(text)
         call ollama#logger#Debug("TextEntered: " .. a:text)
@@ -65,37 +71,60 @@ function! s:StartChat(lines) abort
         endif
         " Send the text to a shell with Enter appended.
         call ch_sendraw(s:job, a:text .. "\n")
+        let s:response_line = -1
+        let s:response_started = v:false
     endfunc
 
-    " Function handling output from the shell: Add it above the prompt.
+    " Function handling output from the shell without changing the active view.
     func! GotOutput(channel, msg)
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
-        " append lines
-        let l:lines = split(a:msg, "\n", 1)
+        if !bufexists(s:buf) || !bufloaded(s:buf)
+            return
+        endif
+
+        " Decode model line breaks; actual newlines frame channel messages.
+        let l:msg = substitute(a:msg, '<OLLAMA_NL>', "\n", 'g')
+        let l:lines = split(l:msg, "\n", 1)
+        let l:first_line = v:true
         for l:line in l:lines
-            " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
             if l:idx != -1
                 call ollama#logger#Debug("idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
-            " remove trailing spaces from line
-            let l:line = substitute(l:line, '\s*$', '', '')
-            call appendbufline(s:buf, "$", l:line)
-            if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
-                " check if in insert mode
-                if mode() == 'i'
-                    " start insert mode again
-                    call feedkeys("\<Esc>")
+
+            if !s:response_started
+                if l:line !=# ''
+                    " Insert output immediately before the editable prompt line.
+                    let l:line_count = getbufinfo(s:buf)[0].linecount
+                    call appendbufline(s:buf, l:line_count - 1, l:line)
+                    let s:response_line = l:line_count
+                    let s:response_started = v:true
                 endif
-                call feedkeys("G") "jump to end
-                if l:idx != -1
-                    " start insert mode
-                    call feedkeys("a")
+            elseif !l:first_line
+                " Each subsequent channel line starts a new output line.
+                let l:line_count = getbufinfo(s:buf)[0].linecount
+                call appendbufline(s:buf, l:line_count - 1, l:line)
+                let s:response_line = l:line_count
+            elseif l:line !=# ''
+                let l:old_line = getbufline(s:buf, s:response_line)[0]
+                call setbufline(s:buf, s:response_line, l:old_line .. l:line)
+            endif
+            let l:first_line = v:false
+
+            if l:idx != -1
+                let s:response_started = v:false
+                let s:response_line = -1
+                if bufwinid(s:buf) == win_getid()
+                    startinsert
                 endif
             endif
         endfor
+    endfunc
+
+    func! Interrupt(channel) abort
+        call ollama#review#KillChatBot()
     endfunc
 
     " Function handling output from the shell: Add it above the prompt.
@@ -122,8 +151,17 @@ function! s:StartChat(lines) abort
     " Function handling the shell exits: close the window.
     func! JobExit(job, status)
         call ollama#logger#Debug("JobExit: " .. a:status)
+        if !bufexists(s:buf)
+            let s:buf = -1
+            return
+        endif
         " Switch to the chat buffer
-        execute 'buffer' s:buf
+        let l:chat_win = s:FindBufferWindow(s:buf)
+        if l:chat_win == -1
+            let s:buf = -1
+            return
+        endif
+        execute l:chat_win .. 'wincmd w'
         " Turn off prompt functionality and make the buffer modifiable
         call prompt_setprompt(s:buf, '')
         setlocal buftype=
@@ -241,11 +279,11 @@ function! s:StartChat(lines) abort
 
     " connect buffer with job
     call prompt_setcallback(buf, function("TextEntered"))
+    call prompt_setinterrupt(buf, function("Interrupt"))
     eval prompt_setprompt(buf, ">>> ")
 
     " add key mapping for CTRL-C to terminate the chat script
     execute 'nnoremap <buffer> <C-C> :call ollama#review#KillChatBot()<CR>'
-    execute 'inoremap <buffer> <C-C> <esc>:call ollama#review#KillChatBot()<CR>'
 
     " buftype=prompt change modified. so reset it to easy to :q
     augroup ollama_chat_fix_modified

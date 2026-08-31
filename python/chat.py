@@ -34,6 +34,12 @@ DEFAULT_TEMPERATURE = 0
 DEFAULT_MAX_TOKENS = 5000
 
 log = None
+OUTPUT_NEWLINE = "<OLLAMA_NL>"
+
+
+def emit_output(text):
+    """Emit one channel message while preserving model line breaks."""
+    print(text.replace("\n", OUTPUT_NEWLINE), flush=True)
 
 async def stream_chat_message_ollama(messages, endpoint, model, options, timeout, credentialname, flag_nothinking):
     """Stream chat responses from Ollama API.
@@ -93,20 +99,20 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
 
                                     if reasoning:
                                         if not flag_thinking_started:
-                                            print("#StartThinking", flush=True)
+                                            emit_output("#StartThinking")
                                             flag_thinking_started = True
                                         if flag_first_print_message_reasoning:
                                             flag_first_print_message_reasoning = False
-                                            print(prefix_reasoning, flush=True, end="")
-                                        print(reasoning.replace("\n", "\n" + prefix_reasoning), flush=True, end="")
+                                            emit_output(prefix_reasoning)
+                                        emit_output(reasoning.replace("\n", "\n" + prefix_reasoning))
 
                                 content = message["message"].get("content", "")
                                 if content:
                                     if flag_thinking_started and not flag_thinking_done:
                                         flag_thinking_done = True
-                                        print("\n#EndThinking\n\n", flush=True, end="")
+                                        emit_output("\n#EndThinking\n\n")
                                     assistant_message += content
-                                    print(content, end="", flush=True)
+                                    emit_output(content)
 
                                 # If <EOT> is detected, stop processing
                                 if "<EOT>" in content:
@@ -116,8 +122,8 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                             if message.get("done", False):
                                 break
                     if flag_thinking_started and not flag_thinking_done:
-                        print("\n#EndThinking", flush=True)
-                    print("<EOT>", flush=True)
+                        emit_output("\n#EndThinking")
+                    emit_output("<EOT>")
                 else:
                     await response.aread()
                     raise Exception(f"Error: {response.status_code} - {response.text}")
@@ -174,9 +180,9 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
                 assistant_message += token
-                print(token, end="", flush=True)
+                emit_output(token)
 
-        print("<EOT>", flush=True)
+        emit_output("<EOT>")
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -249,6 +255,8 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                     await task
                 except asyncio.CancelledError:
                     pass
+            # Keep the long-lived chat process usable after cancelling one reply.
+            emit_output("<EOT>")
 
 
 if __name__ == "__main__":
