@@ -6,6 +6,7 @@ let s:timer = 0
 let s:bufnr = -1
 let s:source_winid = -1
 let s:conversation_bufnr = -1
+let s:conversation_winid = -1
 let s:change_match = -1
 let s:firstline = 0
 let s:lastline = 0
@@ -23,14 +24,43 @@ function! s:OpenConversation(request) abort
     botright new
     setlocal buftype=nofile bufhidden=hide noswapfile
     setlocal filetype=markdown
+    setlocal wrap
     let s:conversation_bufnr = bufnr('%')
+    let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', '', 'Request: ' .. a:request, ''])
+endfunction
+
+function! s:PrepareConversation(request) abort
+    if !bufexists(s:conversation_bufnr) || !win_gotoid(s:conversation_winid)
+        call s:OpenConversation(a:request)
+        return
+    endif
+    call appendbufline(s:conversation_bufnr, '$', ['', 'Follow-up: ' .. a:request, ''])
 endfunction
 
 function! ollama#edit#AppendProgress(text) abort
     if bufexists(s:conversation_bufnr)
         call appendbufline(s:conversation_bufnr, '$', a:text)
+        if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+            call win_execute(s:conversation_winid, 'silent! normal! G')
+        endif
     endif
+endfunction
+
+function! ollama#edit#RefreshNERDTree() abort
+    if !exists('*NERDTreeRefreshRoot') && exists(':NERDTreeRefreshRoot') != 2
+        return
+    endif
+    for l:window in getwininfo()
+        if getbufvar(l:window.bufnr, '&filetype') !=# 'nerdtree'
+            continue
+        endif
+        if exists('*NERDTreeRefreshRoot')
+            call win_execute(l:window.winid, 'silent call NERDTreeRefreshRoot()')
+        else
+            call win_execute(l:window.winid, 'silent NERDTreeRefreshRoot')
+        endif
+    endfor
 endfunction
 
 function! ollama#edit#ShowFile(path) abort
@@ -39,7 +69,12 @@ function! ollama#edit#ShowFile(path) abort
     endif
     let l:path = simplify(g:ollama_edit_cwd .. '/' .. a:path)
     if filereadable(l:path)
-        execute 'edit ' .. fnameescape(l:path)
+        " The worker may have written this file since Vim last loaded it.
+        " Never discard unrelated unsaved edits in the source window.
+        if &modified && expand('%:p') !=# simplify(fnamemodify(l:path, ':p'))
+            botright new
+        endif
+        execute 'edit! ' .. fnameescape(l:path)
         normal! gg
     endif
 endfunction
@@ -68,12 +103,47 @@ function! ollama#edit#ShowChanges(ranges) abort
     endif
 endfunction
 
+function! ollama#edit#RunMake(request_id, arguments) abort
+    let l:command = 'silent make! | redraw!'
+    try
+        for l:buffer in getbufinfo({'bufloaded': 1})
+            call setbufvar(l:buffer.bufnr, '&autoread', 1)
+        endfor
+        execute l:command
+        let l:diagnostics = []
+        for l:item in getqflist()
+            call add(l:diagnostics, {
+                        \ 'filename': get(l:item, 'filename', ''),
+                        \ 'lnum': get(l:item, 'lnum', 0),
+                        \ 'col': get(l:item, 'col', 0),
+                        \ 'type': get(l:item, 'type', ''),
+                        \ 'text': get(l:item, 'text', ''),
+                        \ })
+        endfor
+        let l:result = {
+                    \ 'ok': empty(l:diagnostics),
+                    \ 'message': empty(l:diagnostics) ? 'Vim :make completed without diagnostics' : 'Vim :make returned diagnostics',
+                    \ 'output': '',
+                    \ 'diagnostics': l:diagnostics,
+                    \ }
+    catch
+        let l:result = {'ok': v:false, 'message': 'Vim :make failed: ' .. v:exception, 'output': '', 'diagnostics': []}
+    endtry
+    let l:result_json = json_encode(l:result)
+    python3 << EOF
+import json
+import vim
+CodeEditor.submit_make_result(vim.eval('a:request_id'), json.loads(vim.eval('l:result_json')))
+EOF
+endfunction
+
 function! ollama#edit#EditCodeDone(status, ...) abort
     call s:CloseProgress()
     let g:edit_in_progress = 0
 
     if a:status ==# 'Done'
         echo 'OllamaEdit completed.'
+        call timer_start(0, {-> s:PromptFollowup()})
     else
         let l:error = a:0 > 0 && !empty(a:1) ? a:1 : 'Unknown editing error'
         echohl ErrorMsg
@@ -81,6 +151,23 @@ function! ollama#edit#EditCodeDone(status, ...) abort
         echohl None
     endif
     redraw!
+endfunction
+
+function! s:PromptFollowup() abort
+    if g:edit_in_progress || s:conversation_winid == -1
+        return
+    endif
+    call win_gotoid(s:conversation_winid)
+    let l:request = input('OllamaEdit follow-up (empty to finish): ')
+    if empty(l:request)
+        call ollama#edit#AppendProgress('Session finished.')
+        return
+    endif
+    if !win_gotoid(s:source_winid) || !bufexists(s:bufnr)
+        echoerr 'OllamaEdit: source buffer is no longer available'
+        return
+    endif
+    call s:EditCodeInternal(l:request, 1, line('$'), v:true)
 endfunction
 
 function! ollama#edit#UpdateProgress(timer) abort
@@ -93,6 +180,11 @@ try:
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
         vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
+        if event.get('type') == 'make_request':
+            arguments = event.get('arguments', {}).get('arguments', '')
+            vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
+        if event.get('tool') in ('create_file', 'create_folder', 'delete_file', 'delete_folder') and event.get('path'):
+            vim.command('call ollama#edit#RefreshNERDTree()')
         if event.get('tool') == 'create_file' and event.get('path'):
             vim.command('call ollama#edit#ShowFile(' + json.dumps(event['path']) + ')')
     vim.command('let g:ollama_edit_progress_index = ' + str(len(events)))
@@ -117,7 +209,7 @@ except Exception as exception:
 EOF
 endfunction
 
-function! s:EditCodeInternal(request, start_line, end_line) abort
+function! s:EditCodeInternal(request, start_line, end_line, ...) abort
     if g:edit_in_progress
         echo 'An OllamaEdit request is already running.'
         return
@@ -126,6 +218,7 @@ function! s:EditCodeInternal(request, start_line, end_line) abort
     let s:bufnr = bufnr('%')
     let s:firstline = a:start_line
     let s:lastline = a:end_line
+    let l:continue_history = a:0 > 0 ? a:1 : v:false
     let g:ollama_edit_bufnr = s:bufnr
     let g:ollama_edit_firstline = s:firstline
     let g:ollama_edit_lastline = s:lastline
@@ -140,6 +233,7 @@ function! s:EditCodeInternal(request, start_line, end_line) abort
                 \ 'options': g:ollama_edit_options,
                 \ 'credentialname': l:is_openai ? g:ollama_openai_credentialname : g:ollama_ollama_credentialname,
                 \ 'cwd': getcwd(),
+                \ 'continue_history': l:continue_history,
                 \ }
     let l:code_json = json_encode(getline(s:firstline, s:lastline))
     let l:settings_json = json_encode(l:settings)
@@ -150,7 +244,8 @@ function! s:EditCodeInternal(request, start_line, end_line) abort
 
     let g:edit_in_progress = 1
     let g:ollama_edit_progress_index = 0
-    call s:OpenConversation(a:request)
+    let s:source_winid = win_getid()
+    call s:PrepareConversation(a:request)
 
     python3 << EOF
 import json
@@ -169,6 +264,15 @@ endfunction
 
 function! ollama#edit#EditCode(request) range abort
     call s:EditCodeInternal(a:request, a:firstline, a:lastline)
+endfunction
+
+function! ollama#edit#QuickFix() range abort
+    call s:EditCodeInternal(
+                \ 'Build the project with make, inspect all compiler errors and warnings, and fix them. '
+                \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
+                \ .. 'Use the supplied OllamaEdit tools for every change. '
+                \ .. 'At the end, provide a concise summary of the changes made and the final build status.',
+                \ a:firstline, a:lastline)
 endfunction
 
 function! ollama#edit#EditPrompt() range abort
