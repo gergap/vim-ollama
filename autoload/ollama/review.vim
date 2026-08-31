@@ -72,7 +72,7 @@ function! s:StartChat(lines) abort
         call ollama#logger#Debug("GotOutput: " .. a:msg)
 
         " append lines
-        let l:lines = split(a:msg, "\n")
+        let l:lines = split(a:msg, "\n", 1)
         for l:line in l:lines
             " when we received <EOT> start insert mode again
             let l:idx = stridx(l:line, "<EOT>")
@@ -80,6 +80,8 @@ function! s:StartChat(lines) abort
                 call ollama#logger#Debug("idx=" .. l:idx)
                 let l:line = strpart(l:line, 0, l:idx)
             endif
+            " remove trailing spaces from line
+            let l:line = substitute(l:line, '\s*$', '', '')
             call appendbufline(s:buf, "$", l:line)
             if bufname() == s:ollama_bufname " Check if current active window is Ollama Chat
                 " check if in insert mode
@@ -156,6 +158,9 @@ function! s:StartChat(lines) abort
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
+    if g:ollama_nothinking ==# v:true
+        let l:command += [ '-n' ]
+    endif
     " Check if a system prompt was configured
     if g:ollama_chat_systemprompt != ''
          " add system prompt option
@@ -249,8 +254,37 @@ function! s:StartChat(lines) abort
       autocmd! TextChangedI <buffer> setlocal nomodified
     augroup END
 
+    " Highlight the reasoning/thinking output (lines starting with '> ') in italics
+    call matchadd('OllamaThinking', '^> .*$')
+    call matchadd('OllamaThinking', '^#\(StartThinking\|EndThinking\)$')
+
+    " Fold the reasoning/thinking output, closed by default
+    " The Python script wraps the thinking block in #StartThinking/#EndThinking markers
+    setlocal foldmethod=marker
+    setlocal foldmarker=#StartThinking,#EndThinking
+    setlocal foldtext=ollama#review#ChatFoldText()
+    setlocal foldlevel=0
+    setlocal foldcolumn=1
+
     " start accepting shell commands
     startinsert
+endfunction
+
+" Compact fold label for the marker-folded thinking output
+function! ollama#review#ChatFoldText() abort
+    let l:count = 0
+    let l:ln = v:foldstart + 1
+    while l:ln < v:foldend
+        let l:line = getline(l:ln)
+        if l:line =~# '^> '
+            let l:count += 1
+        endif
+        let l:ln = l:ln + 1
+    endwhile
+    if l:count == 0
+        return "Thinking..."
+    endif
+    return "+-- Thinking (" .. l:count .. " lines): "
 endfunction
 
 " Creates a chat window with the given prompt and copies the current selection
