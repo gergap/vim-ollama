@@ -108,13 +108,25 @@ function! ollama#edit#ShowChanges(ranges) abort
     endif
 endfunction
 
-function! ollama#edit#RunMake(request_id, arguments) abort
-    let l:command = 'silent make! | redraw!'
+function! s:SubmitMakeResult(request_id, result) abort
+    let l:result_json = json_encode(a:result)
+    python3 << EOF
+import json
+import vim
+CodeEditor.submit_make_result(vim.eval('a:request_id'), json.loads(vim.eval('l:result_json')))
+EOF
+endfunction
+
+function! s:CollectMakeOutput(state, channel, message) abort
+    if !empty(a:message)
+        call add(a:state.output, a:message)
+    endif
+endfunction
+
+function! s:FinishMake(request_id, state, job, status) abort
     try
-        for l:buffer in getbufinfo({'bufloaded': 1})
-            call setbufvar(l:buffer.bufnr, '&autoread', 1)
-        endfor
-        execute l:command
+        let l:output = join(a:state.output, "\n")
+        call setqflist([], 'r', {'lines': a:state.output, 'efm': a:state.errorformat})
         let l:diagnostics = []
         for l:item in getqflist()
             call add(l:diagnostics, {
@@ -126,20 +138,46 @@ function! ollama#edit#RunMake(request_id, arguments) abort
                         \ })
         endfor
         let l:result = {
-                    \ 'ok': empty(l:diagnostics),
-                    \ 'message': empty(l:diagnostics) ? 'Vim :make completed without diagnostics' : 'Vim :make returned diagnostics',
-                    \ 'output': '',
+                    \ 'ok': empty(l:diagnostics) && a:status == 0,
+                    \ 'message': empty(l:diagnostics) && a:status == 0 ? 'Vim makeprg completed without diagnostics' : 'Vim makeprg returned diagnostics',
+                    \ 'output': l:output,
                     \ 'diagnostics': l:diagnostics,
                     \ }
     catch
-        let l:result = {'ok': v:false, 'message': 'Vim :make failed: ' .. v:exception, 'output': '', 'diagnostics': []}
+        let l:result = {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception, 'output': join(a:state.output, "\n"), 'diagnostics': []}
     endtry
-    let l:result_json = json_encode(l:result)
-    python3 << EOF
-import json
-import vim
-CodeEditor.submit_make_result(vim.eval('a:request_id'), json.loads(vim.eval('l:result_json')))
-EOF
+    call s:SubmitMakeResult(a:request_id, l:result)
+endfunction
+
+function! ollama#edit#RunMake(request_id, arguments) abort
+    try
+        for l:buffer in getbufinfo({'bufloaded': 1})
+            call setbufvar(l:buffer.bufnr, '&autoread', 1)
+        endfor
+        let l:state = {
+                    \ 'output': [],
+                    \ 'errorformat': getbufvar(s:bufnr, '&errorformat'),
+                    \ }
+        let l:options = {
+                    \ 'cwd': g:ollama_edit_cwd,
+                    \ 'out_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'exit_cb': function('s:FinishMake', [a:request_id, l:state]),
+                    \ }
+        let l:command = getbufvar(s:bufnr, '&makeprg')
+        for l:target in split(a:arguments)
+            if l:target =~# '^-' || l:target !~# '^[A-Za-z0-9_./:+-]\+$'
+                throw 'make tool accepts only make target names; shell commands and options are not allowed'
+            endif
+            let l:command .= ' ' .. shellescape(l:target)
+        endfor
+        let l:job = job_start(l:command, l:options)
+        if type(l:job) == v:t_number && l:job == -1
+            throw 'failed to start configured makeprg'
+        endif
+    catch
+        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception, 'output': '', 'diagnostics': []})
+    endtry
 endfunction
 
 function! ollama#edit#EditCodeDone(status, ...) abort

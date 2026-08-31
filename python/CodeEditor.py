@@ -210,11 +210,11 @@ MAKE_TOOLS = [
         "type": "function",
         "function": {
             "name": "make",
-            "description": "Run Vim's configured :make command without additional arguments and inspect its compiler errors and warnings. Use this after changing code and before finishing.",
+            "description": "Run Vim's configured makeprg and inspect its compiler errors and warnings. Optional arguments are whitespace-separated make target names only. Use it after changing code and before finishing.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "arguments": {"type": "string", "description": "Ignored. The configured build command is always run unchanged."},
+                    "arguments": {"type": "string", "description": "Optional whitespace-separated make target names, for example 'all', 'clean', or 'distclean'. Shell commands and options are not allowed."},
                 },
                 "required": ["arguments"],
                 "additionalProperties": False,
@@ -268,10 +268,26 @@ def submit_make_result(request_id, result):
 
 
 def _request_make(arguments):
+    if not isinstance(arguments, dict):
+        error = "make tool requires make target arguments"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
+    requested = arguments.get("arguments", "")
+    if requested in (None, ""):
+        requested = ""
+    if not isinstance(requested, str):
+        error = "make targets must be provided as a string"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
+    targets = requested.split()
+    if any(not re.fullmatch(r"[A-Za-z0-9_./:+-]+", target) or target.startswith("-") for target in targets):
+        error = "make tool accepts only make target names; shell commands and options are not allowed"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
     request_id = str(uuid.uuid4())
     with g_make_condition:
         g_make_results[request_id] = None
-    _progress("Running Vim :make", type="make_request", request_id=request_id, arguments=arguments)
+    _progress("Running configured makeprg", type="make_request", request_id=request_id, arguments={"arguments": " ".join(targets)})
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()
