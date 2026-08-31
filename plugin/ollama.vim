@@ -149,6 +149,9 @@ if !exists('g:ollama_edit_options')
                 \ 'keep_alive': 1800,
                 \ }
 endif
+if !exists('g:ollama_edit_instructions')
+    let g:ollama_edit_instructions = ''
+endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif
@@ -270,8 +273,8 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
-command! -nargs=+ -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<q-args>)
-command! -range=% OllamaQuickFix <line1>,<line2>call ollama#edit#QuickFix()
+command! -nargs=+ -range OllamaEdit call ollama#edit#EditCommand(<q-args>, <line1>, <line2>, <range>)
+command! OllamaQuickFix call ollama#edit#QuickFix()
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)

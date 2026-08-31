@@ -7,10 +7,13 @@ let s:bufnr = -1
 let s:source_winid = -1
 let s:conversation_bufnr = -1
 let s:conversation_winid = -1
-let s:change_match = -1
 let s:firstline = 0
 let s:lastline = 0
 let g:edit_in_progress = 0
+
+if empty(sign_getdefined('OllamaEditChange'))
+    call sign_define('OllamaEditChange', {'text': '>', 'texthl': 'DiffChange'})
+endif
 
 function! s:CloseProgress() abort
     if s:timer != 0
@@ -91,21 +94,35 @@ function! ollama#edit#ShowChanges(ranges) abort
     if bufnr('%') != s:bufnr
         execute 'buffer ' .. s:bufnr
     endif
-    if s:change_match != -1
-        call matchdelete(s:change_match)
-        let s:change_match = -1
-    endif
-    let l:positions = []
+    call sign_unplace('OllamaEdit', {'buffer': s:bufnr})
+    let l:seen = {}
     for l:range in a:ranges
         for l:line in range(l:range[0], l:range[1])
-            call add(l:positions, [l:line])
+            if !has_key(l:seen, l:line)
+                call sign_place(0, 'OllamaEdit', 'OllamaEditChange', s:bufnr, {'lnum': l:line, 'priority': 10})
+                let l:seen[l:line] = v:true
+            endif
         endfor
     endfor
-    if !empty(l:positions)
-        let s:change_match = matchaddpos('DiffChange', l:positions)
+    if !empty(l:seen)
         call cursor(a:ranges[0][0], 1)
         normal! zz
     endif
+endfunction
+
+function! ollama#edit#StripTrailingWhitespace(bufnr, ranges) abort
+    for l:range in a:ranges
+        for l:line_number in range(l:range[0], l:range[1])
+            let l:line = getbufline(a:bufnr, l:line_number)
+            if empty(l:line)
+                continue
+            endif
+            let l:clean = substitute(l:line[0], '\s\+$', '', '')
+            if l:clean !=# l:line[0]
+                call setbufline(a:bufnr, l:line_number, l:clean)
+            endif
+        endfor
+    endfor
 endfunction
 
 function! s:SubmitMakeResult(request_id, result) abort
@@ -180,6 +197,91 @@ function! ollama#edit#RunMake(request_id, arguments) abort
     endtry
 endfunction
 
+function! s:ExecuteDecisionFile() abort
+    return g:ollama_edit_cwd .. '/.ollama-execute.json'
+endfunction
+
+function! s:LoadExecuteDecisions() abort
+    let l:file = s:ExecuteDecisionFile()
+    if !filereadable(l:file) || getftype(l:file) ==# 'link'
+        return {}
+    endif
+    try
+        let l:decisions = json_decode(join(readfile(l:file), "\n"))
+        return type(l:decisions) == v:t_dict ? l:decisions : {}
+    catch
+        return {}
+    endtry
+endfunction
+
+function! s:SaveExecuteDecisions(decisions) abort
+    let l:file = s:ExecuteDecisionFile()
+    if getftype(l:file) ==# 'link'
+        throw 'execute decision file must not be a symbolic link'
+    endif
+    call writefile([json_encode(a:decisions)], l:file, 's')
+endfunction
+
+function! s:FinishExecute(request_id, state, job, status) abort
+    let l:output = join(a:state.output, "\n")
+    let l:result = {
+                \ 'ok': a:status == 0,
+                \ 'message': a:status == 0 ? 'execution completed successfully' : 'execution failed',
+                \ 'output': l:output,
+                \ 'exit_code': a:status,
+                \ }
+    call s:SubmitMakeResult(a:request_id, l:result)
+endfunction
+
+function! ollama#edit#RunExecute(request_id, arguments) abort
+    try
+        if type(a:arguments) != v:t_dict || type(get(a:arguments, 'path', v:null)) != v:t_string || type(get(a:arguments, 'arguments', v:null)) != v:t_list
+            throw 'execute tool requires a path and argument list'
+        endif
+        let l:relative = a:arguments.path
+        if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^/' || l:relative =~# '^[A-Za-z]:[\\/]'
+            throw 'execute path must be relative and remain below the current directory'
+        endif
+        let l:path = simplify(g:ollama_edit_cwd .. '/' .. l:relative)
+        if getftype(l:path) ==# 'link' || !filereadable(l:path) || !executable(l:path) || isdirectory(l:path)
+            throw 'execute path must be an executable regular file'
+        endif
+        for l:argument in a:arguments.arguments
+            if type(l:argument) != v:t_string || stridx(l:argument, "\x00") != -1
+                throw 'execute arguments must be a list of strings'
+            endif
+        endfor
+
+        let l:key = fnamemodify(l:path, ':.')
+        let l:decisions = s:LoadExecuteDecisions()
+        if get(l:decisions, l:key, '') !=# 'always'
+            let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
+            if l:choice == 3 || l:choice == 0
+                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'output': []})
+                return
+            endif
+            if l:choice == 2
+                let l:decisions[l:key] = 'always'
+                call s:SaveExecuteDecisions(l:decisions)
+            endif
+        endif
+
+        let l:state = {'output': []}
+        let l:options = {
+                    \ 'cwd': g:ollama_edit_cwd,
+                    \ 'out_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'exit_cb': function('s:FinishExecute', [a:request_id, l:state]),
+                    \ }
+        let l:job = job_start([l:path] + a:arguments.arguments, l:options)
+        if type(l:job) == v:t_number && l:job == -1
+            throw 'failed to start executable'
+        endif
+    catch
+        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execute failed: ' .. v:exception, 'output': []})
+    endtry
+endfunction
+
 function! ollama#edit#EditCodeDone(status, ...) abort
     call s:CloseProgress()
     let g:edit_in_progress = 0
@@ -207,7 +309,7 @@ function! ollama#edit#PromptEntered(text) abort
         echoerr 'OllamaEdit: source buffer is no longer available'
         return
     endif
-    call s:EditCodeInternal(a:text, 1, line('$'), v:true)
+    call s:EditCodeRange(a:text, 1, line('$'), v:true)
 endfunction
 
 function! ollama#edit#UpdateProgress(timer) abort
@@ -223,6 +325,8 @@ try:
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
+        if event.get('type') == 'execute_request':
+            vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('tool') in ('create_file', 'create_folder', 'delete_file', 'delete_folder') and event.get('path'):
             vim.command('call ollama#edit#RefreshNERDTree()')
         if event.get('tool') == 'create_file' and event.get('path'):
@@ -242,6 +346,7 @@ try:
                 error = 'buffer changed while OllamaEdit was running'
             else:
                 changed_ranges = CodeEditor.apply_operations(bufnr, firstline, lastline, operations)
+                vim.command('call ollama#edit#StripTrailingWhitespace(' + str(bufnr) + ', ' + json.dumps(changed_ranges) + ')')
                 vim.command('call ollama#edit#ShowChanges(' + json.dumps(changed_ranges) + ')')
         vim.command('call ollama#edit#EditCodeDone(' + json.dumps(result) + ', ' + json.dumps(error or '') + ')')
 except Exception as exception:
@@ -249,16 +354,15 @@ except Exception as exception:
 EOF
 endfunction
 
-function! s:EditCodeInternal(request, start_line, end_line, ...) abort
+function! s:StartEditSession(request, code, filetype, settings) abort
     if g:edit_in_progress
         echo 'An OllamaEdit request is already running.'
         return
     endif
 
     let s:bufnr = bufnr('%')
-    let s:firstline = a:start_line
-    let s:lastline = a:end_line
-    let l:continue_history = a:0 > 0 ? a:1 : v:false
+    let s:firstline = get(a:settings, 'start_line', 1)
+    let s:lastline = get(a:settings, 'end_line', line('$'))
     let g:ollama_edit_bufnr = s:bufnr
     let g:ollama_edit_firstline = s:firstline
     let g:ollama_edit_lastline = s:lastline
@@ -266,20 +370,21 @@ function! s:EditCodeInternal(request, start_line, end_line, ...) abort
     let g:ollama_edit_cwd = getcwd()
 
     let l:is_openai = g:ollama_edit_provider =~# '^openai'
-    let l:settings = {
+    let l:session_settings = {
                 \ 'url': l:is_openai ? g:ollama_openai_baseurl : g:ollama_host,
                 \ 'provider': g:ollama_edit_provider,
                 \ 'model': g:ollama_edit_model,
                 \ 'options': g:ollama_edit_options,
                 \ 'credentialname': l:is_openai ? g:ollama_openai_credentialname : g:ollama_ollama_credentialname,
                 \ 'cwd': getcwd(),
-                \ 'continue_history': l:continue_history,
+                \ 'continue_history': get(a:settings, 'continue_history', v:false),
+                \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                 \ }
-    let l:code_json = json_encode(getline(s:firstline, s:lastline))
-    let l:settings_json = json_encode(l:settings)
+    let l:session_settings = extend(l:session_settings, a:settings)
+    let l:code_json = json_encode(a:code)
+    let l:settings_json = json_encode(l:session_settings)
     let l:request_json = json_encode(a:request)
-    let l:filetype = &filetype
-    let l:filetype_json = json_encode(l:filetype)
+    let l:filetype_json = json_encode(a:filetype)
     let l:log_level = ollama#logger#PythonLogLevel(g:ollama_debug)
 
     let g:edit_in_progress = 1
@@ -302,22 +407,46 @@ EOF
     let s:timer = timer_start(100, {-> ollama#edit#UpdateProgress(0)}, {'repeat': -1})
 endfunction
 
-function! ollama#edit#EditCode(request) range abort
-    call s:EditCodeInternal(a:request, a:firstline, a:lastline)
+function! s:EditCodeRange(request, start_line, end_line, ...) abort
+    let l:settings = {
+                \ 'range_mode': v:true,
+                \ 'filename': fnamemodify(expand('%:p'), ':.') ,
+                \ 'start_line': a:start_line,
+                \ 'end_line': a:end_line,
+                \ 'continue_history': a:0 > 0 ? a:1 : v:false,
+                \ }
+    call s:StartEditSession(a:request, getline(a:start_line, a:end_line), &filetype, l:settings)
 endfunction
 
-function! ollama#edit#QuickFix() range abort
-    call s:EditCodeInternal(
-                \ 'Build the project with make, inspect all compiler errors and warnings, and fix them. '
+function! s:EditWorkspace(request, ...) abort
+    let l:settings = {'range_mode': v:false, 'continue_history': a:0 > 0 ? a:1 : v:false}
+    call s:StartEditSession(a:request, [], '', l:settings)
+endfunction
+
+function! ollama#edit#EditCode(request) range abort
+    call s:EditCodeRange(a:request, a:firstline, a:lastline)
+endfunction
+
+function! ollama#edit#EditCommand(request, start_line, end_line, range_count) abort
+    if a:range_count == 0
+        call s:EditWorkspace(a:request)
+    else
+        call s:EditCodeRange(a:request, a:start_line, a:end_line)
+    endif
+endfunction
+
+function! ollama#edit#QuickFix() abort
+    call s:EditWorkspace(
+                \ 'Build the project with vim-make, inspect all compiler errors and warnings, and fix them. '
                 \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
                 \ .. 'Use the supplied OllamaEdit tools for every change. '
-                \ .. 'At the end, provide a concise summary of the changes made and the final build status.',
-                \ a:firstline, a:lastline)
+                \ .. 'Never use the execute tool for compiling, use vim-make instead. '
+                \ .. 'At the end, provide a concise summary of the changes made and the final build status.')
 endfunction
 
 function! ollama#edit#EditPrompt() range abort
     let l:prompt = input('Enter prompt: ', '', 'file')
     if !empty(l:prompt)
-        call s:EditCodeInternal(l:prompt, a:firstline, a:lastline)
+        call s:EditCodeRange(l:prompt, a:firstline, a:lastline)
     endif
 endfunction

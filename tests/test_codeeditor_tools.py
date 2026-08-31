@@ -52,6 +52,111 @@ def test_insert_at_end():
     assert document == ["one", "two", "three"]
 
 
+def test_insert_lines_accepts_string_content_from_model(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "insert-1", "function": {"name": "insert_lines", "arguments": {
+            "line": 2,
+            "content": "two",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    operations, _messages = CodeEditor._run_edit("insert it", ["one"], "text", {"provider": "ollama"})
+
+    assert operations == [{"tool": "insert_lines", "arguments": {"line": 2, "content": ["two"]}}]
+
+
+def test_replace_lines_accepts_multiline_string_arguments(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "replace-1", "function": {"name": "replace_lines", "arguments": {
+            "start_line": 1,
+            "end_line": 2,
+            "expected": "old\nvalue",
+            "replacement": "new\ntext",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, _messages = CodeEditor._run_edit("replace it", ["old", "value"], "text", {"provider": "ollama"})
+
+    assert operations == [{"tool": "replace_lines", "arguments": {
+        "start_line": 1,
+        "end_line": 2,
+        "expected": ["old", "value"],
+        "replacement": ["new", "text"],
+    }}]
+
+
+def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Use the project style.")
+
+    settings = {
+        "cwd": str(tmp_path),
+        "provider": "ollama",
+        "model": "test-model",
+        "range_mode": True,
+        "filename": "src/main.c",
+        "start_line": 4,
+        "end_line": 6,
+    }
+    system = CodeEditor._system_prompt(settings)
+    prompt = CodeEditor._edit_prompt("fix it", ["old"], "c", settings)
+
+    assert "Working directory:" in system
+    assert "Use the project style." in system
+    assert "src/main.c" in prompt
+    assert "lines 4-6" in prompt
+    assert "4|old" in prompt
+    assert "tool line 1 is Vim line 4" in prompt
+    assert "Do not create, delete, or modify any files." in prompt
+
+
+def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, _messages = CodeEditor._run_edit(
+        "fix the project", [], "", {"provider": "ollama", "range_mode": False}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert operations == []
+    assert "create_file" in names
+    assert "insert_lines" not in names
+
+
+def test_workspace_prompt_does_not_include_buffer_snapshot():
+    prompt = CodeEditor._edit_prompt(
+        "fix the project", ["should not be included"], "", {"range_mode": False}
+    )
+
+    assert "should not be included" not in prompt
+    assert "filesystem" in prompt
+
+
+def test_range_edit_rejects_filesystem_tools(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "file-1", "function": {"name": "create_file", "arguments": {
+            "path": "outside.txt",
+            "content": "not allowed",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, messages = CodeEditor._run_edit("edit it", ["old"], "text", {"provider": "ollama"})
+
+    assert operations == []
+    tool_result = next(message for message in messages if message.get("role") == "tool")
+    assert "filesystem tools are not allowed" in tool_result["content"]
+
+
 def test_tool_loop_returns_validated_operations(monkeypatch):
     responses = iter(
         [
@@ -156,7 +261,7 @@ def test_inspection_tools_reject_paths_outside_workspace(tmp_path):
 
 def test_make_result_is_returned_to_model_without_becoming_buffer_operation(monkeypatch):
     responses = iter([
-        {"tool_calls": [{"id": "make-1", "function": {"name": "make", "arguments": {"arguments": ""}}}]},
+        {"tool_calls": [{"id": "make-1", "function": {"name": "vim-make", "arguments": {"arguments": ""}}}]},
         {"tool_calls": []},
     ])
     monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
@@ -179,3 +284,10 @@ def test_make_rejects_command_arguments(arguments):
 
     assert result["ok"] is False
     assert "only make target names" in result["error"]
+
+
+def test_execute_rejects_paths_outside_workspace():
+    result = CodeEditor._request_execute({"path": "../program", "arguments": []})
+
+    assert result["ok"] is False
+    assert "remain below the current directory" in result["error"]

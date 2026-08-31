@@ -209,7 +209,7 @@ MAKE_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "make",
+            "name": "vim-make",
             "description": "Run Vim's configured makeprg and inspect its compiler errors and warnings. Optional arguments are whitespace-separated make target names only. Use it after changing code and before finishing.",
             "parameters": {
                 "type": "object",
@@ -223,10 +223,33 @@ MAKE_TOOLS = [
     },
 ]
 
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS
+EXECUTE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "execute",
+            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to an executable file below the current directory."},
+                    "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
+                },
+                "required": ["path", "arguments"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
+EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
+RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -258,6 +281,11 @@ def _progress(text, **details):
         event.update(details)
         g_progress_events.append(event)
 
+def _info(text, **details):
+    with g_thread_lock:
+        event = {"text": text}
+        event.update(details)
+        g_progress_events.append(event)
 
 def submit_make_result(request_id, result):
     """Deliver a main-thread Vim :make result to the waiting worker."""
@@ -288,6 +316,35 @@ def _request_make(arguments):
     with g_make_condition:
         g_make_results[request_id] = None
     _progress("Running configured makeprg", type="make_request", request_id=request_id, arguments={"arguments": " ".join(targets)})
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            g_make_condition.wait()
+        return g_make_results.pop(request_id)
+
+
+def _request_execute(arguments):
+    if not isinstance(arguments, dict):
+        error = "execute tool requires a path and argument list"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    path = arguments.get("path")
+    requested_arguments = arguments.get("arguments")
+    if not isinstance(path, str) or not path or "\x00" in path:
+        error = "execute path must be a non-empty string"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/")):
+        error = "execute path must be relative and remain below the current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if not isinstance(requested_arguments, list) or not all(isinstance(item, str) and "\x00" not in item for item in requested_arguments):
+        error = "execute arguments must be a list of strings"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Waiting for execution confirmation", type="execute_request", request_id=request_id, arguments={"path": path, "arguments": requested_arguments})
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()
@@ -493,8 +550,10 @@ def apply_tool(document, name, arguments, cwd=None):
         expected = arguments.get("expected")
         if not all(isinstance(value, int) for value in (start, end)):
             raise ValueError(f"{name} has invalid line range")
-        if not isinstance(expected, list) or not all(isinstance(item, str) for item in expected):
-            raise ValueError(f"{name} expected must contain strings")
+        if not isinstance(expected, list):
+            raise ValueError(f"{name}: expected must be a list of strings, got {type(expected).__name__}")
+        if not all(isinstance(item, str) for item in expected):
+            raise ValueError(f"{name}: every expected item must be a string")
         if end - start + 1 != len(expected):
             raise ValueError(f"{name} expected length does not match line range")
         _check_range(document, start, end, expected)
@@ -503,26 +562,117 @@ def apply_tool(document, name, arguments, cwd=None):
             replacement = []
         else:
             replacement = arguments.get("replacement")
-            if not isinstance(replacement, list) or not all(isinstance(item, str) for item in replacement):
-                raise ValueError("replacement must contain strings")
+            if not isinstance(replacement, list):
+                raise ValueError(f"{name}: replacement must be a list of strings, got {type(replacement).__name__}")
+            if not all(isinstance(item, str) for item in replacement):
+                raise ValueError(f"{name}: every replacement item must be a string")
         document[start - 1:end] = replacement
         return {"ok": True, "message": f"{name} applied to lines {start}-{end}"}
 
     raise ValueError(f"unknown edit tool: {name}")
 
 
-def _edit_prompt(request, code, filetype):
-    numbered = "\n".join(f"{index}: {line}" for index, line in enumerate(code, 1))
+def _load_project_instructions(cwd):
+    instructions = []
+    current = os.path.realpath(cwd)
+    while True:
+        for filename in ("AGENTS.md", "CLAUDE.md"):
+            path = os.path.join(current, filename)
+            if not os.path.isfile(path) or os.path.islink(path):
+                continue
+            try:
+                if os.path.getsize(path) <= 128 * 1024:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        instructions.append((os.path.relpath(path, cwd), handle.read()))
+            except (OSError, UnicodeDecodeError):
+                continue
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return list(reversed(instructions))
+
+
+def _system_prompt(settings):
+    cwd = settings.get("cwd") or os.getcwd()
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+    model = settings.get("model") or (DEFAULT_MODEL if provider == "ollama" else DEFAULT_OPENAI_MODEL)
+    lines = [
+        "You are a precise coding agent operating inside Vim.",
+        f"Provider: {provider}; model: {model}.",
+        f"Working directory: {cwd}",
+        f"Operating system: {os.name}",
+        "Use only the supplied tools for changes and execution. Do not return rewritten files as a substitute for tool calls.",
+        "Use tools only through the provided tool-calling interface.",
+        "Never write or imitate tool-call markup in normal response text.",
+        "Do not manually emit <tool_call>, <function=...>, <parameter=...>,",
+        "JSON tool calls, or similar syntax.",
+        "When a tool is required, invoke the supplied tool directly.",
+        "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
+        "Use replace_lines tool instead of calling sed.",
+    ]
+    if settings.get("range_mode", True):
+        lines.extend([
+            "This is a range edit inside the current Vim buffer.",
+            "Modify only the specified buffer range with the buffer edit tools. Do not create, delete, or modify files.",
+            "Reading and searching other files is allowed for context.",
+        ])
+    else:
+        lines.extend([
+            "This is a workspace edit. You may read and modify project files below the working directory with the filesystem tools.",
+            "Keep all paths relative to the working directory and never use absolute paths or '..'.",
+        ])
+    configured = settings.get("instructions")
+    if configured:
+        lines.append("Configured instructions:\n" + configured)
+    for filename, content in _load_project_instructions(cwd):
+        lines.append(f"Instructions from {filename}:\n{content}")
+    return "\n\n".join(lines)
+
+
+def _edit_prompt(request, code, filetype, settings):
+    if not settings.get("range_mode", True):
+        return (
+            f"User request:\n{request}\n\n"
+            "Work across the project as needed using the filesystem and inspection tools. "
+            "Validate changes with vim-make before finishing."
+        )
+
+    start_line = settings.get("start_line", 1)
+    numbered = "\n".join(
+        f"{index}|{line}" for index, line in enumerate(code, start_line)
+    )
+
+    filename = settings.get("filename") or "[No filename]"
+    end_line = settings.get("end_line", len(code))
+
     return (
-        f"Edit this {filetype or 'text'} according to the request: {request}\n\n"
-        "The editable region is shown below with 1-based line numbers. "
-        "Use the provided tools for every change. Never return rewritten code. "
-        "Use exact expected text for delete_lines and replace_lines. "
-        "If the request asks for a project, create its folders and files with the filesystem tools. "
-        "Create project files directly below the current directory unless the request asks for a subdirectory, "
-        "and provide complete file contents. "
-        "File paths must be relative to the current directory; never use absolute paths or '..'. "
-        "Make the smallest correct set of operations, then stop.\n\n"
+        f"User request:\n{request}\n\n"
+        f"Current Vim buffer: {filename}\n"
+        f"Filetype: {filetype or 'text'}\n"
+        f"Editable range: lines {start_line}-{end_line}\n\n"
+
+        "Modify only this range in the current Vim buffer with the buffer edit tools. "
+        "Do not create, delete, or modify any files. "
+        "Reading and searching other files is allowed.\n\n"
+
+        "The buffer snapshot below uses this format:\n"
+        "<vim-line-number>|<exact-buffer-content>\n\n"
+        "The line number and '|' separator are metadata and are not part of the buffer. "
+        "Everything after '|' is the exact buffer content. "
+        "Preserve it exactly when constructing expected text, including leading whitespace, "
+        "tabs, trailing whitespace, and empty lines.\n\n"
+
+        "Buffer edit tool line numbers are relative to the editable range: "
+        f"tool line 1 is Vim line {start_line}, "
+        f"tool line 2 is Vim line {start_line + 1}, and so on. "
+        "Do not use the displayed Vim line numbers as tool line arguments.\n\n"
+
+        "For delete_lines and replace_lines, expected must match the current buffer text exactly. "
+        "Prefer the smallest possible edit and avoid including unchanged surrounding lines "
+        "unless necessary. "
+        "Validate changes with vim-make when appropriate, then stop.\n\n"
+
         f"{numbered}"
     )
 
@@ -579,21 +729,29 @@ def _run_edit(request, code, filetype, settings):
         raise ValueError(f"Tool-based editing is not supported for provider '{provider}'")
 
     previous_messages = settings.get("messages")
+    range_mode = settings.get("range_mode", True)
+    tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
     if previous_messages:
         messages = list(previous_messages)
-        messages.append({"role": "user", "content": _edit_prompt(request, code, filetype)})
+        messages.append({"role": "user", "content": _edit_prompt(request, code, filetype, settings)})
     else:
         messages = [
-            {"role": "system", "content": "You are a precise code editing agent. Modify code only through the supplied tools."},
-            {"role": "user", "content": _edit_prompt(request, code, filetype)},
+            {"role": "system", "content": _system_prompt(settings)},
+            {"role": "user", "content": _edit_prompt(request, code, filetype, settings)},
         ]
     document = list(code)
     operations = []
     _progress(f"Starting {provider} request with {settings.get('model') or DEFAULT_MODEL}")
+    _info(f"range_mode: {range_mode}")
+
+    tool_names = [tool["function"]["name"] for tool in tools]
+    _info(f"available tools: {tool_names}")
 
     for call_number in range(MAX_TOOL_CALLS):
         _progress(f"Waiting for model response ({call_number + 1}/{MAX_TOOL_CALLS})")
-        message = _ollama_request(messages, settings, TOOLS) if provider == "ollama" else _openai_request(messages, settings, TOOLS)
+        if log is not None:
+            log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
+        message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
             messages.append(message)
@@ -614,22 +772,40 @@ def _run_edit(request, code, filetype, settings):
                 raw_arguments = call.function.arguments
                 call_id = call.id
             arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
-            display_arguments = dict(arguments)
-            if isinstance(display_arguments.get("content"), str):
-                display_arguments["content"] = f"<{len(arguments['content'])} characters>"
+            original_arguments = arguments
+            if name == "insert_lines" and isinstance(arguments, dict) and isinstance(arguments.get("content"), str):
+                arguments = dict(arguments)
+                arguments["content"] = arguments["content"].splitlines()
+            if name in ("delete_lines", "replace_lines") and isinstance(arguments, dict):
+                arguments = dict(arguments)
+                for key in ("expected", "replacement"):
+                    if isinstance(arguments.get(key), str):
+                        arguments[key] = arguments[key].splitlines()
+            if log is not None:
+                log.debug(f"Tool call: {name} {json.dumps(arguments)}")
+            display_arguments = dict(arguments) if isinstance(arguments, dict) else arguments
+            if isinstance(original_arguments, dict) and isinstance(original_arguments.get("content"), str):
+                display_arguments = dict(display_arguments)
+                display_arguments["content"] = f"<{len(original_arguments['content'])} characters>"
             _progress(f"Tool call: {name} {json.dumps(display_arguments)}", tool=name, arguments=arguments)
             try:
+                if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
+                    raise ValueError("filesystem tools are not allowed during a range edit")
+                if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:
+                    raise ValueError("buffer edit tools require an editable range")
                 if name in MAKE_TOOL_NAMES:
                     result = _request_make(arguments)
+                elif name in EXECUTE_TOOL_NAMES:
+                    result = _request_execute(arguments)
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"))
-                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 _progress(result["message"], tool=name, path=arguments.get("path"))
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
-                _progress(f"Tool error: {error}", tool=name)
+                _progress(f"Tool error: {error}; request: {json.dumps(arguments)}", tool=name, arguments=arguments)
             if provider == "ollama":
                 messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
             else:
