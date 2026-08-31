@@ -22,12 +22,15 @@ endfunction
 function! s:OpenConversation(request) abort
     let s:source_winid = win_getid()
     botright new
-    setlocal buftype=nofile bufhidden=hide noswapfile
+    setlocal buftype=prompt bufhidden=hide noswapfile
     setlocal filetype=markdown
     setlocal wrap
+    setlocal modifiable
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', '', 'Request: ' .. a:request, ''])
+    call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
+    call prompt_setprompt(s:conversation_bufnr, '>>> ')
 endfunction
 
 function! s:PrepareConversation(request) abort
@@ -35,12 +38,14 @@ function! s:PrepareConversation(request) abort
         call s:OpenConversation(a:request)
         return
     endif
-    call appendbufline(s:conversation_bufnr, '$', ['', 'Follow-up: ' .. a:request, ''])
+    let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+    call appendbufline(s:conversation_bufnr, l:line_count - 1, ['', 'Follow-up: ' .. a:request, ''])
 endfunction
 
 function! ollama#edit#AppendProgress(text) abort
     if bufexists(s:conversation_bufnr)
-        call appendbufline(s:conversation_bufnr, '$', a:text)
+        let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+        call appendbufline(s:conversation_bufnr, l:line_count - 1, split(a:text, "\n", v:true))
         if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
             call win_execute(s:conversation_winid, 'silent! normal! G')
         endif
@@ -143,7 +148,6 @@ function! ollama#edit#EditCodeDone(status, ...) abort
 
     if a:status ==# 'Done'
         echo 'OllamaEdit completed.'
-        call timer_start(0, {-> s:PromptFollowup()})
     else
         let l:error = a:0 > 0 && !empty(a:1) ? a:1 : 'Unknown editing error'
         echohl ErrorMsg
@@ -153,21 +157,19 @@ function! ollama#edit#EditCodeDone(status, ...) abort
     redraw!
 endfunction
 
-function! s:PromptFollowup() abort
-    if g:edit_in_progress || s:conversation_winid == -1
+function! ollama#edit#PromptEntered(text) abort
+    if empty(a:text)
         return
     endif
-    call win_gotoid(s:conversation_winid)
-    let l:request = input('OllamaEdit follow-up (empty to finish): ')
-    if empty(l:request)
-        call ollama#edit#AppendProgress('Session finished.')
+    if g:edit_in_progress
+        call ollama#edit#AppendProgress('An OllamaEdit request is already running.')
         return
     endif
     if !win_gotoid(s:source_winid) || !bufexists(s:bufnr)
         echoerr 'OllamaEdit: source buffer is no longer available'
         return
     endif
-    call s:EditCodeInternal(l:request, 1, line('$'), v:true)
+    call s:EditCodeInternal(a:text, 1, line('$'), v:true)
 endfunction
 
 function! ollama#edit#UpdateProgress(timer) abort
