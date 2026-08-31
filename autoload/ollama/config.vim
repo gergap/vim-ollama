@@ -34,7 +34,6 @@ let s:help_text = {
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
 \ 'ollama_nothinking': 'Disable thinking output of reasoning models (default=v:false)',
-\ 'ollama_use_inline_diff': 'Use inline diff for edits (default=1).',
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
 \ 'ollama_logfile': 'Logfile path for debugging.',
 \ 'ollama_review_logfile': 'Review-specific logfile path.',
@@ -217,4 +216,3 @@ function! ollama#config#ShowHelp() abort
 endfunction
 
 " vim: filetype=vim
-

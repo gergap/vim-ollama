@@ -319,8 +319,6 @@ function! s:FinalizeSetupTask()
                 \ "",
                 \ "\" edit model",
                 \ "let g:ollama_edit_model = '" .. g:ollama_edit_model .. "'",
-                \ "\" when disabled, LLM changs are applied directly. Useful when tracking changes via Git.",
-                \ "\"let g:ollama_use_inline_diff = 0",
                 \ "",
                 \ "\" debug settings",
                 \ "\"let g:ollama_debug = 4",
@@ -417,7 +415,6 @@ if plugin_python_path not in sys.path:
 try:
     # Import your CodeEditor module
     import CodeEditor
-    import VimHelper
 except ImportError as e:
     print(f'Error importing CodeEditor module:\n{e}')
 EOF

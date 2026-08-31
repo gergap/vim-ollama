@@ -149,9 +149,6 @@ if !exists('g:ollama_edit_options')
                 \ 'keep_alive': 1800,
                 \ }
 endif
-if !exists('g:ollama_use_inline_diff')
-    let g:ollama_use_inline_diff = 1
-endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif
@@ -214,10 +211,6 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         :call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
-    nnoremap <Plug>(ollama-accept-changes) <Cmd>call ollama#edit#AcceptCurrent()<CR>
-    nnoremap <Plug>(ollama-reject-changes) <Cmd>call ollama#edit#RejectCurrent()<CR>
-    nnoremap <Plug>(ollama-accept-all-changes) <Cmd>call ollama#edit#AcceptAll()<CR>
-    nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
     nnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
 
@@ -277,21 +270,10 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
-command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
+command! -nargs=+ -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<q-args>)
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
-
-" Define new signs for diffs
-sign define NewLine text=+ texthl=DiffAdd
-sign define ChangedLine text=~ texthl=DiffChange
-sign define DeletedLine text=- texthl=DiffDelete
-" Define inline diff property types
-highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
-" Italic rendering for the reasoning/thinking output in the chat buffer
-call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
-call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
-call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
 
 " expand does funky stuff inside of a function need to set it here
 let s:ollama_plugin_dir=expand('<sfile>:p:h:h')

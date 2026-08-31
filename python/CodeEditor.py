@@ -1,801 +1,491 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+"""Tool-driven code editing for vim-ollama.
+
+The worker operates exclusively on a Python snapshot.  Vim is touched only by
+the polling callback in the main thread after all requested operations have
+been validated.
+"""
+
 import json
+import ntpath
 import os
-import requests
+import shutil
 import threading
-from difflib import ndiff
-from ChatTemplate import ChatTemplate
-from OllamaLogger import OllamaLogger
+
+import requests
+
 from OllamaCredentials import OllamaCredentials
+from OllamaLogger import OllamaLogger
 
-# create logger
-log = None
-
-# Try to import OpenAI SDK
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
 
-# Default values
-DEFAULT_HOST = 'http://localhost:11434'
-DEFAULT_PROVIDER = "ollama"
-DEFAULT_MODEL = 'qwen2.5-coder:14b'
-DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
-# default options if missing
-DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
-# default parameters if options is given, but missing these entries
-DEFAULT_TEMPERATURE = 0
-DEFAULT_MAX_TOKENS = 5000
-CONTEXT_LINES = 10
 
-# Shared variable to indicate whether the editing thread is active
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_HOST = "http://localhost:11434"
+DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+DEFAULT_OPTIONS = {"temperature": 0, "top_p": 0.95, "num_predict": 4096}
+MAX_TOOL_CALLS = 64
+
+BUFFER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "insert_lines",
+            "description": "Insert one or more lines before a 1-based line number. Use line number length+1 to append.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "line": {"type": "integer", "minimum": 1},
+                    "content": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["line", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_lines",
+            "description": "Delete an exact inclusive range of lines. The expected text must match exactly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["start_line", "end_line", "expected"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_lines",
+            "description": "Replace an exact inclusive range of lines with new content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                    "replacement": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["start_line", "end_line", "expected", "replacement"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+FILE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "create_file",
+            "description": "Create a new UTF-8 text file below the current directory. The relative path must not already exist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_folder",
+            "description": "Create a new folder below the current directory. The relative path must not already exist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_file",
+            "description": "Delete an existing file below the current directory. Never use this for folders.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_folder",
+            "description": "Delete an existing folder below the current directory. Set recursive only when all contents should be removed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                    "recursive": {"type": "boolean"},
+                },
+                "required": ["path", "recursive"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+TOOLS = BUFFER_TOOLS + FILE_TOOLS
+FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
+
+log = None
 g_thread_lock = threading.Lock()
 g_editing_thread = None
-# We bring the worker thread results into the main thread using these variables
 g_result = None
-g_errormsg = ''
-g_start_line = 0 # start line of edit
-g_end_line = 0 # end line of edit
-g_restored_lines = 0 # number of restored lines (undone deletes)
-g_new_code_lines = []
-g_diff = []
-g_groups = []
-g_original_content = []
-g_debug_mode = False  # You can turn this on/off as needed
-g_change_index = -1
-g_dialog_callback = None
+g_operations = []
+g_errormsg = ""
+g_progress_events = []
+
 
 def CreateLogger():
     global log
-    log = OllamaLogger('/tmp/logs', 'edit.log')
+    log = OllamaLogger("/tmp/logs", "edit.log")
     log.setLevel(0)
 
+
 def SetLogLevel(level):
-    if log == None:
+    if log is None:
         CreateLogger()
     log.setLevel(level)
 
-# Debug prints for development. This output is shown as Vim message.
-def debug_print(*args):
-    global g_debug_mode
-    if g_debug_mode:
-        print(' '.join(map(str, args)))
 
-def compute_diff(old_lines, new_lines):
-    """
-    Compute differences between old and new lines.
+def _progress(text, **details):
+    with g_thread_lock:
+        event = {"text": text}
+        event.update(details)
+        g_progress_events.append(event)
 
-    Args:
-        old_lines (list): The original code as a list of strings.
-        new_lines (list): The modified code as a list of strings.
 
-    Returns:
-        list: A list of dictionaries describing the changes.
-    """
-    diff = list(ndiff(old_lines, new_lines))
-    return diff
+def _check_range(document, start_line, end_line, expected):
+    if start_line < 1 or end_line < start_line or end_line > len(document):
+        raise ValueError("line range is outside the editable snapshot")
+    actual = document[start_line - 1:end_line]
+    if actual != expected:
+        raise ValueError("expected text does not match the editable snapshot")
 
-def group_diff(diff, starting_line=1):
-    """
-    Group consecutive changes into chunks, excluding unchanged lines.
 
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        starting_line (int): Line number offset for the original code.
+def _safe_path(cwd, value):
+    """Resolve a workspace-relative path without allowing traversal or links out."""
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError("path must be a non-empty string")
+    if os.path.isabs(value) or ntpath.isabs(value):
+        raise ValueError("absolute paths are not allowed")
+    if any(part == ".." for part in value.replace("\\", "/").split("/")):
+        raise ValueError("parent-directory components are not allowed")
 
-    Returns:
-        list: A list of dictionaries, where each dictionary contains:
-              - 'start_line': The starting line number of the group.
-              - 'end_line': The ending line number of the group.
-              - 'changes': A list of strings representing the changes in the group.
-    """
-    grouped_diff = []
-    current_group = []
-    current_start_line = None
-    line_number = starting_line
+    root = os.path.realpath(cwd)
+    candidate = os.path.realpath(os.path.join(root, value))
+    try:
+        inside = os.path.commonpath([root, candidate]) == root
+    except ValueError:
+        inside = False
+    if not inside or candidate == root:
+        raise ValueError("path must stay below the current directory")
+    return candidate
 
-    for line in diff:
-        if line.startswith('- ') or line.startswith('+ '):
-            # Start a new group if this is the first change in a group
-            if not current_group:
-                current_start_line = line_number
-            current_group.append(line)
-        elif line.startswith('  '):
-            # Unchanged line stops the current group
-            if current_group:
-                grouped_diff.append({
-                    'start_line': current_start_line,
-                    'end_line': line_number,
-                    'changes': current_group
-                })
-                current_group = []
-        elif line.startswith('? '):
-            # Context-only marker, skip it
-            continue
 
-        # Increment line number for each line processed
-        if not line.startswith('? ') and not line.startswith('- '):
-            line_number += 1
-
-    # Add the remaining group if it has any lines
-    if current_group:
-        grouped_diff.append({
-            'start_line': current_start_line,
-            'end_line': line_number - 1,
-            'changes': current_group
-        })
-
-    return grouped_diff
-
-def apply_diff(diff, buf, line_offset=0):
-    """
-    Apply differences directly to a Vim buffer as inline diff.
-
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        buf: The Vim buffer to apply changes to.
-        line_offset (int): Line offset for the current buffer.
-    """
-    debug_print("\n".join(diff))
-    deleted_lines = []  # Collect deleted lines for multi-line display
-
-    for line in diff:
-
-        if line.startswith('+ '):
-            debug_print(f"add line: '{line}'")
-            # Added line
-            lineno = line_offset
-            content = line[2:].rstrip()
-            VimHelper.InsertLine(lineno, content, buf)
-            VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
-            if deleted_lines:
-                # Show the collected deleted lines above the current added line
-                for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', deleted_line, buf)
-                deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'ChangedLine', buf)
-            else:
-                VimHelper.PlaceSign(lineno, 'NewLine', buf)
-
-            line_offset += 1
-
-        elif line.startswith('- '):
-            debug_print("delete line")
-            # Deleted line
-            lineno = line_offset
-            old_content = VimHelper.DeleteLine(lineno, buf)
-            if old_content != line[2:]:
-                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
-            deleted_lines.append(old_content)  # Collect the deleted line content
-
-        elif line.startswith('? '):
-            debug_print("info line")
-            # This line is a marker for the previous change (not handled)
-            continue
-
-        elif line.startswith('  '):
-            debug_print("unchanged line")
-            # Unchanged line
-            if deleted_lines:
-                # Show the collected deleted lines above the current unchanged line
-                for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
-                deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
-
-            lineno = line_offset
-            old_content = VimHelper.GetLine(lineno, buf)
-            debug_print(f"line {lineno}: '{old_content}'")
-            debug_print(f"diffline {lineno}: '{line}'")
-            content = line[2:]
-            if content != old_content:
-                debug_print(f"existing line: '{old_content}'")
-                debug_print(f"expected line: '{content}'")
-                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
-            line_offset += 1
-        else:
-            debug_print(f"other: '{line}'")
-            line_offset += 1
-
-    # Handle any remaining deleted lines at the end
-    if deleted_lines:
-        for i, deleted_line in enumerate(deleted_lines):
-            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
-
-def apply_change(diff, buf, line_offset=0):
-    """
-    Apply differences directly to a Vim buffer without inline diff.
-
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        buf: The Vim buffer to apply changes to.
-        line_offset (int): Line offset for the current buffer.
-    """
-    debug_print("\n".join(diff))
-
-    for line in diff:
-
-        if line.startswith('+ '):
-            debug_print(f"add line: '{line}'")
-            # Added line
-            lineno = line_offset
-            content = line[2:].rstrip()
-            VimHelper.InsertLine(lineno, content, buf)
-
-            line_offset += 1
-
-        elif line.startswith('- '):
-            debug_print("delete line")
-            # Deleted line
-            lineno = line_offset
-            old_content = VimHelper.DeleteLine(lineno, buf)
-            if old_content != line[2:]:
-                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
-
-        elif line.startswith('? '):
-            debug_print("info line")
-            # This line is a marker for the previous change (not handled)
-            continue
-
-        elif line.startswith('  '):
-            debug_print("unchanged line")
-
-            lineno = line_offset
-            old_content = VimHelper.GetLine(lineno, buf)
-            debug_print(f"line {lineno}: '{old_content}'")
-            debug_print(f"diffline {lineno}: '{line}'")
-            content = line[2:]
-            if content != old_content:
-                debug_print(f"existing line: '{old_content}'")
-                debug_print(f"expected line: '{content}'")
-                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
-            line_offset += 1
-        else:
-            debug_print(f"other: '{line}'")
-            line_offset += 1
-
-def accept_changes(buffer):
-    """
-    Apply accepted changes to the Vim buffer.
-
-    Args:
-        buffer (list): The original Vim buffer as a list.
-        diff (list): The computed diff (ndiff output).
-        start (int): The starting line number.
-    """
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
-
-    bufno = buffer.number
-    # remove properties from all lines
-    vim.command(f"call prop_clear(1, line('$'))")
-    debug_print("Changes accepted: All annotations and signs removed.")
-
-def reject_changes(buffer, original_lines, start):
-    """
-    Revert to the original lines.
-
-    Args:
-        buffer (list): The Vim buffer as a list.
-        original_lines (list): The original lines to restore.
-        start (int): The starting line number.
-    """
-#    line_offset = start - 1  # Adjust to 0-based index
-#    debug_print(f"Reverting changes starting from line {start}")
-#
-#    # Compute the range to replace in the buffer
-#    num_lines_to_replace = len(original_lines)
-#    buffer[line_offset:line_offset + num_lines_to_replace] = original_lines
-
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
-
-    # simply undo last change
-    vim.command(f"undo")
-    debug_print("Changes rejected. Original content restored.")
-
-def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
-    """
-    Creates a prompt for the LLM based on the given parameters.
-
-    Args:
-        request (str): The request to be satisfied by the translation.
-        preamble (str): The preamble to be included in the code block.
-        code (str): The code block to be changed.
-        postamble (str): The postamble to be included in the code block.
-        ft (str): The file type of the code block.
-
-    Returns:
-        str: The prompt for the code editing task.
-    """
-
-    # Get the directory where the Python script resides
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the full path to the config file relative to the script directory
-    template_path = os.path.join(script_dir, "chat_templates", template_name)
-    chat_template = ChatTemplate(template_path)
-    chat = [
-            { "role": "system", "content": "You are a Vim code assistant plugin." },
-            { "role": "user", "content":
-f"""```{ft}
-{preamble}
-<START_EDIT_HERE>{code}
-<STOP_EDIT_HERE>
-{postamble}
-```
-Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified raw text. Don't surrend it with markdown backticks.
-"""}
-    ]
-
-    prompt = chat_template.render(messages=chat, add_generation_prompt=True)
-    # Start the answer of the assistant to set it on the right path...
-    prompt += f"""Sure! Here's the rewritten code block:
-```{ft}
-{preamble}
-<START_EDIT_HERE>"""
-    debug_print(prompt)
-    return prompt
-
-def generate_code_completion(prompt, baseurl, model, options):
-    """
-    Calls the Ollama REST API with the given prompt.
-
-    Args:
-        prompt (str): The prompt for Ollama model.
-        baseurl (str): The base URL of the Ollama server.
-        model (str): The name of the model to use.
-        options (dict): Additional options for the API call.
-
-    Returns:
-        str: The completion from the OpenAI API.
-    """
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Host': baseurl.split('//')[1].split('/')[0]
-    }
-    endpoint = baseurl + "/api/generate"
-    log.debug('endpoint: ' + endpoint)
-
-    if model is None:
-        model = DEFAULT_MODEL
-    if options is None:
-        options = json.loads(DEFAULT_OPTIONS)
-
-    log.debug('model: ' + str(model))
-    data = {
-        'model': model,
-        'prompt': prompt,
-        'stream': False,
-        'raw' : True,
-        'options': options
-    }
-    log.debug('request: ' + json.dumps(data, indent=4))
-
-    response = requests.post(endpoint, headers=headers, json=data)
-
-    if response.status_code == 200:
-        json_response = response.json()
-        log.debug('response: ' + json.dumps(json_response, indent=4))
-        completion = response.json().get('response')
-        if completion is None:
-            error = response.json().get('error', 'no response')
-            raise Exception(f"Error: {error}")
-
-        log.debug(completion)
-        # find index of sub string
-        index = completion.find('<|endoftext|>')
-        if index == -1:
-            index = completion.find('<EOT>')
-        if index != -1:
-            completion = completion[:index]
-
-        return completion.rstrip()
+def apply_filesystem_tool(cwd, name, arguments):
+    """Apply one explicitly requested filesystem operation inside cwd."""
+    path = _safe_path(cwd, arguments.get("path"))
+    if os.path.lexists(path):
+        if os.path.islink(path):
+            raise ValueError("symbolic links are not allowed")
+        exists = True
     else:
-        raise Exception(f"Error: {response.status_code} - {response.text}")
+        exists = False
 
-def generate_code_completion_openai(prompt, baseurl='', model='', options=None, credentialname=None):
-    """
-    Calls OpenAI API with the given prompt.
-    Returns the raw completion text.
-    """
-    if OpenAI is None:
-        raise ImportError("OpenAI package not found. Install via `pip install openai`.")
+    if name == "create_file":
+        content = arguments.get("content")
+        if not isinstance(content, str):
+            raise ValueError("file content must be a string")
+        if exists:
+            raise FileExistsError(f"path already exists: {arguments['path']}")
+        parent = os.path.dirname(path)
+        if not os.path.isdir(parent) or os.path.islink(parent):
+            raise ValueError("file parent folder does not exist or is a symbolic link")
+        with open(path, "x", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+        return {"ok": True, "message": f"created file {arguments['path']}"}
 
-    if model is None:
-        model = DEFAULT_OPENAI_MODEL
+    if name == "create_folder":
+        if exists:
+            raise FileExistsError(f"path already exists: {arguments['path']}")
+        parent = os.path.dirname(path)
+        if not os.path.isdir(parent) or os.path.islink(parent):
+            raise ValueError("parent folder does not exist or is a symbolic link")
+        os.mkdir(path)
+        return {"ok": True, "message": f"created folder {arguments['path']}"}
 
-    log.debug('Using OpenAI completion endpoint')
-    cred = OllamaCredentials()
-    api_key = cred.GetApiKey('openai', credentialname)
+    if name == "delete_file":
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        os.remove(path)
+        return {"ok": True, "message": f"deleted file {arguments['path']}"}
 
-    if baseurl:
-        log.info('Using OpenAI endpoint '+baseurl)
-        client = OpenAI(base_url=baseurl, api_key=api_key)
-    else:
-        log.info('Using official OpenAI endpoint')
-        client = OpenAI(api_key=api_key)
+    if name == "delete_folder":
+        recursive = arguments.get("recursive")
+        if not isinstance(recursive, bool):
+            raise ValueError("recursive must be boolean")
+        if not exists or not os.path.isdir(path):
+            raise FileNotFoundError(f"folder does not exist: {arguments['path']}")
+        if recursive:
+            shutil.rmtree(path)
+        else:
+            os.rmdir(path)
+        return {"ok": True, "message": f"deleted folder {arguments['path']}"}
 
-    # Extract options
-    if options is None:
-        options = json.loads(DEFAULT_OPTIONS)
+    raise ValueError(f"unknown filesystem tool: {name}")
 
-    temperature = options.get("temperature", DEFAULT_TEMPERATURE)
-    max_tokens = options.get("max_tokens", DEFAULT_MAX_TOKENS)
 
-    log.debug('model: ' + str(model))
-    log.debug('temperature: ' + str(temperature))
-    log.debug('max_tokens: ' + str(max_tokens))
-    response = client.chat.completions.create(
-        model=model or DEFAULT_OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
+def apply_tool(document, name, arguments, cwd=None):
+    """Validate and apply one tool call to a document snapshot."""
+    if name in FILE_TOOL_NAMES:
+        if cwd is None:
+            raise ValueError("filesystem tools require a current directory")
+        return apply_filesystem_tool(cwd, name, arguments)
+
+    if name == "insert_lines":
+        line = arguments.get("line")
+        content = arguments.get("content")
+        if not isinstance(line, int) or not isinstance(content, list):
+            raise ValueError("insert_lines has invalid arguments")
+        if line < 1 or line > len(document) + 1:
+            raise ValueError("insert line is outside the editable snapshot")
+        if not all(isinstance(item, str) for item in content):
+            raise ValueError("insert content must contain strings")
+        document[line - 1:line - 1] = content
+        return {"ok": True, "message": f"inserted {len(content)} line(s) at {line}"}
+
+    if name in ("delete_lines", "replace_lines"):
+        start = arguments.get("start_line")
+        end = arguments.get("end_line")
+        expected = arguments.get("expected")
+        if not all(isinstance(value, int) for value in (start, end)):
+            raise ValueError(f"{name} has invalid line range")
+        if not isinstance(expected, list) or not all(isinstance(item, str) for item in expected):
+            raise ValueError(f"{name} expected must contain strings")
+        if end - start + 1 != len(expected):
+            raise ValueError(f"{name} expected length does not match line range")
+        _check_range(document, start, end, expected)
+
+        if name == "delete_lines":
+            replacement = []
+        else:
+            replacement = arguments.get("replacement")
+            if not isinstance(replacement, list) or not all(isinstance(item, str) for item in replacement):
+                raise ValueError("replacement must contain strings")
+        document[start - 1:end] = replacement
+        return {"ok": True, "message": f"{name} applied to lines {start}-{end}"}
+
+    raise ValueError(f"unknown edit tool: {name}")
+
+
+def _edit_prompt(request, code, filetype):
+    numbered = "\n".join(f"{index}: {line}" for index, line in enumerate(code, 1))
+    return (
+        f"Edit this {filetype or 'text'} according to the request: {request}\n\n"
+        "The editable region is shown below with 1-based line numbers. "
+        "Use the provided tools for every change. Never return rewritten code. "
+        "Use exact expected text for delete_lines and replace_lines. "
+        "If the request asks for a project, create its folders and files with the filesystem tools. "
+        "Put project files in a new child folder when appropriate, and provide complete file contents. "
+        "File paths must be relative to the current directory; never use absolute paths or '..'. "
+        "Make the smallest correct set of operations, then stop.\n\n"
+        f"{numbered}"
     )
 
-    # OpenAI returns a list of choices
-    completion = response.choices[0].message.content
-    log.debug(completion)
-    # convert response to lines
-    lines = completion.splitlines()
-    if lines:
-        # remove 1st element from array if it starts with ```
-        if lines[0].startswith("```"):
-            lines.pop(0)
-        # remove last element from array if it starts with ```
-        if lines[-1].startswith("```"):
-            lines.pop()
 
-        completion = "\n".join(lines)
-    completion = completion.strip()
-    log.debug(completion)
-
-    # Strip any end markers
-    for end_marker in ["<|endoftext|>", "<STOP_EDIT_HERE>", "<EOT>"]:
-        idx = completion.find(end_marker)
-        if idx != -1:
-            completion = completion[:idx]
-
-    return completion.rstrip()
-
-def edit_code(request, preamble, code, postamble, ft, settings, credentialname):
-    """
-    Edit code with Ollama or OpenAI LLM.
-
-    Args:
-        request (str): The request to be satisfied by the translation.
-        preamble (str): The preamble to be included in the code block.
-        code (str): The code block to be changed.
-        postamble (str): The postamble to be included in the code block.
-        ft (str): The file type of the code block.
-
-    Returns:
-        Array of lines containing the changed code.
-    """
-
-    provider = settings.get("provider", DEFAULT_PROVIDER)
-
-    if settings.get('simulate', 0):
-        response = settings['response']
-    else:
-        # TODO: choose correct template based on selected model
-        prompt = create_prompt('chatml.jinja', request, preamble, code, postamble, ft)
-        url = settings.get('url', None)
-        model = settings.get('model', None)
-        options = settings.get('options', None)
+def _ollama_request(messages, settings, tools):
+    baseurl = settings.get("url") or DEFAULT_HOST
+    endpoint = baseurl.rstrip("/") + "/api/chat"
+    model = settings.get("model") or DEFAULT_MODEL
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
         options = json.loads(options)
-        if provider == "openai":
-            response = generate_code_completion_openai(prompt, url, model, options, credentialname)
+    headers = {"Content-Type": "application/json"}
+    credentialname = settings.get("credentialname")
+    api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+    response = requests.post(
+        endpoint,
+        headers=headers,
+        json={"model": model, "messages": messages, "tools": tools, "stream": False, "options": options},
+        timeout=settings.get("timeout", 300),
+    )
+    response.raise_for_status()
+    return response.json().get("message", {})
+
+
+def _openai_request(messages, settings, tools):
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Install it with pip install openai.")
+    credentialname = settings.get("credentialname")
+    api_key = OllamaCredentials().GetApiKey("openai", credentialname)
+    client_options = {"api_key": api_key}
+    if settings.get("url"):
+        client_options["base_url"] = settings["url"]
+    client = OpenAI(**client_options)
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
+        options = json.loads(options)
+    request = {
+        "model": settings.get("model") or DEFAULT_OPENAI_MODEL,
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "auto",
+        "temperature": options.get("temperature", 0),
+        "max_tokens": options.get("max_tokens", 5000),
+    }
+    message = client.chat.completions.create(**request).choices[0].message
+    return message
+
+
+def _run_edit(request, code, filetype, settings):
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+    if provider != "ollama" and not provider.startswith("openai"):
+        raise ValueError(f"Tool-based editing is not supported for provider '{provider}'")
+
+    messages = [
+        {"role": "system", "content": "You are a precise code editing agent. Modify code only through the supplied tools."},
+        {"role": "user", "content": _edit_prompt(request, code, filetype)},
+    ]
+    document = list(code)
+    operations = []
+    _progress(f"Starting {provider} request with {settings.get('model') or DEFAULT_MODEL}")
+
+    for call_number in range(MAX_TOOL_CALLS):
+        _progress(f"Waiting for model response ({call_number + 1}/{MAX_TOOL_CALLS})")
+        message = _ollama_request(messages, settings, TOOLS) if provider == "ollama" else _openai_request(messages, settings, TOOLS)
+        tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
+        if not tool_calls:
+            content = message.get("content", "") if isinstance(message, dict) else (message.content or "")
+            _progress("Model finished" if not content else f"Model: {content.strip()[:240]}")
+            return operations
+
+        if isinstance(message, dict):
+            messages.append(message)
         else:
-            response = generate_code_completion(prompt, url, model, options)
+            messages.append(message.model_dump(exclude_none=True))
 
-    # check if we got a valid response
-    if response is None or len(response) == 0:
-        return []
+        for call in tool_calls:
+            if isinstance(call, dict):
+                name = call.get("function", {}).get("name")
+                raw_arguments = call.get("function", {}).get("arguments", "{}")
+                call_id = call.get("id", "")
+            else:
+                name = call.function.name
+                raw_arguments = call.function.arguments
+                call_id = call.id
+            arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+            display_arguments = dict(arguments)
+            if isinstance(display_arguments.get("content"), str):
+                display_arguments["content"] = f"<{len(arguments['content'])} characters>"
+            _progress(f"Tool call: {name} {json.dumps(display_arguments)}", tool=name, arguments=arguments)
+            try:
+                result = apply_tool(document, name, arguments, settings.get("cwd"))
+                operation = {"tool": name, "arguments": arguments}
+                operations.append(operation)
+                _progress(result["message"], tool=name, path=arguments.get("path"))
+            except Exception as error:
+                result = {"ok": False, "error": str(error)}
+                _progress(f"Tool error: {error}", tool=name)
+            if provider == "ollama":
+                messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
+            else:
+                messages.append({"role": "tool", "tool_call_id": call_id, "content": json.dumps(result)})
+    raise ValueError(f"model exceeded the {MAX_TOOL_CALLS}-operation limit")
 
-    # split repsonse into lines
-    lines = response.split('\n')
-    # search for our end marker, the LLM often produces more then we need
-    num_lines=0
-    last_line=None
-    for line in lines:
-        # find end tag in line
-        pos = line.find('<STOP_EDIT_HERE>')
-        if (pos == 0):
-            break;
-        elif (pos > 0):
-            last_line = line[:pos]
-            break;
-        num_lines += 1
-    # remove remainder
-    lines = lines[:num_lines]
-    if last_line:
-        lines.append(last_line)
-    return lines
 
-def vim_edit_code(request, firstline, lastline, settings, credentialname):
-    """
-    Vim function to edit a selected range of code.
-
-    Args:
-        request (str): The request to be satisfied by the translation.
-        firstline: first line to change
-        lastline: last line to change
-        settings: Ollama settings
-
-    This function extracts the selected range, adds context lines, calls edit_code, and replaces the selection with the result.
-    """
-    global g_result
-    global g_errormsg
-    global g_original_content
-    global g_new_code_lines
-    global g_diff
-    new_code_lines = ''
-    diff = ''
-    result = ''
-    errormsg = ''
+def _worker(request, code, filetype, settings):
+    global g_result, g_operations, g_errormsg
     try:
-        buffer = vim.current.buffer
-        filetype = vim.eval('&filetype')
-        (start, end) = int(firstline) - 1, int(lastline) - 1
+        operations = _run_edit(request, code, filetype, settings)
+        _progress(f"Validated {len(operations)} operation(s)")
+        with g_thread_lock:
+            g_operations = operations
+            g_result = "Done"
+    except Exception as error:
+        log.error(f"Error in tool-based edit: {error}")
+        _progress(f"Error: {error}")
+        with g_thread_lock:
+            g_operations = []
+            g_errormsg = str(error)
+            g_result = "Error"
 
-        # Add context lines
-        preamble_start = max(0, start - CONTEXT_LINES)
-        postamble_end = min(len(buffer), end + CONTEXT_LINES + 1)
 
-        # Note in python vim lines are zero based
-        preamble_lines  = buffer[preamble_start:start]
-        code_lines      = buffer[start:end + 1]
-        postamble_lines = buffer[end + 1:postamble_end]
-
-        # Join arrays to strings
-        preamble  = "\n".join(preamble_lines)
-        code      = "\n".join(code_lines)
-        postamble = "\n".join(postamble_lines)
-
-        log.debug('preamble: ' + preamble)
-        log.debug('code: ' + code)
-        log.debug('postamble: ' + postamble)
-
-        # Edit the code
-        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings, credentialname)
-
-        # Produce diff
-        diff = compute_diff(code_lines, new_code_lines)
-
-        # Finish operation
-        result = 'Done'
-    except Exception as e:
-        log.error(f"Error in vim_edit_code: {e}")
-        # Finish operation with error
-        result = 'Error'
-        errormsg = str(e)
-
-    # write results to global vars
-    with g_thread_lock:
-        # backup existing code
-        g_original_content = code_lines
-        # save new code in global variables
-        g_new_code_lines = new_code_lines
-        # save diff and result
-        g_diff = diff
-        g_result = result
-        g_errormsg = errormsg
-
-def start_vim_edit_code(request, firstline, lastline, settings, credentialname):
-    global log
-    global g_editing_thread
-    global g_result
-    global g_errormsg
-    global g_start_line
-    global g_end_line
-
-    if log == None:
+def start_vim_edit_code(request, code, filetype, settings):
+    global g_editing_thread, g_result, g_operations, g_errormsg, g_progress_events
+    if log is None:
         CreateLogger()
-    log.debug(f'*** vim_edit_code: request={request}')
-
-    g_errormsg =''
-    g_result = 'InProgress'
-    g_start_line = int(firstline)
-    g_end_line = int(lastline)
-    # Start the thread
-    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings, credentialname))
+    settings = dict(settings)
+    with g_thread_lock:
+        g_result = "InProgress"
+        g_operations = []
+        g_errormsg = ""
+        g_progress_events = []
+    g_editing_thread = threading.Thread(target=_worker, args=(request, list(code), filetype, settings), daemon=True)
     g_editing_thread.start()
 
+
 def get_job_status():
-    """
-    Check if the editing thread is still running.
-
-    Returns:
-        str: Job status: 'InProgress', 'Done', 'Error'
-    """
-    global g_editing_thread
-    global g_result
-    global g_errormsg
-    global g_start_line
-    global g_end_line
-    global g_restored_lines
-    global g_new_code_lines
-    global g_diff
-    global g_groups
-    global g_change_index
-
-    log.debug(f"result={g_result}")
-    groups = None
-    try:
-        is_running = False
-        if g_editing_thread:
-            with g_thread_lock:
-                is_running = g_editing_thread.is_alive()
-
-        if (is_running):
-            return "InProgress", None, ''
-
-        # Job Complete
-        if g_result != 'Done':
-            # Error
-            return g_result, None, g_errormsg
-
-        # Success:
-        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
-        if use_inline_diff:
-            apply_diff(g_diff, vim.current.buffer, g_start_line)
-        else:
-            apply_change(g_diff, vim.current.buffer, g_start_line)
-
-        g_groups = group_diff(g_diff, g_start_line)
-        log.debug(g_groups)
-        g_change_index = 0
-        g_restored_lines = 0
-
-        result = 'Done'
-    except Exception as e:
-        log.error(f"Error in get_job_status: {e}")
-        g_errormsg = str(e)
-        result = 'Error'
-
-    return result, g_groups, g_errormsg
-
-def AcceptAllChanges():
-    accept_changes(vim.current.buffer)
-
-def RejectAllChanges():
-    reject_changes(vim.current.buffer, g_original_content, g_start_line)
-
-def ShowAcceptDialog(dialog_callback, index):
-    global g_groups, g_dialog_callback
-    if not g_groups:
-        print("No groups, ignoring ShowAcceptDialog.")
-        return
-
-    # get current group
-    group = g_groups[index]
-    start_line = group.get('start_line', 1)
-
-    # move cursor to line lineno
-    vim.command(f'execute "normal! {start_line}G"')
-    # move cursor to col 0
-    vim.command(f'execute "normal! 0"')
-    vim.command(f'redraw')
-
-    # save callback for later calls
-    g_dialog_callback = dialog_callback
-    count = len(g_groups)
-    msg = f"Accept change {index+1} of {count}? y/n"
-    # show popup
-    vim.command(f'call popup_dialog("{msg}", {{ "line": {start_line}, "filter": "popup_filter_yesno", "callback": "{dialog_callback}", "padding": [2, 4, 2, 4] }})')
-
-def DialogCallback(id, result):
-    global g_change_index, g_groups
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring callback.")
-        return
-
-    # Handle based on result
-    if result == 1:  # 'y' pressed, meaning accept
-        AcceptChange(g_change_index)
-    elif result == 0:  # 'n' pressed, meaning reject
-        RejectChange(g_change_index)
-    else:
-        print(f"Unexpected result: {result}")
-    NextChange()
-
-def NextChange():
-    global g_change_index, g_groups, g_dialog_callback
-    count = len(g_groups)
-    if (count == 0):
-        # no more changes left
-        return
-
-    # update index
-    g_change_index += 1
-    if (g_change_index >= len(g_groups)):
-        # not more changes
-        g_groups = None
-        g_change_index = -1
-        VimHelper.SignClear(vim.current.buffer)
-        print("No more changes.")
-        return
-
-    ShowAcceptDialog(g_dialog_callback, g_change_index)
-
-def AcceptChange(index):
-    global g_change_index, g_groups
-    global g_restored_lines
-
-    # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring AcceptChange.")
-        return
-
-    log.debug("AcceptChange")
-    # get current change
-    group = g_groups[g_change_index]
-    log.debug(group)
-    # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
-    buf = vim.current.buffer
-
-    log.debug(f"remove signs from {start_line} to {end_line}")
-    # remove signs
-    for line in range(start_line, end_line + 1):
-        VimHelper.UnplaceSign(line, buf)
-
-    # remove abovetext
-    log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
-
-def RejectChange(index):
-    global g_change_index, g_groups
-    global g_restored_lines
-
-    # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring RejectChange.")
-        return
-
-    log.debug("RejectChange")
-    # get current change
-    group = g_groups[g_change_index]
-    log.debug(group)
-    # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
-    buf = vim.current.buffer
-
-    # remove any abovetext
-    log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
-
-    # undo all changes of current group
-    lineno = start_line
-    for line in group.get('changes'):
-        log.debug(f"remove signs from line {lineno}")
-        VimHelper.UnplaceSign(lineno, buf)
-        # undo change
-        if (line.startswith('- ')):
-            content = line[2:]
-            # restore deleted line
-            log.debug(f"restore line {lineno}")
-            VimHelper.InsertLine(lineno, content)
-            lineno += 1
-            g_restored_lines += 1
-        elif (line.startswith('+ ')):
-            # remove added line
-            log.debug(f"delete line {lineno}")
-            VimHelper.DeleteLine(lineno)
-            g_restored_lines -= 1
-    log.debug(f"restored_lines={g_restored_lines}")
+    with g_thread_lock:
+        if g_editing_thread and g_editing_thread.is_alive():
+            return "InProgress", [], ""
+        return g_result, list(g_operations), g_errormsg
 
 
-# Main entry point
-if __name__ == "__main__":
-    print("The script works only inside Vim.")
-else:
-    # importing to Vim
+def get_progress_events():
+    with g_thread_lock:
+        return list(g_progress_events)
+
+
+def apply_operations(bufnr, firstline, lastline, operations):
+    """Apply the already validated operation sequence to a Vim buffer."""
     import vim
-    import VimHelper
+
+    buffer = vim.buffers[bufnr]
+    original = list(buffer[firstline - 1:lastline])
+    document = list(original)
+    changed_ranges = []
+    for operation in operations:
+        if operation["tool"] not in FILE_TOOL_NAMES:
+            arguments = operation["arguments"]
+            if operation["tool"] == "insert_lines":
+                start = firstline + arguments["line"] - 1
+                end = start + max(len(arguments["content"]) - 1, 0)
+            else:
+                start = firstline + arguments["start_line"] - 1
+                replacement = arguments.get("replacement", [])
+                end = start + max(len(replacement) - 1, 0)
+            changed_ranges.append([start, end])
+            apply_tool(document, operation["tool"], operation["arguments"])
+    if document != original:
+        buffer[firstline - 1:lastline] = document
+    return changed_ranges
