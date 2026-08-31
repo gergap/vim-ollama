@@ -126,8 +126,8 @@ endif
 if !exists('g:ollama_chat_timeout')
     let g:ollama_chat_timeout = 10
 endif
-if !exists('g:ollama_hidethinking')
-    let g:ollama_hidethinking = v:false
+if !exists('g:ollama_nothinking')
+    let g:ollama_nothinking = v:false
 endif
 " Code edit specific settings
 if !exists('g:ollama_edit_provider')

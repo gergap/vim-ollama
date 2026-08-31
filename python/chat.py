@@ -35,7 +35,7 @@ DEFAULT_MAX_TOKENS = 5000
 
 log = None
 
-async def stream_chat_message_ollama(messages, endpoint, model, options, timeout, credentialname, flag_hidethinking):
+async def stream_chat_message_ollama(messages, endpoint, model, options, timeout, credentialname, flag_nothinking):
     """Stream chat responses from Ollama API.
 
     Supports DeepSeek-R1 and similar models that emit reasoning content.
@@ -62,24 +62,27 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         "raw": True,
         "options": options,
     }
+    if flag_nothinking:
+        # Ask thinking models (e.g. DeepSeek-R1) to skip the thinking step
+        data["think"] = False
     log.debug("request: " + json.dumps(data, indent=4))
 
     assistant_message = ""
     prefix_reasoning = "> "
     flag_first_print_message_reasoning = True
+    flag_thinking_started = False
     flag_thinking_done = False
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("POST", endpoint, headers=headers, json=data) as response:
                 if response.status_code == 200:
-                    print("#StartThinking", flush=True)
                     async for line in response.aiter_lines():
                         if line:
                             message = json.loads(line)
                             if "message" in message:
 
-                                if not flag_hidethinking:
+                                if not flag_nothinking:
                                     # Check for reasoning content (DeepSeek-R1 and similar models)
                                     # Support both 'reasoning_content' and 'thinking' fields for different Ollama model types
                                     reasoning = None
@@ -89,16 +92,19 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                         reasoning = message["message"]["thinking"]
 
                                     if reasoning:
+                                        if not flag_thinking_started:
+                                            print("#StartThinking", flush=True)
+                                            flag_thinking_started = True
                                         if flag_first_print_message_reasoning:
                                             flag_first_print_message_reasoning = False
-                                            print("\n" + prefix_reasoning, flush=True, end="")
+                                            print(prefix_reasoning, flush=True, end="")
                                         print(reasoning.replace("\n", "\n" + prefix_reasoning), flush=True, end="")
 
                                 content = message["message"].get("content", "")
                                 if content:
-                                    if not flag_thinking_done:
+                                    if flag_thinking_started and not flag_thinking_done:
                                         flag_thinking_done = True
-                                        print("\n#EndThinking\n", flush=True, end="")
+                                        print("\n#EndThinking\n\n", flush=True, end="")
                                     assistant_message += content
                                     print(content, end="", flush=True)
 
@@ -109,7 +115,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                             # Stop if response contains an indication of completion
                             if message.get("done", False):
                                 break
-                    if not flag_thinking_done:
+                    if flag_thinking_started and not flag_thinking_done:
                         print("\n#EndThinking", flush=True)
                     print("<EOT>", flush=True)
                 else:
@@ -130,9 +136,9 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def stream_chat_message_openai(messages, endpoint, model, options, credentialname, flag_hidethinking):
+async def stream_chat_message_openai(messages, endpoint, model, options, credentialname, flag_nothinking):
     """Stream chat responses from OpenAI API."""
-    # TODO: flag_hidethinking Implement hidethinking functionality for OpenAI
+    # TODO: flag_nothinking Implement nothinking functionality for OpenAI
     if AsyncOpenAI is None:
         raise ImportError("OpenAI package not found. Please install via 'pip install openai'.")
 
@@ -187,7 +193,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
     multiline_input = False
     multiline_message = []
 
-    flag_hidethinking = args.hidethinking
+    flag_nothinking = args.nothinking
 
     if systemprompt:
         if provider == "ollama":
@@ -208,11 +214,11 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
 
                     if provider == "ollama":
                         task = asyncio.create_task(
-                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname, flag_hidethinking)
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname, flag_nothinking)
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_hidethinking)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_nothinking)
                         )
                     await task
                 else:
@@ -228,11 +234,11 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                     conversation_history.append({"role": "user", "content": user_message})
                     if provider == "ollama":
                         task = asyncio.create_task(
-                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname, flag_hidethinking)
+                            stream_chat_message_ollama(conversation_history, endpoint, model, options, timeout, credentialname, flag_nothinking)
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_hidethinking)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_nothinking)
                         )
                     await task
         except KeyboardInterrupt:
@@ -257,7 +263,7 @@ if __name__ == "__main__":
                         help="Ollama REST API options.")
     parser.add_argument("-s", "--system-prompt", type=str, default="", help="Specify system prompt.")
     parser.add_argument("-t", "--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout in seconds.")
-    parser.add_argument("-n", "--hidethinking", action="store_true", help="Hide thinking output (if provided by the model).")
+    parser.add_argument("-n", "--nothinking", action="store_true", help="Disable thinking output (if provided by the model).")
     parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
     parser.add_argument("-f", "--log-filename", type=str, default="chat.log", help="Log filename.")
     parser.add_argument("-d", "--log-dir", type=str, default="/tmp/logs", help="Log file directory.")

@@ -530,7 +530,7 @@ g:ollama_use_venv
 >
         let g:ollama_use_venv = 1
 <
-                                                     *g:ollama_split_vertically*
+                                                      *g:ollama_split_vertically*
 g:ollama_split_vertically
     - Description: When this variable is defined and set to 1 the OllamaChat
       command will create a vertical split, otherwise a horizontal split is
@@ -540,32 +540,36 @@ g:ollama_split_vertically
         " prefer horizontal split
         let g:ollama_split_vertically = 0
 <
-                                                       *g:ollama_hidethinking*
-g:ollama_hidethinking
-                                                       *OllamaThinking*
-    - Description: When set to v:true, hides the thinking reasoning lines from
-      the model's response. The thinking block is still folded (see below).
+                                                      *g:ollama_nothinking*
+g:ollama_nothinking
+    - Description: When set to v:true, disables the thinking step of
+      reasoning models (e.g. DeepSeek-R1). The chat script sends the
+      `think: false` request option so the model skips thinking entirely.
+      This also means the |OllamaThinking| block is neither shown nor folded.
     - Default: v:false
     - Example:
 >
-        " hide thinking output in chat
-        let g:ollama_hidethinking = v:true
+        " disable thinking output in chat
+        let g:ollama_nothinking = v:true
 <
     - The thinking output (shown when not hidden) is rendered in italics via
       the |OllamaThinking| highlight group, which can be customized, e.g.:
 >
         highlight OllamaThinking gui=italic ctermfg=DarkGray
 <
-    - The chat script wraps the thinking block in #StartThinking and
-      #EndThinking marker lines, which are folded automatically, closed by
-      default. Expand the fold with `zo` and collapse it with `zc`. The
-      markers themselves are hidden while the fold is closed. To disable
-      marker folding in the chat buffer use:
+    - When the model emits reasoning content, the chat script wraps the
+      thinking block in #StartThinking and #EndThinking marker lines,
+      which are folded automatically, closed by default. Expand the fold
+      with `zo` and collapse it with `zc`. The markers themselves are
+      hidden while the fold is closed. If there is no reasoning content
+      (e.g. with standard chat models, or when disabled via
+      `g:ollama_nothinking`), no markers are emitted and nothing is
+      folded. To disable marker folding in the chat buffer use:
 >
         setlocal foldmethod=manual
 <
 
-=============================================================================
+==============================================================================
 7. Troubleshooting                                    *vim-ollama-troubleshooting*
 
 You can enable logging by specifying the following variables.

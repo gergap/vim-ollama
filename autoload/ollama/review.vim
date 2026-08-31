@@ -158,7 +158,7 @@ function! s:StartChat(lines) abort
                 \ '-o', l:model_options,
                 \ '-t', g:ollama_chat_timeout,
                 \ '-l', l:log_level ]
-    if g:ollama_hidethinking ==# v:true
+    if g:ollama_nothinking ==# v:true
         let l:command += [ '-n' ]
     endif
     " Check if a system prompt was configured
