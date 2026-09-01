@@ -13,6 +13,7 @@ import ntpath
 import os
 import re
 import shutil
+import subprocess
 import threading
 import uuid
 
@@ -210,7 +211,7 @@ MAKE_TOOLS = [
         "type": "function",
         "function": {
             "name": "vim-make",
-            "description": "Run Vim's configured makeprg and inspect its compiler errors and warnings. Optional arguments are whitespace-separated make target names only. Use it after changing code and before finishing.",
+            "description": "Builds the project using Vim's configured makeprg and inspect its compiler errors and warnings. Optional arguments are whitespace-separated make target names only. Use it after changing code and before finishing.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -242,14 +243,115 @@ EXECUTE_TOOLS = [
     },
 ]
 
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+GIT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "git_init",
+            "description": "Initialize a Git repository in the current project directory.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_add",
+            "description": "Stage the specified project-relative paths with Git.",
+            "parameters": {
+                "type": "object",
+                "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_rm",
+            "description": "Remove the specified project-relative paths from Git and the working tree.",
+            "parameters": {
+                "type": "object",
+                "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_restore",
+            "description": "Restore specified project-relative paths from Git. This discards working-tree changes unless staged=true, which restores the index.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                    "staged": {"type": "boolean"},
+                },
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit",
+            "description": "Create a Git commit with the supplied commit message.",
+            "parameters": {
+                "type": "object",
+                "properties": {"message": {"type": "string"}},
+                "required": ["message"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_status",
+            "description": "Show the current Git branch and working-tree status.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_log",
+            "description": "Show recent Git commits from the current project.",
+            "parameters": {
+                "type": "object",
+                "properties": {"max_count": {"type": "integer", "minimum": 1, "maximum": 100}},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_diff",
+            "description": "Show Git changes in the current project. Set staged=true to show staged changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"staged": {"type": "boolean"}},
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
+GIT_TOOL_NAMES = {tool["function"]["name"] for tool in GIT_TOOLS}
+GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
-WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+RANGE_TOOLS += [tool for tool in GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -349,6 +451,66 @@ def _request_execute(arguments):
         while g_make_results[request_id] is None:
             g_make_condition.wait()
         return g_make_results.pop(request_id)
+
+
+def _run_git_tool(cwd, name, arguments):
+    if not isinstance(arguments, dict):
+        raise ValueError(f"{name} requires an argument object")
+
+    command = ["git"]
+    if name == "git_init":
+        command += ["init", "."]
+    elif name in ("git_add", "git_rm", "git_restore"):
+        paths = arguments.get("paths")
+        if not isinstance(paths, list) or not paths:
+            raise ValueError(f"{name} requires a non-empty list of paths")
+        for path in paths:
+            if not isinstance(path, str) or not path or "\x00" in path:
+                raise ValueError(f"{name} paths must be non-empty strings")
+            if os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/")):
+                raise ValueError(f"{name} paths must stay below the current directory")
+        if name == "git_add":
+            command += ["add", "--"] + paths
+        elif name == "git_rm":
+            command += ["rm", "--"] + paths
+        else:
+            staged = arguments.get("staged", False)
+            if not isinstance(staged, bool):
+                raise ValueError("git_restore staged must be boolean")
+            command += ["restore"]
+            if staged:
+                command.append("--staged")
+            command += ["--"] + paths
+    elif name == "git_commit":
+        message = arguments.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("git_commit requires a non-empty commit message")
+        command += ["commit", "-m", message]
+    elif name == "git_status":
+        command += ["status", "--short", "--branch"]
+    elif name == "git_log":
+        max_count = arguments.get("max_count", 10)
+        if isinstance(max_count, bool) or not isinstance(max_count, int) or not 1 <= max_count <= 100:
+            raise ValueError("git_log max_count must be an integer from 1 to 100")
+        command += ["log", "--oneline", f"--max-count={max_count}"]
+    elif name == "git_diff":
+        staged = arguments.get("staged", False)
+        if not isinstance(staged, bool):
+            raise ValueError("git_diff staged must be boolean")
+        command += ["diff"]
+        if staged:
+            command.append("--cached")
+    else:
+        raise ValueError(f"unknown Git tool: {name}")
+
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=120, check=False)
+    output = "\n".join(part for part in (completed.stdout.rstrip(), completed.stderr.rstrip()) if part)
+    return {
+        "ok": completed.returncode == 0,
+        "message": f"{name} completed" if completed.returncode == 0 else f"{name} failed",
+        "output": output,
+        "exit_code": completed.returncode,
+    }
 
 
 def _check_range(document, start_line, end_line, expected):
@@ -609,6 +771,7 @@ def _system_prompt(settings):
         "JSON tool calls, or similar syntax.",
         "When a tool is required, invoke the supplied tool directly.",
         "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
+        "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "Use replace_lines tool instead of calling sed.",
     ]
     if settings.get("range_mode", True):
@@ -793,16 +956,24 @@ def _run_edit(request, code, filetype, settings):
                     raise ValueError("filesystem tools are not allowed during a range edit")
                 if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:
                     raise ValueError("buffer edit tools require an editable range")
+                if settings.get("range_mode", True) and name in GIT_TOOL_NAMES - GIT_READ_TOOL_NAMES:
+                    raise ValueError("Git write tools are not allowed during a range edit")
                 if name in MAKE_TOOL_NAMES:
                     result = _request_make(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
                     result = _request_execute(arguments)
+                elif name in GIT_TOOL_NAMES:
+                    result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"))
-                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
-                _progress(result["message"], tool=name, path=arguments.get("path"))
+                diagnostic = result.get("content") or result.get("output")
+                details = {"tool": name, "path": arguments.get("path")}
+                if diagnostic:
+                    details["diagnostic"] = {"title": name, "content": diagnostic}
+                _progress(result["message"], **details)
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
                 _progress(f"Tool error: {error}; request: {json.dumps(arguments)}", tool=name, arguments=arguments)

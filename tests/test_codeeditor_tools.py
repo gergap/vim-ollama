@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -291,3 +292,37 @@ def test_execute_rejects_paths_outside_workspace():
 
     assert result["ok"] is False
     assert "remain below the current directory" in result["error"]
+
+
+def test_git_add_uses_structured_command_without_shell(monkeypatch, tmp_path):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(CodeEditor.subprocess, "run", run)
+    result = CodeEditor._run_git_tool(str(tmp_path), "git_add", {"paths": ["main.c", "src"]})
+
+    assert result["ok"]
+    assert calls == [(["git", "add", "--", "main.c", "src"], {
+        "cwd": str(tmp_path), "capture_output": True, "text": True, "timeout": 120, "check": False,
+    })]
+
+
+def test_git_restore_requires_paths_and_supports_staged_restore(monkeypatch, tmp_path):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(CodeEditor.subprocess, "run", run)
+    result = CodeEditor._run_git_tool(
+        str(tmp_path), "git_restore", {"paths": ["main.c"], "staged": True}
+    )
+
+    assert result["ok"]
+    assert calls == [["git", "restore", "--staged", "--", "main.c"]]
+    with pytest.raises(ValueError, match="non-empty list of paths"):
+        CodeEditor._run_git_tool(str(tmp_path), "git_restore", {"paths": []})

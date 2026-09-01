@@ -27,8 +27,13 @@ function! s:OpenConversation(request) abort
     botright new
     setlocal buftype=prompt bufhidden=hide noswapfile
     setlocal filetype=markdown
+    " avoid showing _ as errors in Markdown
+    syntax clear markdownError
     setlocal wrap
     setlocal modifiable
+    setlocal foldmethod=marker
+    setlocal foldmarker=#StartDiagnostic,#EndDiagnostic
+    setlocal foldlevel=0
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', '', 'Request: ' .. a:request, ''])
@@ -52,6 +57,19 @@ function! ollama#edit#AppendProgress(text) abort
         if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
             call win_execute(s:conversation_winid, 'silent! normal! G')
         endif
+    endif
+endfunction
+
+function! ollama#edit#AppendDiagnostic(title, content) abort
+    if !bufexists(s:conversation_bufnr) || empty(a:content)
+        return
+    endif
+    let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+    let l:lines = ['#StartDiagnostic ' .. a:title] + split(a:content, "\n", v:true) + ['#EndDiagnostic']
+    call appendbufline(s:conversation_bufnr, l:line_count - 1, l:lines)
+    if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+        call win_execute(s:conversation_winid, 'silent! normal! G')
+        call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
     endif
 endfunction
 
@@ -145,7 +163,18 @@ function! s:FinishMake(request_id, state, job, status) abort
         let l:output = join(a:state.output, "\n")
         call setqflist([], 'r', {'lines': a:state.output, 'efm': a:state.errorformat})
         let l:diagnostics = []
+        let l:error_count = 0
+        let l:warning_count = 0
         for l:item in getqflist()
+            let l:type = toupper(get(l:item, 'type', ''))
+            let l:text = get(l:item, 'text', '')
+            if l:type ==# 'E' || l:text =~? '\<\(error\|fatal\)\>'
+                let l:error_count += 1
+            elseif l:type ==# 'W' || l:text =~? '\<warning\>'
+                let l:warning_count += 1
+            elseif a:status != 0
+                let l:error_count += 1
+            endif
             call add(l:diagnostics, {
                         \ 'filename': get(l:item, 'filename', ''),
                         \ 'lnum': get(l:item, 'lnum', 0),
@@ -154,9 +183,12 @@ function! s:FinishMake(request_id, state, job, status) abort
                         \ 'text': get(l:item, 'text', ''),
                         \ })
         endfor
+        if empty(l:diagnostics) && a:status != 0
+            let l:error_count = 1
+        endif
         let l:result = {
                     \ 'ok': empty(l:diagnostics) && a:status == 0,
-                    \ 'message': empty(l:diagnostics) && a:status == 0 ? 'Vim makeprg completed without diagnostics' : 'Vim makeprg returned diagnostics',
+                    \ 'message': empty(l:diagnostics) && a:status == 0 ? 'Vim makeprg completed without diagnostics' : printf('Vim makeprg returned diagnostics (errors: %d, warnings: %d)', l:error_count, l:warning_count),
                     \ 'output': l:output,
                     \ 'diagnostics': l:diagnostics,
                     \ }
@@ -327,6 +359,9 @@ try:
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
         if event.get('type') == 'execute_request':
             vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+        if event.get('diagnostic'):
+            diagnostic = event['diagnostic']
+            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')
         if event.get('tool') in ('create_file', 'create_folder', 'delete_file', 'delete_folder') and event.get('path'):
             vim.command('call ollama#edit#RefreshNERDTree()')
         if event.get('tool') == 'create_file' and event.get('path'):
@@ -437,11 +472,20 @@ endfunction
 
 function! ollama#edit#QuickFix() abort
     call s:EditWorkspace(
-                \ 'Build the project with vim-make, inspect all compiler errors and warnings, and fix them. '
+                \ 'Build the project using the provided `vim-make` tool, inspect all compiler errors and warnings, and fix them. '
                 \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
                 \ .. 'Use the supplied OllamaEdit tools for every change. '
                 \ .. 'Never use the execute tool for compiling, use vim-make instead. '
                 \ .. 'At the end, provide a concise summary of the changes made and the final build status.')
+endfunction
+
+function! ollama#edit#InitAgents() abort
+    let l:prompt_file = g:ollama_plugin_dir .. '/agents_prompt.md'
+    if !filereadable(l:prompt_file)
+        echoerr 'OllamaInitAgents: agents_prompt.md was not found'
+        return
+    endif
+    call s:EditWorkspace(join(readfile(l:prompt_file), "\n"))
 endfunction
 
 function! ollama#edit#EditPrompt() range abort
