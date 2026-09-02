@@ -907,7 +907,13 @@ def _system_prompt(settings):
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
-    if settings.get("range_mode", True):
+    if settings.get("explain_mode", False):
+        lines.extend([
+            "This is a read-only code explanation request.",
+            "Use only the supplied inspection tools to inspect the selected code or related files.",
+            "Do not modify buffers or files and do not call tools that are not supplied.",
+        ])
+    elif settings.get("range_mode", True):
         lines.extend([
             "This is a range edit inside the current Vim buffer.",
             "Modify only the specified buffer range with the buffer edit tools. Do not create, delete, or modify files.",
@@ -944,6 +950,18 @@ def _edit_prompt(request, code, filetype, settings):
 
     filename = settings.get("filename") or "[No filename]"
     end_line = settings.get("end_line", len(code))
+
+    if settings.get("explain_mode", False):
+        return (
+            f"Explain the following {filetype or 'text'} code in detail.\n\n"
+            "Describe its purpose, important control flow, dependencies, and any relevant issues. "
+            "Use the read-only inspection tools to inspect related project files when useful. "
+            "Do not call tools if not necessary."
+            "Do not modify any buffers or files.\n\n"
+            f"Current Vim buffer: {filename}\n"
+            f"Selected range: lines {start_line}-{end_line}\n\n"
+            f"{numbered}"
+        )
 
     return (
         f"User request:\n{request}\n\n"
@@ -1029,7 +1047,10 @@ def _run_edit(request, code, filetype, settings):
 
     previous_messages = settings.get("messages")
     range_mode = settings.get("range_mode", True)
-    tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
+    if settings.get("explain_mode", False):
+        tools = INSPECTION_TOOLS
+    else:
+        tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
     if previous_messages:
         messages = list(previous_messages)
         messages.append({"role": "user", "content": _edit_prompt(request, code, filetype, settings)})
@@ -1114,6 +1135,8 @@ def _run_edit(request, code, filetype, settings):
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
                 _progress(f"Tool error: {error}; request: {json.dumps(arguments)}", tool=name, arguments=arguments)
+                if settings.get("stop_on_error", False):
+                    raise ValueError(f"{name} failed: {error}") from error
             if provider == "ollama":
                 messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
             else:

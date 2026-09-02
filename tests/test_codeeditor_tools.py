@@ -210,6 +210,26 @@ def test_range_tools_are_prefixed_and_relative(monkeypatch):
     assert "insert_lines" not in names
 
 
+def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, messages = CodeEditor._run_edit(
+        "explain it", ["int main() {}"], "c",
+        {"provider": "ollama", "range_mode": True, "explain_mode": True},
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert names == {"read_file", "search_files", "list_files"}
+    assert operations == []
+    assert "read-only" in messages[1]["content"]
+
+
 def test_workspace_prompt_does_not_include_buffer_snapshot():
     prompt = CodeEditor._edit_prompt(
         "fix the project", ["should not be included"], "", {"range_mode": False}
@@ -234,6 +254,23 @@ def test_range_edit_rejects_filesystem_tools(monkeypatch):
     assert operations == []
     tool_result = next(message for message in messages if message.get("role") == "tool")
     assert "filesystem tools are not allowed" in tool_result["content"]
+
+
+def test_tool_error_can_stop_edit_cycle(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "bad-1", "function": {"name": "buf_replace_lines", "arguments": {
+            "start_line": 1,
+            "end_line": 1,
+            "expected": ["wrong"],
+            "replacement": ["new"],
+        }}}]},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    with pytest.raises(ValueError, match="buf_replace_lines failed"):
+        CodeEditor._run_edit(
+            "edit it", ["old"], "text", {"provider": "ollama", "stop_on_error": True}
+        )
 
 
 def test_tool_loop_returns_validated_operations(monkeypatch):

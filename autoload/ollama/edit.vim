@@ -28,17 +28,56 @@ function! s:OpenConversation(request) abort
     setlocal buftype=prompt bufhidden=hide noswapfile
     setlocal filetype=markdown
     " avoid showing _ as errors in Markdown
-    syntax clear markdownError
+    silent! syntax clear markdownError
     setlocal wrap
     setlocal modifiable
-    setlocal foldmethod=marker
-    setlocal foldmarker=#StartDiagnostic,#EndDiagnostic
+    setlocal foldmethod=expr
+    setlocal foldexpr=ollama#edit#ConversationFold(v:lnum)
     setlocal foldlevel=0
+    let b:ollama_edit_conversation = v:true
+    augroup OllamaEditConversation
+        autocmd! * <buffer>
+        autocmd BufWinEnter,BufWritePost,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
+                    \ call ollama#edit#SetupConversationFolding()
+    augroup END
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
     call prompt_setprompt(s:conversation_bufnr, '>>> ')
+endfunction
+
+function! ollama#edit#ConversationFold(lnum) abort
+    let l:line = getline(a:lnum)
+    if l:line =~# '^#StartDiagnostic\>'
+        return 'a1'
+    endif
+    if l:line =~# '^#EndDiagnostic\>'
+        return 's1'
+    endif
+    let l:index = a:lnum - 1
+    while l:index >= 1
+        let l:previous = getline(l:index)
+        if l:previous =~# '^#EndDiagnostic\>'
+            return 0
+        endif
+        if l:previous =~# '^#StartDiagnostic\>'
+            return '='
+        endif
+        let l:index -= 1
+    endwhile
+    return 0
+endfunction
+
+function! ollama#edit#SetupConversationFolding() abort
+    if get(b:, 'ollama_edit_conversation', v:false)
+        if &l:foldmethod !=# 'expr'
+            setlocal foldmethod=expr
+        endif
+        if &l:foldexpr !=# 'ollama#edit#ConversationFold(v:lnum)'
+            setlocal foldexpr=ollama#edit#ConversationFold(v:lnum)
+        endif
+    endif
 endfunction
 
 function! s:PrepareConversation(request) abort
@@ -53,11 +92,17 @@ endfunction
 
 function! ollama#edit#AppendProgress(text) abort
     if bufexists(s:conversation_bufnr)
+        let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
+        call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
+        try
         let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
         call appendbufline(s:conversation_bufnr, l:line_count - 1, split(a:text, "\n", v:true))
         if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
             call win_execute(s:conversation_winid, 'silent! normal! G')
         endif
+        finally
+            call setbufvar(s:conversation_bufnr, 'ollama_internal_update', l:internal_update)
+        endtry
     endif
 endfunction
 
@@ -65,13 +110,20 @@ function! ollama#edit#AppendDiagnostic(title, content) abort
     if !bufexists(s:conversation_bufnr) || empty(a:content)
         return
     endif
+    let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
+    call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
+    try
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
     let l:lines = ['#StartDiagnostic ' .. a:title] + split(a:content, "\n", v:true) + ['#EndDiagnostic']
     call appendbufline(s:conversation_bufnr, l:line_count - 1, l:lines)
     if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
-        call win_execute(s:conversation_winid, 'silent! normal! G')
+        " Keep diagnostic folds closed without toggling the fold under the cursor.
         call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
+        call win_execute(s:conversation_winid, 'silent! normal! G')
     endif
+    finally
+        call setbufvar(s:conversation_bufnr, 'ollama_internal_update', l:internal_update)
+    endtry
 endfunction
 
 function! ollama#edit#RefreshNERDTree() abort
@@ -373,6 +425,9 @@ function! ollama#edit#PromptEntered(text) abort
     if empty(a:text)
         return
     endif
+    if get(b:, 'ollama_internal_update', v:false)
+        return
+    endif
     if g:edit_in_progress
         call ollama#edit#AppendProgress('An OllamaEdit request is already running.')
         return
@@ -454,6 +509,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'cwd': getcwd(),
                 \ 'continue_history': get(a:settings, 'continue_history', v:false),
                 \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
+                \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)
     let l:code_json = json_encode(a:code)
@@ -500,6 +556,20 @@ endfunction
 
 function! ollama#edit#EditCode(request) range abort
     call s:EditCodeRange(a:request, a:firstline, a:lastline)
+endfunction
+
+function! ollama#edit#ExplainCode(start_line, end_line) abort
+    let l:settings = {
+                \ 'range_mode': v:true,
+                \ 'explain_mode': v:true,
+                \ 'filename': fnamemodify(expand('%:p'), ':.'),
+                \ 'start_line': a:start_line,
+                \ 'end_line': a:end_line,
+                \ 'continue_history': v:false,
+                \ }
+    call s:StartEditSession(
+                \ 'Explain the selected code. You can inspect related files when relevant, but avoid this if not needed.',
+                \ getline(a:start_line, a:end_line), &filetype, l:settings)
 endfunction
 
 function! ollama#edit#EditCommand(request, start_line, end_line, range_count) abort

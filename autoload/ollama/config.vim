@@ -33,6 +33,7 @@ let s:help_text = {
 \ 'ollama_edit_provider': 'Provider for edit tasks: "ollama" or "openai".',
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
+\ 'ollama_stop_on_error': 'Stop OllamaEdit immediately after a tool error (default=v:false).',
 \ 'ollama_nothinking': 'Disable thinking output of reasoning models (default=v:false)',
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
 \ 'ollama_logfile': 'Logfile path for debugging.',

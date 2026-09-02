@@ -149,6 +149,18 @@ The vim-ollama plugin provides the following commands:
  Note: It is recommended to track all source files in Git so that you can
  undo changes of the AI and avoid loosing data if AI goes crazy.
 
+                                                      *:OllamaExplain*
+:[range]OllamaExplain
+    - Description: Explains the selected code using the configured edit model.
+      The command is read-only: the AI receives only file inspection tools and
+      cannot modify buffers or files. Related project files may be inspected
+      when relevant. The explanation is written to the OllamaEdit chat buffer.
+
+    - Usage:
+>
+        :[range]OllamaExplain
+<
+
                                                       *:OllamaQuickFix*
 :OllamaQuickFix
     - Description: Builds the project with Vim's configured `makeprg`, inspects
@@ -513,7 +525,19 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                      *g:ollama_no_maps*
+                                                      *g:ollama_stop_on_error*
+g:ollama_stop_on_error
+    - Description: Stops the OllamaEdit cycle immediately after a tool error
+      instead of sending the error back to the model for another attempt. This
+      is useful for investigating whether a failed tool call came from the LLM
+      or from vim-ollama.
+    - Default: 'v:false'
+    - Example:
+>
+        let g:ollama_stop_on_error = v:true
+<
+
+                                                       *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts

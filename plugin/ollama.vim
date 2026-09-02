@@ -152,6 +152,9 @@ endif
 if !exists('g:ollama_edit_instructions')
     let g:ollama_edit_instructions = ''
 endif
+if !exists('g:ollama_stop_on_error')
+    let g:ollama_stop_on_error = v:false
+endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif
@@ -274,6 +277,7 @@ command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
 command! -nargs=+ -range OllamaEdit call ollama#edit#EditCommand(<q-args>, <line1>, <line2>, <range>)
+command! -range=% OllamaExplain <line1>,<line2>call ollama#edit#ExplainCode(<line1>, <line2>)
 command! OllamaQuickFix call ollama#edit#QuickFix()
 command! OllamaInitAgents call ollama#edit#InitAgents()
 command! OllamaChat call ollama#review#Chat()
