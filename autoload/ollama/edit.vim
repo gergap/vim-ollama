@@ -90,19 +90,56 @@ function! ollama#edit#RefreshNERDTree() abort
 endfunction
 
 function! ollama#edit#ShowFile(path) abort
-    if s:source_winid == -1 || !win_gotoid(s:source_winid)
+    let l:path = simplify(g:ollama_edit_cwd .. '/' .. a:path)
+    if !filereadable(l:path)
         return
     endif
-    let l:path = simplify(g:ollama_edit_cwd .. '/' .. a:path)
-    if filereadable(l:path)
-        " The worker may have written this file since Vim last loaded it.
-        " Never discard unrelated unsaved edits in the source window.
-        if &modified && expand('%:p') !=# simplify(fnamemodify(l:path, ':p'))
-            botright new
-        endif
-        execute 'edit! ' .. fnameescape(l:path)
-        normal! gg
+
+    let l:target_path = simplify(fnamemodify(l:path, ':p'))
+    let l:target_bufnr = bufnr(l:target_path)
+    let l:target_winid = -1
+
+    " Reuse a visible window already showing the tool-created file first.
+    if l:target_bufnr > 0
+        for l:winid in win_findbuf(l:target_bufnr)
+            if getbufvar(winbufnr(l:winid), '&filetype') !=# 'nerdtree'
+                let l:target_winid = l:winid
+                break
+            endif
+        endfor
     endif
+
+    " Otherwise reuse an unmodified normal code window, never a NERDTree or
+    " conversation window. This avoids losing unrelated user edits.
+    if l:target_winid == -1
+        for l:window in getwininfo()
+            let l:bufnr = l:window.bufnr
+            if getbufvar(l:bufnr, '&buftype') ==# ''
+                        \ && getbufvar(l:bufnr, '&filetype') !=# 'nerdtree'
+                        \ && !getbufvar(l:bufnr, '&modified')
+                let l:target_winid = l:window.winid
+                break
+            endif
+        endfor
+    endif
+
+    " Open a split only if no reusable code window is available.
+    if l:target_winid == -1
+        botright new
+        let l:target_winid = win_getid()
+    endif
+
+    if !win_gotoid(l:target_winid)
+        return
+    endif
+    " The worker may have written the file since Vim last loaded it. An
+    " unmodified buffer can be refreshed safely; a modified one is preserved.
+    if expand('%:p') !=# l:target_path
+        execute 'edit! ' .. fnameescape(l:path)
+    elseif !&modified
+        execute 'edit! ' .. fnameescape(l:path)
+    endif
+    normal! gg
 endfunction
 
 function! ollama#edit#ShowChanges(ranges) abort

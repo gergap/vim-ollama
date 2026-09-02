@@ -39,8 +39,8 @@ BUFFER_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "insert_lines",
-            "description": "Insert one or more lines before a 1-based line number. Use line number length+1 to append.",
+            "name": "buf_insert_lines",
+            "description": "Insert one or more lines before a 1-based line number relative to the editable buffer range. Use range length+1 to append.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -55,8 +55,8 @@ BUFFER_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "delete_lines",
-            "description": "Delete an exact inclusive range of lines. The expected text must match exactly.",
+            "name": "buf_delete_lines",
+            "description": "Delete an exact inclusive range of lines from the editable buffer range. Line numbers are relative to that range and expected text must match exactly.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -72,8 +72,8 @@ BUFFER_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "replace_lines",
-            "description": "Replace an exact inclusive range of lines with new content.",
+            "name": "buf_replace_lines",
+            "description": "Replace an exact inclusive range of lines in the editable buffer range. Line numbers are relative to that range.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -83,6 +83,63 @@ BUFFER_TOOLS = [
                     "replacement": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["start_line", "end_line", "expected", "replacement"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+FILE_LINE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "insert_lines",
+            "description": "Insert one or more lines into a project file before an absolute 1-based line number. Use line number length+1 to append.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "line": {"type": "integer", "minimum": 1},
+                    "content": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "line", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_lines",
+            "description": "Delete an exact inclusive range of lines from a project file using absolute 1-based line numbers. The expected text must match exactly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "start_line", "end_line", "expected"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_lines",
+            "description": "Replace an exact inclusive range of lines in a project file using absolute 1-based line numbers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                    "replacement": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "start_line", "end_line", "expected", "replacement"],
                 "additionalProperties": False,
             },
         },
@@ -341,8 +398,10 @@ GIT_TOOLS = [
     },
 ]
 
+FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
 TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
+FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
@@ -629,7 +688,7 @@ def _list_files(cwd, arguments):
                     files.sort()
                     content = "\n".join(files)
                     return {"ok": True, "message": "file listing reached the 1000 file limit", "content": content}
-            elif recursive and entry.is_dir(follow_symlinks=False):
+            elif recursive and entry.name != ".git" and entry.is_dir(follow_symlinks=False):
                 directories.append(entry.path)
 
     files.sort()
@@ -646,6 +705,57 @@ def apply_filesystem_tool(cwd, name, arguments):
         exists = True
     else:
         exists = False
+
+    if name in FILE_LINE_TOOL_NAMES:
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        if os.path.getsize(path) > 1024 * 1024:
+            raise ValueError("file is larger than the 1 MiB editing limit")
+
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            original_text = handle.read()
+        newline = "\r\n" if "\r\n" in original_text else "\n"
+        document = original_text.splitlines()
+
+        if name == "insert_lines":
+            line = arguments.get("line")
+            content = arguments.get("content")
+            if not isinstance(line, int) or not isinstance(content, list):
+                raise ValueError("insert_lines has invalid file arguments")
+            if line < 1 or line > len(document) + 1:
+                raise ValueError("insert line is outside the file")
+            if not all(isinstance(item, str) for item in content):
+                raise ValueError("insert content must contain strings")
+            document[line - 1:line - 1] = content
+        else:
+            start = arguments.get("start_line")
+            end = arguments.get("end_line")
+            expected = arguments.get("expected")
+            if not all(isinstance(value, int) for value in (start, end)):
+                raise ValueError(f"{name} has invalid file line range")
+            if not isinstance(expected, list):
+                raise ValueError(f"{name}: expected must be a list of strings, got {type(expected).__name__}")
+            if not all(isinstance(item, str) for item in expected):
+                raise ValueError(f"{name}: every expected item must be a string")
+            expected = _normalize_expected(document, start, end, expected)
+            if end - start + 1 != len(expected):
+                raise ValueError(f"{name} expected length does not match file line range")
+            _check_range(document, start, end, expected)
+
+            replacement = [] if name == "delete_lines" else arguments.get("replacement")
+            if not isinstance(replacement, list):
+                raise ValueError(f"{name}: replacement must be a list of strings, got {type(replacement).__name__}")
+            if not all(isinstance(item, str) for item in replacement):
+                raise ValueError(f"{name}: every replacement item must be a string")
+            document[start - 1:end] = replacement
+
+        updated_text = newline.join(document)
+        if document and original_text.endswith(("\n", "\r")):
+            updated_text += newline
+        if updated_text != original_text:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(updated_text)
+        return {"ok": True, "message": f"{name} applied to file {arguments['path']}"}
 
     if name == "create_file":
         content = arguments.get("content")
@@ -716,11 +826,11 @@ def apply_tool(document, name, arguments, cwd=None):
             raise ValueError("filesystem tools require a current directory")
         return apply_filesystem_tool(cwd, name, arguments)
 
-    if name == "insert_lines":
+    if name == "buf_insert_lines":
         line = arguments.get("line")
         content = arguments.get("content")
         if not isinstance(line, int) or not isinstance(content, list):
-            raise ValueError("insert_lines has invalid arguments")
+            raise ValueError("buf_insert_lines has invalid arguments")
         if line < 1 or line > len(document) + 1:
             raise ValueError("insert line is outside the editable snapshot")
         if not all(isinstance(item, str) for item in content):
@@ -728,7 +838,7 @@ def apply_tool(document, name, arguments, cwd=None):
         document[line - 1:line - 1] = content
         return {"ok": True, "message": f"inserted {len(content)} line(s) at {line}"}
 
-    if name in ("delete_lines", "replace_lines"):
+    if name in ("buf_delete_lines", "buf_replace_lines"):
         start = arguments.get("start_line")
         end = arguments.get("end_line")
         expected = arguments.get("expected")
@@ -743,7 +853,7 @@ def apply_tool(document, name, arguments, cwd=None):
             raise ValueError(f"{name} expected length does not match line range")
         _check_range(document, start, end, expected)
 
-        if name == "delete_lines":
+        if name == "buf_delete_lines":
             replacement = []
         else:
             replacement = arguments.get("replacement")
@@ -795,7 +905,7 @@ def _system_prompt(settings):
         "When a tool is required, invoke the supplied tool directly.",
         "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
-        "Use replace_lines tool instead of calling sed.",
+        "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
     if settings.get("range_mode", True):
         lines.extend([
@@ -807,6 +917,7 @@ def _system_prompt(settings):
         lines.extend([
             "This is a workspace edit. You may read and modify project files below the working directory with the filesystem tools.",
             "Keep all paths relative to the working directory and never use absolute paths or '..'.",
+            "Use insert_lines, delete_lines, and replace_lines for files; their line numbers are absolute 1-based file line numbers.",
         ])
     configured = settings.get("instructions")
     if configured:
@@ -856,7 +967,7 @@ def _edit_prompt(request, code, filetype, settings):
         f"tool line 2 is Vim line {start_line + 1}, and so on. "
         "Do not use the displayed Vim line numbers as tool line arguments.\n\n"
 
-        "For delete_lines and replace_lines, expected must match the current buffer text exactly. "
+        "For buf_delete_lines and buf_replace_lines, expected must match the current buffer text exactly. "
         "Prefer the smallest possible edit and avoid including unchanged surrounding lines "
         "unless necessary. "
         "Validate changes with vim-make when appropriate, then stop.\n\n"
@@ -962,10 +1073,10 @@ def _run_edit(request, code, filetype, settings):
                 call_id = call.id
             arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
             original_arguments = arguments
-            if name == "insert_lines" and isinstance(arguments, dict) and isinstance(arguments.get("content"), str):
+            if name in ("buf_insert_lines", "insert_lines") and isinstance(arguments, dict) and isinstance(arguments.get("content"), str):
                 arguments = dict(arguments)
                 arguments["content"] = arguments["content"].splitlines()
-            if name in ("delete_lines", "replace_lines") and isinstance(arguments, dict):
+            if name in ("buf_delete_lines", "buf_replace_lines", "delete_lines", "replace_lines") and isinstance(arguments, dict):
                 arguments = dict(arguments)
                 for key in ("expected", "replacement"):
                     if isinstance(arguments.get(key), str):
@@ -1070,7 +1181,7 @@ def apply_operations(bufnr, firstline, lastline, operations):
     for operation in operations:
         if operation["tool"] not in FILE_TOOL_NAMES:
             arguments = operation["arguments"]
-            if operation["tool"] == "insert_lines":
+            if operation["tool"] == "buf_insert_lines":
                 start = firstline + arguments["line"] - 1
                 end = start + max(len(arguments["content"]) - 1, 0)
             else:

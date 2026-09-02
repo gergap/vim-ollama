@@ -13,7 +13,7 @@ from CodeEditor import apply_tool
 def test_insert_lines():
     document = ["one", "three"]
 
-    result = apply_tool(document, "insert_lines", {"line": 2, "content": ["two"]})
+    result = apply_tool(document, "buf_insert_lines", {"line": 2, "content": ["two"]})
 
     assert result["ok"]
     assert document == ["one", "two", "three"]
@@ -25,7 +25,7 @@ def test_replace_lines_requires_exact_expected_text():
     with pytest.raises(ValueError):
         apply_tool(
             document,
-            "replace_lines",
+            "buf_replace_lines",
             {"start_line": 2, "end_line": 2, "expected": ["wrong"], "replacement": ["new"]},
         )
 
@@ -35,10 +35,10 @@ def test_replace_lines_requires_exact_expected_text():
 def test_delete_and_replace_lines():
     document = ["one", "two", "three", "four"]
 
-    apply_tool(document, "delete_lines", {"start_line": 2, "end_line": 2, "expected": ["two"]})
+    apply_tool(document, "buf_delete_lines", {"start_line": 2, "end_line": 2, "expected": ["two"]})
     apply_tool(
         document,
-        "replace_lines",
+        "buf_replace_lines",
         {"start_line": 2, "end_line": 3, "expected": ["three", "four"], "replacement": ["3", "4"]},
     )
 
@@ -50,7 +50,7 @@ def test_replace_lines_accepts_omitted_trailing_blank_expected_line():
 
     apply_tool(
         document,
-        "replace_lines",
+        "buf_replace_lines",
         {"start_line": 2, "end_line": 4, "expected": ["two", "three"], "replacement": ["new"]},
     )
 
@@ -62,7 +62,7 @@ def test_replace_lines_accepts_extra_trailing_blank_expected_line():
 
     apply_tool(
         document,
-        "replace_lines",
+        "buf_replace_lines",
         {"start_line": 2, "end_line": 3, "expected": ["two", "three", ""], "replacement": ["new"]},
     )
 
@@ -75,7 +75,7 @@ def test_replace_lines_rejects_nonblank_expected_length_mismatch():
     with pytest.raises(ValueError, match="expected length"):
         apply_tool(
             document,
-            "replace_lines",
+            "buf_replace_lines",
             {"start_line": 2, "end_line": 3, "expected": ["two"], "replacement": ["new"]},
         )
 
@@ -83,14 +83,14 @@ def test_replace_lines_rejects_nonblank_expected_length_mismatch():
 def test_insert_at_end():
     document = ["one"]
 
-    apply_tool(document, "insert_lines", {"line": 2, "content": ["two", "three"]})
+    apply_tool(document, "buf_insert_lines", {"line": 2, "content": ["two", "three"]})
 
     assert document == ["one", "two", "three"]
 
 
 def test_insert_lines_accepts_string_content_from_model(monkeypatch):
     responses = iter([
-        {"tool_calls": [{"id": "insert-1", "function": {"name": "insert_lines", "arguments": {
+        {"tool_calls": [{"id": "insert-1", "function": {"name": "buf_insert_lines", "arguments": {
             "line": 2,
             "content": "two",
         }}}]},
@@ -99,12 +99,12 @@ def test_insert_lines_accepts_string_content_from_model(monkeypatch):
     monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
     operations, _messages = CodeEditor._run_edit("insert it", ["one"], "text", {"provider": "ollama"})
 
-    assert operations == [{"tool": "insert_lines", "arguments": {"line": 2, "content": ["two"]}}]
+    assert operations == [{"tool": "buf_insert_lines", "arguments": {"line": 2, "content": ["two"]}}]
 
 
 def test_replace_lines_accepts_multiline_string_arguments(monkeypatch):
     responses = iter([
-        {"tool_calls": [{"id": "replace-1", "function": {"name": "replace_lines", "arguments": {
+        {"tool_calls": [{"id": "replace-1", "function": {"name": "buf_replace_lines", "arguments": {
             "start_line": 1,
             "end_line": 2,
             "expected": "old\nvalue",
@@ -116,7 +116,7 @@ def test_replace_lines_accepts_multiline_string_arguments(monkeypatch):
 
     operations, _messages = CodeEditor._run_edit("replace it", ["old", "value"], "text", {"provider": "ollama"})
 
-    assert operations == [{"tool": "replace_lines", "arguments": {
+    assert operations == [{"tool": "buf_replace_lines", "arguments": {
         "start_line": 1,
         "end_line": 2,
         "expected": ["old", "value"],
@@ -164,6 +164,49 @@ def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
     names = {tool["function"]["name"] for tool in captured_tools}
     assert operations == []
     assert "create_file" in names
+    assert "insert_lines" in names
+    assert "buf_insert_lines" not in names
+
+
+def test_file_line_tools_use_absolute_file_lines(tmp_path):
+    path = tmp_path / "source.c"
+    path.write_text("one\ntwo\nthree\n")
+
+    apply_tool([], "replace_lines", {
+        "path": "source.c",
+        "start_line": 2,
+        "end_line": 2,
+        "expected": ["two"],
+        "replacement": ["changed"],
+    }, str(tmp_path))
+    apply_tool([], "insert_lines", {
+        "path": "source.c",
+        "line": 4,
+        "content": ["four"],
+    }, str(tmp_path))
+    apply_tool([], "delete_lines", {
+        "path": "source.c",
+        "start_line": 3,
+        "end_line": 3,
+        "expected": ["three"],
+    }, str(tmp_path))
+
+    assert path.read_text() == "one\nchanged\nfour\n"
+
+
+def test_range_tools_are_prefixed_and_relative(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit("edit the range", ["old"], "text", {"provider": "ollama", "range_mode": True})
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert {"buf_insert_lines", "buf_delete_lines", "buf_replace_lines"} <= names
     assert "insert_lines" not in names
 
 
@@ -196,7 +239,7 @@ def test_range_edit_rejects_filesystem_tools(monkeypatch):
 def test_tool_loop_returns_validated_operations(monkeypatch):
     responses = iter(
         [
-            {"tool_calls": [{"id": "call-1", "function": {"name": "replace_lines", "arguments": {
+            {"tool_calls": [{"id": "call-1", "function": {"name": "buf_replace_lines", "arguments": {
                 "start_line": 1,
                 "end_line": 1,
                 "expected": ["old"],
@@ -210,7 +253,7 @@ def test_tool_loop_returns_validated_operations(monkeypatch):
     operations, _messages = CodeEditor._run_edit("change it", ["old"], "text", {"provider": "ollama"})
 
     assert operations == [{
-        "tool": "replace_lines",
+        "tool": "buf_replace_lines",
         "arguments": {
             "start_line": 1,
             "end_line": 1,
@@ -297,6 +340,20 @@ def test_list_files_supports_non_recursive_and_recursive_modes(tmp_path):
 
     assert immediate["content"] == "README.md"
     assert recursive["content"].splitlines() == ["README.md", "src/main.c", "src/nested/detail.txt"]
+
+
+def test_list_files_ignores_git_directories(tmp_path):
+    (tmp_path / "visible.txt").write_text("visible")
+    git_directory = tmp_path / ".git"
+    git_directory.mkdir()
+    (git_directory / "config").write_text("internal")
+    nested_git_directory = tmp_path / "src" / ".git"
+    nested_git_directory.mkdir(parents=True)
+    (nested_git_directory / "index").write_text("internal")
+
+    result = apply_tool([], "list_files", {"path": ".", "recursive": True}, str(tmp_path))
+
+    assert result["content"].splitlines() == ["visible.txt"]
 
 
 def test_inspection_tools_reject_paths_outside_workspace(tmp_path):
