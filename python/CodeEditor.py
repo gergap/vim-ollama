@@ -691,7 +691,12 @@ def apply_filesystem_tool(cwd, name, arguments):
 
 
 def apply_tool(document, name, arguments, cwd=None):
-    """Validate and apply one tool call to a document snapshot."""
+    """Validate and apply one tool call using 1-based snapshot line numbers.
+
+    In range-edit mode, ``document`` is only the selected Vim range, so all
+    buffer-tool line arguments are relative to that range rather than the full
+    Vim buffer.
+    """
     if name == "read_file":
         if cwd is None:
             raise ValueError("read_file requires a current directory")
@@ -820,6 +825,8 @@ def _edit_prompt(request, code, filetype, settings):
         )
 
     start_line = settings.get("start_line", 1)
+    # The model sees absolute Vim numbers for context, but tool arguments use
+    # positions relative to the editable snapshot passed in as ``code``.
     numbered = "\n".join(
         f"{index}|{line}" for index, line in enumerate(code, start_line)
     )
@@ -920,6 +927,7 @@ def _run_edit(request, code, filetype, settings):
             {"role": "system", "content": _system_prompt(settings)},
             {"role": "user", "content": _edit_prompt(request, code, filetype, settings)},
         ]
+    # Keep tool coordinates relative to this range while the model is editing.
     document = list(code)
     operations = []
     _progress(f"Starting {provider} request with {settings.get('model') or DEFAULT_MODEL}")
@@ -1052,7 +1060,7 @@ def get_progress_events():
 
 
 def apply_operations(bufnr, firstline, lastline, operations):
-    """Apply the already validated operation sequence to a Vim buffer."""
+    """Apply validated relative-range operations to the actual Vim buffer."""
     import vim
 
     buffer = vim.buffers[bufnr]
@@ -1066,6 +1074,8 @@ def apply_operations(bufnr, firstline, lastline, operations):
                 start = firstline + arguments["line"] - 1
                 end = start + max(len(arguments["content"]) - 1, 0)
             else:
+                # Tool arguments address the sliced document; changed signs
+                # must use the corresponding absolute Vim line numbers.
                 start = firstline + arguments["start_line"] - 1
                 replacement = arguments.get("replacement", [])
                 end = start + max(len(replacement) - 1, 0)
