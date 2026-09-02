@@ -78,4 +78,5 @@ When in doubt, omit.
 Prefer short sections and bullets. If the repo is simple, keep the file simple. If the repo is large, summarize the few structural facts that actually change how an agent should work.
 
 If `AGENTS.md` already exists at `/home/gergap/tmp/qtdemo`, improve it in place rather than rewriting blindly. Preserve verified useful guidance, delete fluff or stale claims, and reconcile it with the current codebase.
+Don't start implementing any code yet. Only create the AGENTS.md.
 
