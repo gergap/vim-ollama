@@ -36,7 +36,7 @@ function! s:OpenConversation(request) abort
     setlocal foldlevel=0
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
-    call setline(1, ['OllamaEdit', '=========', '', 'Request: ' .. a:request, ''])
+    call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
     call prompt_setprompt(s:conversation_bufnr, '>>> ')
 endfunction
@@ -47,7 +47,8 @@ function! s:PrepareConversation(request) abort
         return
     endif
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
-    call appendbufline(s:conversation_bufnr, l:line_count - 1, ['', 'Follow-up: ' .. a:request, ''])
+    call appendbufline(s:conversation_bufnr, l:line_count - 1,
+                \ [''] + split('Follow-up: ' .. a:request, "\n", v:true) + [''])
 endfunction
 
 function! ollama#edit#AppendProgress(text) abort
@@ -139,6 +140,8 @@ function! ollama#edit#ShowFile(path) abort
     elseif !&modified
         execute 'edit! ' .. fnameescape(l:path)
     endif
+    " Tool operations can update this file outside Vim while the buffer is open.
+    setlocal autoread
     normal! gg
 endfunction
 
@@ -508,11 +511,49 @@ function! ollama#edit#EditCommand(request, start_line, end_line, range_count) ab
 endfunction
 
 function! ollama#edit#QuickFix() abort
+    let l:build_output = ''
+    try
+        " Run the initial build before starting the worker so its first prompt
+        " already contains the current diagnostics.
+        let l:build_output = execute('silent make!')
+        redraw!
+        " Vim may encode line breaks in execute() output as NUL characters.
+        let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')
+    catch
+        let l:build_output = 'Vim :make failed: ' .. v:exception
+    endtry
+
+    let l:diagnostics = []
+    for l:item in getqflist()
+        let l:filename = get(l:item, 'filename', '')
+        if empty(l:filename) && get(l:item, 'bufnr', 0) > 0
+            let l:filename = bufname(l:item.bufnr)
+        endif
+        let l:location = empty(l:filename) ? '[unknown]' : l:filename
+        let l:line = get(l:item, 'lnum', 0)
+        let l:column = get(l:item, 'col', 0)
+        let l:text = substitute(get(l:item, 'text', ''), '\%x00', "\n", 'g')
+        call add(l:diagnostics, printf('%s:%d:%d: %s', l:location, l:line, l:column, l:text))
+    endfor
+
+    let l:report_parts = []
+    if !empty(l:build_output)
+        call add(l:report_parts, l:build_output)
+    endif
+    if !empty(l:diagnostics)
+        call extend(l:report_parts, l:diagnostics)
+    endif
+    let l:report = join(l:report_parts, "\n")
+    if empty(l:report)
+        let l:report = 'Vim :make completed without diagnostics.'
+    endif
     call s:EditWorkspace(
-                \ 'Build the project using the provided `vim-make` tool, inspect all compiler errors and warnings, and fix them. '
+                \ "We are in Vim-Ollama AI assisted QuickFix mode to fix build issues.\n\n"
+                \ .. "Current build results from Vim :make:\n```" .. l:report .. "\n```\n\n"
+                \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
                 \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
-                \ .. 'Use the supplied OllamaEdit tools for every change. '
-                \ .. 'Never use the execute tool for compiling, use vim-make instead. '
+                \ .. 'Use `vim-make` tool to verify after making changes. '
+                \ .. 'Never use the execute tool for compiling. '
                 \ .. 'At the end, provide a concise summary of the changes made and the final build status.')
 endfunction
 

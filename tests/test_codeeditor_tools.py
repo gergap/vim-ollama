@@ -344,12 +344,14 @@ def test_list_files_supports_non_recursive_and_recursive_modes(tmp_path):
 
 def test_list_files_ignores_git_directories(tmp_path):
     (tmp_path / "visible.txt").write_text("visible")
+    (tmp_path / ".hidden.txt").write_text("hidden")
     git_directory = tmp_path / ".git"
     git_directory.mkdir()
     (git_directory / "config").write_text("internal")
     nested_git_directory = tmp_path / "src" / ".git"
     nested_git_directory.mkdir(parents=True)
     (nested_git_directory / "index").write_text("internal")
+    (tmp_path / "src" / ".hidden.txt").write_text("hidden")
 
     result = apply_tool([], "list_files", {"path": ".", "recursive": True}, str(tmp_path))
 

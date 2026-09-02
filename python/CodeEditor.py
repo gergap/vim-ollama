@@ -680,7 +680,7 @@ def _list_files(cwd, arguments):
         except OSError:
             continue
         for entry in entries:
-            if entry.is_symlink():
+            if entry.name.startswith(".") or entry.is_symlink():
                 continue
             if entry.is_file(follow_symlinks=False):
                 files.append(os.path.relpath(entry.path, cwd))
