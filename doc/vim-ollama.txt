@@ -125,26 +125,56 @@ The vim-ollama plugin provides the following commands:
         :OllamaTask "Add doxygen comments to all functions"
 <
                                                       *:OllamaEdit*
-:OllamaEdit
+:[range]OllamaEdit
     - Description: Allows editing a selected text using the AI. This command
-    works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
+    can work on a range or in workspace mode. In range mode the AI only
+    gets buffer tools and so can only edit the selected range inside a Vim
+    buffer. File edits are not allowed.
+    In workspace mode it can edit all files in the current directory.
     a visual selection. Alternatively, you can use the mapping `<leader>e` to
     achieve the same, but the command has the advantage of a command history,
     which may be handy when you want to apply the same change to multiple
     locations.
     - Usage:
 >
-        :OllamaEdit [prompt]
+        :[range]OllamaEdit [prompt]
 <
     - Example:
 >
-        :OllamaEdit "add comments to this code"
+        # Range Mode
+        :%OllamaEdit "add doxygen comments to all functions"
+        # Workspace Mode (used AGENTS.md)
+        :OllamaEdit "start implementing the code"
 <
-    - Accepting and Rejecting changes: The changes made by the AI are applied
-    as an inline diff. You can accept/reject each individual change or all.
-    The dialog uses Vim's `popup_filter_yesno`, which means you can accept
-    using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
-    works like pressing 'n'. `
+ Note: It is recommended to track all source files in Git so that you can
+ undo changes of the AI and avoid loosing data if AI goes crazy.
+
+                                                      *:OllamaQuickFix*
+:OllamaQuickFix
+    - Description: Builds the project with Vim's configured `makeprg`, inspects
+      compiler errors and warnings, and asks the AI to fix them. The command
+      repeats the build and fix cycle until the build succeeds.
+      It runs in workspace mode and may modify files below the current working
+      directory.
+
+    - Usage:
+>
+        :OllamaQuickFix
+<
+
+                                                      *:OllamaInitAgents*
+:OllamaInitAgents
+    - Description: Starts a workspace edit to create a AGENTS.md file.
+      Therefore it inspects all files in the current directory.
+      It will also create a local git repo and add a .gitignore file if it
+      does not exist yet.
+      The AGENTS.md file will be injected into the context of further
+      OllamaEdit calls.
+
+    - Usage:
+>
+        :OllamaInitAgents
+<
 
                                                       *:OllamaPull*
 :OllamaPull
