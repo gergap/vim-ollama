@@ -220,6 +220,19 @@ def test_tool_loop_returns_validated_operations(monkeypatch):
     }]
 
 
+def test_final_model_response_is_not_truncated(monkeypatch):
+    content = "x" * 300
+    progress = []
+    responses = iter([{"tool_calls": [], "content": content}])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(text))
+
+    operations, _messages = CodeEditor._run_edit("summarize", [], "text", {"provider": "ollama"})
+
+    assert operations == []
+    assert progress[-1] == "Model: " + content
+
+
 def test_filesystem_tools_are_limited_to_current_directory(tmp_path):
     apply_tool([], "create_folder", {"path": "new"}, str(tmp_path))
     apply_tool([], "create_file", {"path": "new/file.txt", "content": "hello"}, str(tmp_path))

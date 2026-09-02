@@ -940,7 +940,7 @@ def _run_edit(request, code, filetype, settings):
             messages.append(message.model_dump(exclude_none=True))
         if not tool_calls:
             content = message.get("content", "") if isinstance(message, dict) else (message.content or "")
-            _progress("Model finished" if not content else f"Model: {content.strip()[:240]}")
+            _progress("Model finished" if not content else f"Model: {content.strip()}")
             return operations, messages
 
         for call in tool_calls:
