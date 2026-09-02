@@ -56,6 +56,14 @@ Include these Vim-ollama specific build instructions:
 Use the `vim-make` tool to build this project. It will return all diagnostics needed.
 Vim will call the configured build tools for you, you don't have to care.
 Never build manually using the `execute` tool!
+
+### Vim-Ollama Track Changes
+
+Track all changes in Git.
+If a git repo does not exist yet create a local repo using `git_init` tool.
+If not .gitignore exists yet create one and add it to get. It should contain
+temporary files (e.g. `.swp`, and `.tmp`), `tags` file and build artifacts like `.o` files.
+Also exclude build folders like `build`, `bld` and `bldDebug' or `bldRelease`.
 ```
 
 Exclude:
