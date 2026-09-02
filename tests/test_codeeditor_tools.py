@@ -45,6 +45,41 @@ def test_delete_and_replace_lines():
     assert document == ["one", "3", "4"]
 
 
+def test_replace_lines_accepts_omitted_trailing_blank_expected_line():
+    document = ["one", "two", "three", ""]
+
+    apply_tool(
+        document,
+        "replace_lines",
+        {"start_line": 2, "end_line": 4, "expected": ["two", "three"], "replacement": ["new"]},
+    )
+
+    assert document == ["one", "new"]
+
+
+def test_replace_lines_accepts_extra_trailing_blank_expected_line():
+    document = ["one", "two", "three"]
+
+    apply_tool(
+        document,
+        "replace_lines",
+        {"start_line": 2, "end_line": 3, "expected": ["two", "three", ""], "replacement": ["new"]},
+    )
+
+    assert document == ["one", "new"]
+
+
+def test_replace_lines_rejects_nonblank_expected_length_mismatch():
+    document = ["one", "two", "three"]
+
+    with pytest.raises(ValueError, match="expected length"):
+        apply_tool(
+            document,
+            "replace_lines",
+            {"start_line": 2, "end_line": 3, "expected": ["two"], "replacement": ["new"]},
+        )
+
+
 def test_insert_at_end():
     document = ["one"]
 

@@ -521,6 +521,23 @@ def _check_range(document, start_line, end_line, expected):
         raise ValueError("expected text does not match the editable snapshot")
 
 
+def _normalize_expected(document, start_line, end_line, expected):
+    """Allow omitted trailing blank lines without relaxing content checks."""
+    if start_line < 1 or end_line < start_line or end_line > len(document):
+        raise ValueError("line range is outside the editable snapshot")
+
+    actual = document[start_line - 1:end_line]
+    if len(expected) < len(actual):
+        missing = actual[len(expected):]
+        if expected == actual[:len(expected)] and all(line == "" for line in missing):
+            return expected + missing
+    elif len(expected) > len(actual):
+        extra = expected[len(actual):]
+        if expected[:len(actual)] == actual and all(line == "" for line in extra):
+            return expected[:len(actual)]
+    return expected
+
+
 def _safe_path(cwd, value, allow_root=False):
     """Resolve a workspace-relative path without allowing traversal or links out."""
     if not isinstance(value, str) or not value or "\x00" in value:
@@ -716,6 +733,7 @@ def apply_tool(document, name, arguments, cwd=None):
             raise ValueError(f"{name}: expected must be a list of strings, got {type(expected).__name__}")
         if not all(isinstance(item, str) for item in expected):
             raise ValueError(f"{name}: every expected item must be a string")
+        expected = _normalize_expected(document, start, end, expected)
         if end - start + 1 != len(expected):
             raise ValueError(f"{name} expected length does not match line range")
         _check_range(document, start, end, expected)
