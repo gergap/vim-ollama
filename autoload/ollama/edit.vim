@@ -35,6 +35,7 @@ function! s:OpenConversation(request) abort
     setlocal modifiable
     setlocal foldmethod=expr
     setlocal foldexpr=ollama#edit#ConversationFold(v:lnum)
+    setlocal foldtext=ollama#edit#ConversationFoldText()
     setlocal foldlevel=0
     let b:ollama_edit_conversation = v:true
     augroup OllamaEditConversation
@@ -47,6 +48,22 @@ function! s:OpenConversation(request) abort
     call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
     call prompt_setprompt(s:conversation_bufnr, '>>> ')
+endfunction
+
+function! ollama#edit#ConversationFoldText() abort
+    let l:start = getline(v:foldstart)
+    let l:label = substitute(l:start, '^#StartDiagnostic\s*', '', '')
+    let l:end = getline(v:foldend)
+    let l:status = substitute(l:end, '^#EndDiagnostic\s*', '', '')
+    if empty(l:label)
+        let l:label = 'diagnostic'
+    endif
+    let l:line_count = v:foldend - v:foldstart + 1
+    let l:prefix = '+-- ' .. l:line_count .. ' lines: '
+    if empty(l:status)
+        return l:prefix .. l:label
+    endif
+    return l:prefix .. l:label .. '  ' .. l:status
 endfunction
 
 function! ollama#edit#ConversationFold(lnum) abort
@@ -113,15 +130,18 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
         return
     endif
     let l:append = a:0 > 0 && a:1
+    let l:status = a:0 > 1 ? a:2 : ''
     let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
     call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
     try
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+    let l:end_line = -1
     if l:append
         let l:insert_at = -1
         for l:idx in range(l:line_count, 1, -1)
             if getbufline(s:conversation_bufnr, l:idx)[0] =~# '^#EndDiagnostic\>'
                 let l:insert_at = l:idx - 1
+                let l:end_line = l:idx
                 break
             endif
         endfor
@@ -133,6 +153,15 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     endif
     let l:lines = l:append ? split(a:content, "\n", v:true) : ['#StartDiagnostic ' .. a:title] + split(a:content, "\n", v:true) + ['#EndDiagnostic']
     call appendbufline(s:conversation_bufnr, l:insert_at, l:lines)
+    if l:append && !empty(l:status) && l:end_line >= 0
+        let l:n = len(l:lines)
+        for l:i in range(l:end_line, l:end_line + l:n)
+            if l:i > 0 && getbufline(s:conversation_bufnr, l:i)[0] =~# '^#EndDiagnostic\>'
+                call setbufline(s:conversation_bufnr, l:i, '#EndDiagnostic ' .. l:status)
+                break
+            endif
+        endfor
+    endif
     if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
         " Keep diagnostic folds closed without toggling the fold under the cursor.
         call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
@@ -446,6 +475,7 @@ function! s:FinishExecute(request_id, state, job, status) abort
                 \ 'message': l:timed_out ? 'execution timed out and was terminated' : a:status == 0 ? 'execution completed successfully' : 'execution failed',
                 \ 'output': l:output,
                 \ 'exit_code': a:status,
+                \ 'decision': get(a:state, 'decision', 'allowed'),
                 \ }
     call s:SubmitMakeResult(a:request_id, l:result)
 endfunction
@@ -479,18 +509,23 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
 
         let l:key = fnamemodify(l:path, ':.')
         let l:decisions = s:LoadExecuteDecisions()
+        let l:decision = 'allowed'
         if get(l:decisions, l:key, '') !=# 'always'
             let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
             if l:choice == 3 || l:choice == 0
-                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'output': []})
+                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
                 return
             endif
-            if l:choice == 2
+            if l:choice == 1
+                let l:decision = 'allowed_once'
+            elseif l:choice == 2
+                let l:decision = 'allowed_always'
                 let l:decisions[l:key] = 'always'
                 call s:SaveExecuteDecisions(l:decisions)
             endif
+        else
+            let l:decision = 'allowed_always'
         endif
-
         let l:state = {
                     \ 'output': [],
                     \ 'finished': v:false,
@@ -498,6 +533,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     \ 'timeout_timer': -1,
                     \ 'kill_timer': -1,
                     \ 'kill_timeout': l:kill_timeout,
+                    \ 'decision': l:decision,
                     \ }
         let l:options = {
                     \ 'cwd': g:ollama_edit_cwd,
@@ -592,7 +628,7 @@ try:
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + json.dumps(event.get('text', '')) + ')')
         if event.get('fold_append'):
-            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('text', '')) + ', 1)')
+            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('text', '')) + ', 1, ' + json.dumps(event.get('fold_status', '')) + ')')
         if event.get('diagnostic'):
             diagnostic = event['diagnostic']
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')

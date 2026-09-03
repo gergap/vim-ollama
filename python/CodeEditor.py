@@ -468,7 +468,7 @@ WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXE
 EDIT_FOLD_TOOL_NAMES = {"replace_lines", "insert_lines", "delete_lines",
                         "buf_replace_lines", "buf_insert_lines", "buf_delete_lines",
                         "read_file", "write_file", "create_file",
-                        "delete_file", "chmod", "list_files"}
+                        "delete_file", "chmod", "list_files", "execute"}
 
 log = None
 g_thread_lock = threading.Lock()
@@ -562,7 +562,7 @@ def _request_check(arguments):
         return g_make_results.pop(request_id)
 
 
-def _request_execute(arguments):
+def _request_execute(arguments, cwd=None):
     if not isinstance(arguments, dict):
         error = "execute tool requires a path and argument list"
         _progress(f"Tool error: {error}", tool="execute")
@@ -591,6 +591,14 @@ def _request_execute(arguments):
         error = "execute kill_timeout must be a non-negative number of seconds"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
+    if cwd is None:
+        error = "execute requires a current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    local_path = os.path.normpath(os.path.join(cwd, path))
+    local_cwd = os.path.normpath(cwd)
+    if os.path.commonpath([local_path, local_cwd]) != local_cwd or not os.path.isfile(local_path) or not os.access(local_path, os.X_OK) or os.path.islink(local_path):
+        return {"ok": False, "message": f"execute denied: {path} is not a local executable below the current directory", "denied": path, "output": ""}
     arguments = dict(arguments)
     arguments["timeout"] = timeout
     arguments["kill_timeout"] = kill_timeout
@@ -1307,7 +1315,8 @@ def _run_edit(request, code, filetype, settings):
                 display_arguments["content"] = f"<{len(original_arguments['content'])} characters>"
             fold_path = arguments.get("path") if isinstance(arguments, dict) else None
             fold_title = f"{name} {fold_path}" if fold_path else name
-            _progress(f"Tool call: {name} {json.dumps(display_arguments)}", tool=name, arguments=arguments, fold=name in EDIT_FOLD_TOOL_NAMES, fold_title=fold_title)
+            call_json = json.dumps(display_arguments, indent=2)
+            _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=name in EDIT_FOLD_TOOL_NAMES, fold_title=fold_title)
             try:
                 if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
@@ -1320,7 +1329,7 @@ def _run_edit(request, code, filetype, settings):
                 elif name in CHECK_TOOL_NAMES:
                     result = _request_check(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
-                    result = _request_execute(arguments)
+                    result = _request_execute(arguments, settings.get("cwd"))
                 elif name in GIT_TOOL_NAMES:
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
@@ -1332,6 +1341,19 @@ def _run_edit(request, code, filetype, settings):
                 if name in EDIT_FOLD_TOOL_NAMES:
                     details["fold_append"] = name
                     details["fold_title"] = fold_title
+                    status = ""
+                    if result.get("denied"):
+                        status = "DENIED"
+                    else:
+                        decision = result.get("decision")
+                        if decision == "allowed_once":
+                            status = "ALLOWED ONCE"
+                        elif decision == "allowed_always":
+                            status = "ALLOWED ALWAYS"
+                        elif decision == "canceled":
+                            status = "CANCELED"
+                    if status:
+                        details["fold_status"] = status
                     diagnostic = result.get("content") or result.get("output")
                     if diagnostic:
                         details["text"] = result["message"] + "\n" + diagnostic
