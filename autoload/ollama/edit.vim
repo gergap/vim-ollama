@@ -579,7 +579,7 @@ try:
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')
         if event.get('tool') in ('create_file', 'create_folder', 'delete_file', 'delete_folder') and event.get('path'):
             vim.command('call ollama#edit#RefreshNERDTree()')
-        if event.get('tool') == 'create_file' and event.get('path'):
+        if event.get('tool') in ('create_file', 'insert_lines', 'delete_lines', 'replace_lines', 'write_file', 'chmod') and event.get('path'):
             vim.command('call ollama#edit#ShowFile(' + json.dumps(event['path']) + ')')
     vim.command('let g:ollama_edit_progress_index = ' + str(len(events)))
 
