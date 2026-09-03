@@ -465,10 +465,6 @@ GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
 WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
-EDIT_FOLD_TOOL_NAMES = {"replace_lines", "insert_lines", "delete_lines",
-                        "buf_replace_lines", "buf_insert_lines", "buf_delete_lines",
-                        "read_file", "write_file", "create_file",
-                        "delete_file", "chmod", "list_files", "execute"}
 
 log = None
 g_thread_lock = threading.Lock()
@@ -1312,8 +1308,10 @@ def _run_edit(request, code, filetype, settings):
                 display_arguments["content"] = f"<{len(original_arguments['content'])} characters>"
             fold_path = arguments.get("path") if isinstance(arguments, dict) else None
             fold_title = f"{name} {fold_path}" if fold_path else name
+            if name in ("grep", "glob") and isinstance(arguments, dict) and arguments.get("pattern"):
+                fold_title += f" {arguments['pattern']}"
             call_json = json.dumps(display_arguments, indent=2)
-            _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=name in EDIT_FOLD_TOOL_NAMES, fold_title=fold_title)
+            _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
             try:
                 if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
@@ -1334,34 +1332,29 @@ def _run_edit(request, code, filetype, settings):
                 if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
-                details = {"tool": name, "path": arguments.get("path")}
-                if name in EDIT_FOLD_TOOL_NAMES:
-                    details["fold_append"] = name
-                    details["fold_title"] = fold_title
-                    status = ""
-                    if result.get("denied"):
-                        status = "DENIED"
-                    else:
-                        decision = result.get("decision")
-                        if decision == "allowed_once":
-                            status = "ALLOWED ONCE"
-                        elif decision == "allowed_always":
-                            status = "ALLOWED ALWAYS"
-                        elif decision == "canceled":
-                            status = "CANCELED"
-                    if status:
-                        details["fold_status"] = status
-                    diagnostic = result.get("content") or result.get("output")
-                    if diagnostic:
-                        details["text"] = result["message"] + "\n" + diagnostic
-                else:
-                    diagnostic = result.get("content") or result.get("output")
-                    if diagnostic:
-                        details["diagnostic"] = {"title": name, "content": diagnostic}
+                details = {
+                    "tool": name,
+                    "path": arguments.get("path"),
+                    "fold_append": name,
+                    "fold_title": fold_title,
+                    "fold_status": "SUCCESS" if result.get("ok", False) else "FAILED",
+                }
+                diagnostic = result.get("content") or result.get("output")
+                details["fold_content"] = result["message"]
+                if diagnostic:
+                    details["fold_content"] += "\n" + diagnostic
                 _progress(result["message"], **details)
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
-                _progress(f"Tool error: {error}; request: {json.dumps(arguments)}", tool=name, arguments=arguments)
+                _progress(
+                    f"Tool error: {error}; request: {json.dumps(arguments)}",
+                    tool=name,
+                    arguments=arguments,
+                    fold_append=name,
+                    fold_title=fold_title,
+                    fold_status="FAILED",
+                    fold_content=f"Tool error: {error}",
+                )
                 if settings.get("stop_on_error", False):
                     raise ValueError(f"{name} failed: {error}") from error
             if provider == "ollama":

@@ -643,7 +643,7 @@ try:
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + json.dumps(event.get('text', '')) + ')')
         if event.get('fold_append'):
-            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('text', '')) + ', 1, ' + json.dumps(event.get('fold_status', '')) + ')')
+            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('fold_content', event.get('text', ''))) + ', 1, ' + json.dumps(event.get('fold_status', '')) + ')')
         if event.get('diagnostic'):
             diagnostic = event['diagnostic']
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')

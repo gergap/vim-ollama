@@ -337,6 +337,79 @@ def test_tool_loop_returns_validated_operations(monkeypatch):
     }]
 
 
+def test_tool_fold_reports_success(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "read-1", "function": {"name": "read_file", "arguments": {
+            "path": "main.c",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("inspect it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    result_event = next(event for event in progress if event.get("fold_append") == "read_file")
+    assert result_event["fold_status"] == "SUCCESS"
+
+
+def test_grep_fold_title_includes_pattern(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "grep-1", "function": {"name": "grep", "arguments": {
+            "pattern": "main",
+            "path": ".",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("search it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    start_event = next(event for event in progress if event.get("fold") and event.get("tool") == "grep")
+    assert start_event["fold_title"] == "grep . main"
+
+
+def test_glob_fold_title_includes_pattern(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "glob-1", "function": {"name": "glob", "arguments": {
+            "pattern": "*.c",
+            "path": ".",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("find it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    start_event = next(event for event in progress if event.get("fold") and event.get("tool") == "glob")
+    assert start_event["fold_title"] == "glob . *.c"
+
+
+def test_tool_fold_reports_failure(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "read-1", "function": {"name": "read_file", "arguments": {
+            "path": "missing.c",
+        }}}]},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    with pytest.raises(ValueError, match="read_file failed"):
+        CodeEditor._run_edit("inspect it", [], "", {"provider": "ollama", "range_mode": False, "cwd": ".", "stop_on_error": True})
+
+    result_event = next(event for event in progress if event.get("fold_append") == "read_file")
+    assert result_event["fold_status"] == "FAILED"
+
+
 def test_final_model_response_is_not_truncated(monkeypatch):
     content = "x" * 300
     progress = []
