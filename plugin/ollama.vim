@@ -145,7 +145,7 @@ if !exists('g:ollama_edit_options')
                 \ 'temperature': 0,
                 \ 'top_p': 0.95,
                 \ 'num_predict': 4096,
-                \ 'num_ctx': 8192,
+                \ 'num_ctx': 65536,
                 \ 'keep_alive': 1800,
                 \ }
 endif
