@@ -230,6 +230,24 @@ def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     assert "read-only" in messages[1]["content"]
 
 
+def test_quickfix_checker_excludes_vim_make(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit(
+        "fix it", [], "", {"provider": "ollama", "range_mode": False, "quickfix_checker": True}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert "vim-check" in names
+    assert "vim-make" not in names
+
+
 def test_workspace_prompt_does_not_include_buffer_snapshot():
     prompt = CodeEditor._edit_prompt(
         "fix the project", ["should not be included"], "", {"range_mode": False}

@@ -323,6 +323,55 @@ function! ollama#edit#RunMake(request_id, arguments) abort
     endtry
 endfunction
 
+function! s:FinishCheck(request_id, state, job, status) abort
+    let l:output = join(a:state.output, "\n")
+    call setqflist([], 'r', {'lines': a:state.output, 'efm': a:state.errorformat})
+    let l:diagnostics = []
+    for l:item in getqflist()
+        call add(l:diagnostics, {
+                    \ 'filename': get(l:item, 'filename', ''),
+                    \ 'lnum': get(l:item, 'lnum', 0),
+                    \ 'col': get(l:item, 'col', 0),
+                    \ 'type': get(l:item, 'type', ''),
+                    \ 'text': get(l:item, 'text', ''),
+                    \ })
+    endfor
+    let l:result = {
+                \ 'ok': a:status == 0 && empty(l:diagnostics),
+                \ 'message': a:status == 0 && empty(l:diagnostics) ? 'checker completed without diagnostics' : 'checker returned diagnostics',
+                \ 'output': l:output,
+                \ 'diagnostics': l:diagnostics,
+                \ }
+    call s:SubmitMakeResult(a:request_id, l:result)
+endfunction
+
+function! ollama#edit#RunCheck(request_id) abort
+    try
+        let l:checker = get(g:, 'ollama_edit_checker', {})
+        if type(l:checker) != v:t_dict || type(get(l:checker, 'command', v:null)) != v:t_list
+            throw 'no valid checker is configured for this filetype'
+        endif
+        for l:argument in l:checker.command
+            if type(l:argument) != v:t_string || empty(l:argument) || stridx(l:argument, "\x00") != -1
+                throw 'checker command must be a list of non-empty strings'
+            endif
+        endfor
+        let l:state = {'output': [], 'errorformat': get(l:checker, 'errorformat', '%f:%l:%c: %m')}
+        let l:options = {
+                    \ 'cwd': g:ollama_edit_cwd,
+                    \ 'out_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
+                    \ 'exit_cb': function('s:FinishCheck', [a:request_id, l:state]),
+                    \ }
+        let l:job = job_start(l:checker.command, l:options)
+        if type(l:job) == v:t_number && l:job == -1
+            throw 'failed to start configured checker'
+        endif
+    catch
+        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'checker failed: ' .. v:exception, 'output': '', 'diagnostics': []})
+    endtry
+endfunction
+
 function! s:ExecuteDecisionFile() abort
     return g:ollama_edit_cwd .. '/.ollama-execute.json'
 endfunction
@@ -501,6 +550,8 @@ try:
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
+        if event.get('type') == 'check_request':
+            vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ')')
         if event.get('type') == 'execute_request':
             vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('diagnostic'):
@@ -549,6 +600,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let g:ollama_edit_lastline = s:lastline
     let g:ollama_edit_changedtick = b:changedtick
     let g:ollama_edit_cwd = getcwd()
+    let g:ollama_edit_checker = get(a:settings, 'checker', {})
 
     let l:is_openai = g:ollama_edit_provider =~# '^openai'
     let l:session_settings = {
@@ -602,6 +654,9 @@ endfunction
 
 function! s:EditWorkspace(request, ...) abort
     let l:settings = {'range_mode': v:false, 'continue_history': a:0 > 0 ? a:1 : v:false}
+    if a:0 > 0 && type(a:1) == v:t_dict
+        let l:settings = extend(l:settings, a:1)
+    endif
     call s:StartEditSession(a:request, [], '', l:settings)
 endfunction
 
@@ -633,17 +688,32 @@ function! ollama#edit#EditCommand(request, start_line, end_line, range_count) ab
 endfunction
 
 function! ollama#edit#QuickFix() abort
+    let l:filetype = &filetype
+    let l:compiled = index(['c', 'cpp', 'objc', 'objcpp', 'rust'], l:filetype) >= 0
+    let l:checker = get(get(g:, 'ollama_quickfix_checkers', {}), l:filetype, {})
     let l:build_output = ''
-    try
-        " Run the initial build before starting the worker so its first prompt
-        " already contains the current diagnostics.
-        let l:build_output = execute('silent make!')
-        redraw!
-        " Vim may encode line breaks in execute() output as NUL characters.
-        let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')
-    catch
-        let l:build_output = 'Vim :make failed: ' .. v:exception
-    endtry
+    if l:compiled
+        try
+            " Run the initial build before starting the worker so its first prompt
+            " already contains the current diagnostics.
+            let l:build_output = execute('silent make!')
+            redraw!
+            " Vim may encode line breaks in execute() output as NUL characters.
+            let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')
+        catch
+            let l:build_output = 'Vim :make failed: ' .. v:exception
+        endtry
+    elseif type(l:checker) == v:t_dict && type(get(l:checker, 'command', v:null)) == v:t_list
+        try
+            let l:build_output = join(systemlist(l:checker.command, '', 1), "\n")
+            call setqflist([], 'r', {'lines': split(l:build_output, "\n", v:true), 'efm': get(l:checker, 'errorformat', '%f:%l:%c: %m')})
+            redraw!
+        catch
+            let l:build_output = 'Checker failed: ' .. v:exception
+        endtry
+    else
+        let l:build_output = 'No checker is configured for filetype ' .. (empty(l:filetype) ? '[unknown]' : l:filetype) .. '.'
+    endif
 
     let l:diagnostics = []
     for l:item in getqflist()
@@ -667,16 +737,27 @@ function! ollama#edit#QuickFix() abort
     endif
     let l:report = join(l:report_parts, "\n")
     if empty(l:report)
-        let l:report = 'Vim :make completed without diagnostics.'
+        let l:report = l:compiled ? 'Vim :make completed without diagnostics.' : 'Checker completed without diagnostics.'
     endif
-    call s:EditWorkspace(
-                \ "We are in Vim-Ollama AI assisted QuickFix mode to fix build issues.\n\n"
-                \ .. "Current build results from Vim :make:\n```" .. l:report .. "\n```\n\n"
-                \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
-                \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
-                \ .. 'Use `vim-make` tool to verify after making changes. '
-                \ .. 'Never use the execute tool for compiling. '
-                \ .. 'At the end, provide a concise summary of the changes made and the final build status.')
+    if l:compiled
+        let l:prompt = "We are in Vim-Ollama AI assisted QuickFix mode to fix build issues.\n\n"
+                    \ .. "Current build results from Vim :make:\n```" .. l:report .. "\n```\n\n"
+                    \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
+                    \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
+                    \ .. 'Use `vim-make` tool to verify after making changes. '
+                    \ .. 'Never use the execute tool for compiling. '
+                    \ .. 'At the end, provide a concise summary of the changes made and the final build status.'
+        call s:EditWorkspace(l:prompt, {'quickfix_mode': v:true})
+    else
+        let l:checker_name = type(l:checker) == v:t_dict && type(get(l:checker, 'command', v:null)) == v:t_list ? join(l:checker.command, ' ') : '[none]'
+        let l:prompt = "We are in Vim-Ollama AI assisted QuickFix mode to fix script-language issues.\n\n"
+                    \ .. "Current checker results from " .. l:checker_name .. ":\n```" .. l:report .. "\n```\n\n"
+                    \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
+                    \ .. 'Repeat the checker, diagnosis, and fix cycle until the checker succeeds. '
+                    \ .. 'Use the `vim-check` tool after making changes. Do not use vim-make. '
+                    \ .. 'At the end, provide a concise summary of the changes made and the final checker status.'
+        call s:EditWorkspace(l:prompt, {'checker': l:checker, 'quickfix_checker': v:true})
+    endif
 endfunction
 
 function! ollama#edit#InitAgents() abort

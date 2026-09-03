@@ -525,6 +525,21 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
+                                                      *g:ollama_quickfix_checkers*
+g:ollama_quickfix_checkers
+    - Description: Configures checker commands used by `:OllamaQuickFix` for
+      non-compiled filetypes. Each entry contains a command list and optional
+      errorformat. For example:
+>
+        let g:ollama_quickfix_checkers = {
+                \ 'python': {
+                \     'command': ['ruff', 'check', '.'],
+                \     'errorformat': '%f:%l:%c: %m'
+                \ }
+                \ }
+<
+    - Default: Python uses `ruff check .`.
+
                                                       *g:ollama_stop_on_error*
 g:ollama_stop_on_error
     - Description: Stops the OllamaEdit cycle immediately after a tool error

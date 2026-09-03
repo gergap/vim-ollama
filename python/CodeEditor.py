@@ -299,12 +299,23 @@ MAKE_TOOLS = [
     },
 ]
 
+CHECK_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "vim-check",
+            "description": "Run the configured language checker and inspect its diagnostics. Use after changing script-language files.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+]
+
 EXECUTE_TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "execute",
-            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution. Timeout values are in seconds.",
+            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution. Timeout values are in seconds. NEVER invoke system tools!",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -419,18 +430,19 @@ GIT_TOOLS = [
 ]
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
+CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
-WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -497,6 +509,19 @@ def _request_make(arguments):
     with g_make_condition:
         g_make_results[request_id] = None
     _progress("Running configured makeprg", type="make_request", request_id=request_id, arguments={"arguments": " ".join(targets)})
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            g_make_condition.wait()
+        return g_make_results.pop(request_id)
+
+
+def _request_check(arguments):
+    if arguments not in ({}, None):
+        raise ValueError("vim-check does not accept arguments")
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Running configured checker", type="check_request", request_id=request_id)
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()
@@ -900,6 +925,8 @@ def apply_tool(document, name, arguments, cwd=None):
         return _list_files(cwd, arguments)
     if name in MAKE_TOOL_NAMES:
         raise ValueError("make must be executed by Vim's main thread")
+    if name in CHECK_TOOL_NAMES:
+        raise ValueError("vim-check must be executed by Vim's main thread")
     if name in FILE_TOOL_NAMES:
         if cwd is None:
             raise ValueError("filesystem tools require a current directory")
@@ -983,6 +1010,7 @@ def _system_prompt(settings):
         "JSON tool calls, or similar syntax.",
         "When a tool is required, invoke the supplied tool directly.",
         "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
+        "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
@@ -1003,6 +1031,7 @@ def _system_prompt(settings):
             "This is a workspace edit. You may read and modify project files below the working directory with the filesystem tools.",
             "Keep all paths relative to the working directory and never use absolute paths or '..'.",
             "Use insert_lines, delete_lines, and replace_lines for files; their line numbers are absolute 1-based file line numbers.",
+            "When a language checker is configured, use vim-check after changes instead of vim-make.",
         ])
     configured = settings.get("instructions")
     if configured:
@@ -1165,6 +1194,10 @@ def _run_edit(request, code, filetype, settings):
         tools = []
     else:
         tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
+        if settings.get("quickfix_checker", False):
+            tools = [tool for tool in tools if tool["function"]["name"] != "vim-make"]
+        elif settings.get("quickfix_mode", False):
+            tools = [tool for tool in tools if tool["function"]["name"] != "vim-check"]
     if previous_messages:
         messages = list(previous_messages)
         messages.append({"role": "user", "content": _edit_prompt(request, code, filetype, settings)})
@@ -1235,13 +1268,15 @@ def _run_edit(request, code, filetype, settings):
                     raise ValueError("Git write tools are not allowed during a range edit")
                 if name in MAKE_TOOL_NAMES:
                     result = _request_make(arguments)
+                elif name in CHECK_TOOL_NAMES:
+                    result = _request_check(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
                     result = _request_execute(arguments)
                 elif name in GIT_TOOL_NAMES:
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"))
-                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 diagnostic = result.get("content") or result.get("output")
