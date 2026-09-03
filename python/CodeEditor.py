@@ -9,6 +9,7 @@ been validated.
 """
 
 import json
+import glob as glob_module
 import ntpath
 import os
 import re
@@ -232,13 +233,30 @@ INSPECTION_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "search_files",
-            "description": "Search UTF-8 text files below a directory for a regular expression. Use '.' to search the current directory.",
+            "name": "glob",
+            "description": "Search for filenames in a directory using wildcards. Use ** in the pattern for recursive searches.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Wildcard filename pattern, for example '*.c'."},
+                    "path": {"type": "string", "description": "Relative directory below the current directory."},
+                },
+                "required": ["pattern", "path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep",
+            "description": "Search file contents using a regular expression. Path may be a file or directory; directory recursion is controlled by recursive.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "pattern": {"type": "string", "description": "Python regular expression to search for."},
-                    "path": {"type": "string", "description": "Relative directory below the current directory, or '.'."},
+                    "path": {"type": "string", "description": "Relative file or directory below the current directory."},
+                    "recursive": {"type": "boolean", "default": False},
                 },
                 "required": ["pattern", "path"],
                 "additionalProperties": False,
@@ -648,32 +666,74 @@ def _read_file(cwd, arguments):
     return {"ok": True, "message": f"read {arguments['path']} lines {start}-{min(end, len(lines))}", "content": content}
 
 
-def _search_files(cwd, arguments):
+def _inspection_files(root, recursive):
+    if os.path.isfile(root):
+        yield root
+        return
+
+    directories = [root]
+    while directories:
+        directory = directories.pop()
+        try:
+            entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_file(follow_symlinks=False):
+                yield entry.path
+            elif recursive and entry.is_dir(follow_symlinks=False):
+                directories.append(entry.path)
+
+
+def _glob_files(cwd, arguments):
     root = _safe_path(cwd, arguments.get("path"), allow_root=True)
-    if not os.path.isdir(root) or os.path.islink(root):
-        raise ValueError("search path is not a regular directory")
+    if os.path.islink(root) or not os.path.isdir(root):
+        raise ValueError("glob path is not a regular directory")
+    pattern = arguments.get("pattern")
+    if not isinstance(pattern, str) or not pattern:
+        raise ValueError("glob pattern must be a non-empty string")
+    if os.path.isabs(pattern) or ntpath.isabs(pattern) or any(part == ".." for part in pattern.replace("\\", "/").split("/")):
+        raise ValueError("glob pattern must remain below the search directory")
+
+    matches = []
+    for path in glob_module.iglob(os.path.join(root, pattern), recursive=True):
+        if os.path.islink(path) or not os.path.isfile(path):
+            continue
+        matches.append(os.path.relpath(path, cwd))
+        if len(matches) >= 1000:
+            return {"ok": True, "message": "glob reached the 1000 match limit", "content": "\n".join(matches)}
+    content = "\n".join(matches) if matches else "No matches found."
+    return {"ok": True, "message": f"found {len(matches)} match(es)", "content": content}
+
+
+def _grep_files(cwd, arguments):
+    root = _safe_path(cwd, arguments.get("path"), allow_root=True)
+    if os.path.islink(root) or not (os.path.isfile(root) or os.path.isdir(root)):
+        raise ValueError("grep path is not a regular file or directory")
     try:
         pattern = re.compile(arguments.get("pattern", ""))
     except re.error as error:
         raise ValueError(f"invalid regular expression: {error}") from error
+    recursive = arguments.get("recursive", False)
+    if not isinstance(recursive, bool):
+        raise ValueError("grep recursive must be boolean")
 
     matches = []
-    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
-        subdirectories[:] = [name for name in subdirectories if not os.path.islink(os.path.join(directory, name))]
-        for filename in filenames:
-            path = os.path.join(directory, filename)
-            if os.path.islink(path) or os.path.getsize(path) > 1024 * 1024:
-                continue
-            try:
-                with open(path, "r", encoding="utf-8") as handle:
-                    for line_number, line in enumerate(handle, 1):
-                        if pattern.search(line):
-                            relative = os.path.relpath(path, cwd)
-                            matches.append(f"{relative}:{line_number}:{line.rstrip()}")
-                            if len(matches) >= 100:
-                                return {"ok": True, "message": "search reached the 100 match limit", "content": "\n".join(matches)}
-            except (UnicodeDecodeError, OSError):
-                continue
+    for path in _inspection_files(root, recursive):
+        if os.path.getsize(path) > 1024 * 1024:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, 1):
+                    if pattern.search(line):
+                        relative = os.path.relpath(path, cwd)
+                        matches.append(f"{relative}:{line_number}:{line.rstrip()}")
+                        if len(matches) >= 100:
+                            return {"ok": True, "message": "grep reached the 100 match limit", "content": "\n".join(matches)}
+        except (UnicodeDecodeError, OSError):
+            continue
     content = "\n".join(matches) if matches else "No matches found."
     return {"ok": True, "message": f"found {len(matches)} match(es)", "content": content}
 
@@ -826,10 +886,14 @@ def apply_tool(document, name, arguments, cwd=None):
         if cwd is None:
             raise ValueError("read_file requires a current directory")
         return _read_file(cwd, arguments)
-    if name == "search_files":
+    if name == "glob":
         if cwd is None:
-            raise ValueError("search_files requires a current directory")
-        return _search_files(cwd, arguments)
+            raise ValueError("glob requires a current directory")
+        return _glob_files(cwd, arguments)
+    if name == "grep":
+        if cwd is None:
+            raise ValueError("grep requires a current directory")
+        return _grep_files(cwd, arguments)
     if name == "list_files":
         if cwd is None:
             raise ValueError("list_files requires a current directory")

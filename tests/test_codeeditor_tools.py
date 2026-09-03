@@ -225,7 +225,7 @@ def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     )
 
     names = {tool["function"]["name"] for tool in captured_tools}
-    assert names == {"read_file", "search_files", "list_files"}
+    assert names == {"read_file", "glob", "grep", "list_files"}
     assert operations == []
     assert "read-only" in messages[1]["content"]
 
@@ -349,18 +349,38 @@ def test_filesystem_tools_reject_symlink_escape(tmp_path):
         outside.rmdir()
 
 
-def test_read_file_and_search_files(tmp_path):
+def test_read_file_glob_and_grep(tmp_path):
     source = tmp_path / "src"
     source.mkdir()
     (source / "main.c").write_text("int main(void) {\n    return 0;\n}\n")
     (source / "notes.txt").write_text("main is documented here\n")
+    nested = source / "nested"
+    nested.mkdir()
+    (nested / "other.c").write_text("int main_nested(void) {}\n")
 
     read_result = apply_tool([], "read_file", {"path": "src/main.c"}, str(tmp_path))
-    search_result = apply_tool([], "search_files", {"pattern": r"main", "path": "."}, str(tmp_path))
+    glob_result = apply_tool([], "glob", {"pattern": "*.c", "path": "src"}, str(tmp_path))
+    recursive_glob_result = apply_tool([], "glob", {"pattern": "**/*.c", "path": "src"}, str(tmp_path))
+    grep_result = apply_tool([], "grep", {"pattern": r"main", "path": ".", "recursive": True}, str(tmp_path))
 
     assert "int main" in read_result["content"]
-    assert "src/main.c:1" in search_result["content"]
-    assert "src/notes.txt:1" in search_result["content"]
+    assert glob_result["content"] == "src/main.c"
+    assert recursive_glob_result["content"].splitlines() == ["src/main.c", "src/nested/other.c"]
+    assert "src/main.c:1" in grep_result["content"]
+    assert "src/notes.txt:1" in grep_result["content"]
+    assert "src/nested/other.c:1" in grep_result["content"]
+
+
+def test_grep_supports_file_paths(tmp_path):
+    path = tmp_path / "main.c"
+    path.write_text("int main(void) {}\n")
+
+    grep_result = apply_tool([], "grep", {"pattern": r"main", "path": "main.c"}, str(tmp_path))
+
+    assert grep_result["content"] == "main.c:1:int main(void) {}"
+
+    with pytest.raises(ValueError, match="regular directory"):
+        apply_tool([], "glob", {"pattern": "*.c", "path": "main.c"}, str(tmp_path))
 
 
 def test_list_files_supports_non_recursive_and_recursive_modes(tmp_path):
@@ -399,7 +419,7 @@ def test_inspection_tools_reject_paths_outside_workspace(tmp_path):
     with pytest.raises(ValueError):
         apply_tool([], "read_file", {"path": "../outside.txt"}, str(tmp_path))
     with pytest.raises(ValueError):
-        apply_tool([], "search_files", {"pattern": "x", "path": "../"}, str(tmp_path))
+        apply_tool([], "grep", {"pattern": "x", "path": "../"}, str(tmp_path))
     with pytest.raises(ValueError):
         apply_tool([], "list_files", {"path": "../"}, str(tmp_path))
 
