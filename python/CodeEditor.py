@@ -321,7 +321,13 @@ CHECK_TOOLS = [
         "function": {
             "name": "vim-check",
             "description": "Run the configured language checker and inspect its diagnostics. Use after changing script-language files.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Optional project-relative file path. If omitted, check the current buffer file."},
+                },
+                "additionalProperties": False,
+            },
         },
     },
 ]
@@ -532,12 +538,20 @@ def _request_make(arguments):
 
 
 def _request_check(arguments):
-    if arguments not in ({}, None):
-        raise ValueError("vim-check does not accept arguments")
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise ValueError("vim-check requires an argument object")
+    path = arguments.get("path")
+    if path is not None and (not isinstance(path, str) or not path or "\x00" in path):
+        raise ValueError("vim-check path must be a non-empty string")
+    if isinstance(path, str) and (os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/"))):
+        raise ValueError("vim-check path must remain below the current directory")
+    arguments = {"path": path} if path is not None else {}
     request_id = str(uuid.uuid4())
     with g_make_condition:
         g_make_results[request_id] = None
-    _progress("Running configured checker", type="check_request", request_id=request_id)
+    _progress("Running configured checker", type="check_request", request_id=request_id, arguments=arguments)
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()
