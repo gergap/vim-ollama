@@ -1051,6 +1051,12 @@ def _system_prompt(settings):
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
+    # detect Windows
+    if os.name == "nt":
+        lines.extend(["Always add a shebang to Python files: `#/usr/bin/env python3`"])
+    else:
+        lines.extend(["Always add a shebang to Python files: `#/usr/bin/env python3` and make the file executable."])
+
     if settings.get("explain_mode", False):
         lines.extend([
             "This is a read-only code explanation request.",
