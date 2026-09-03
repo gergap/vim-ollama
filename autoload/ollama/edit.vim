@@ -546,7 +546,8 @@ try:
     events = CodeEditor.get_progress_events()
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
-        vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
+        if not event.get('diagnostic'):
+            vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
@@ -692,11 +693,13 @@ function! ollama#edit#QuickFix() abort
     let l:compiled = index(['c', 'cpp', 'objc', 'objcpp', 'rust'], l:filetype) >= 0
     let l:checker = get(get(g:, 'ollama_quickfix_checkers', {}), l:filetype, {})
     let l:build_output = ''
+    let l:check_status = -1
     if l:compiled
         try
             " Run the initial build before starting the worker so its first prompt
             " already contains the current diagnostics.
             let l:build_output = execute('silent make!')
+            let l:check_status = v:shell_error
             redraw!
             " Vim may encode line breaks in execute() output as NUL characters.
             let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')
@@ -705,43 +708,35 @@ function! ollama#edit#QuickFix() abort
         endtry
     elseif type(l:checker) == v:t_dict && type(get(l:checker, 'command', v:null)) == v:t_list
         try
-            let l:build_output = join(systemlist(l:checker.command, '', 1), "\n")
+            let l:build_output = join(systemlist(l:checker.command), "\n")
+            let l:check_status = v:shell_error
             call setqflist([], 'r', {'lines': split(l:build_output, "\n", v:true), 'efm': get(l:checker, 'errorformat', '%f:%l:%c: %m')})
             redraw!
         catch
             let l:build_output = 'Checker failed: ' .. v:exception
         endtry
+        if l:check_status == -1
+            echo l:build_output
+            redraw!
+            return
+        endif
     else
         let l:build_output = 'No checker is configured for filetype ' .. (empty(l:filetype) ? '[unknown]' : l:filetype) .. '.'
     endif
 
-    let l:diagnostics = []
-    for l:item in getqflist()
-        let l:filename = get(l:item, 'filename', '')
-        if empty(l:filename) && get(l:item, 'bufnr', 0) > 0
-            let l:filename = bufname(l:item.bufnr)
-        endif
-        let l:location = empty(l:filename) ? '[unknown]' : l:filename
-        let l:line = get(l:item, 'lnum', 0)
-        let l:column = get(l:item, 'col', 0)
-        let l:text = substitute(get(l:item, 'text', ''), '\%x00', "\n", 'g')
-        call add(l:diagnostics, printf('%s:%d:%d: %s', l:location, l:line, l:column, l:text))
-    endfor
+    if l:check_status == 0
+        call s:OpenConversation('No errors, nothing to fix.')
+        return
+    endif
 
-    let l:report_parts = []
-    if !empty(l:build_output)
-        call add(l:report_parts, l:build_output)
-    endif
-    if !empty(l:diagnostics)
-        call extend(l:report_parts, l:diagnostics)
-    endif
-    let l:report = join(l:report_parts, "\n")
+    let l:report = l:build_output
     if empty(l:report)
         let l:report = l:compiled ? 'Vim :make completed without diagnostics.' : 'Checker completed without diagnostics.'
     endif
+    let l:report = substitute(l:report, '\%x00', "\n", 'g')
     if l:compiled
         let l:prompt = "We are in Vim-Ollama AI assisted QuickFix mode to fix build issues.\n\n"
-                    \ .. "Current build results from Vim :make:\n```" .. l:report .. "\n```\n\n"
+                    \ .. "Current build results from Vim :make:\n```\n" .. l:report .. "\n```\n\n"
                     \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
                     \ .. 'Repeat the build, diagnosis, and fix cycle until the build succeeds. '
                     \ .. 'Use `vim-make` tool to verify after making changes. '
@@ -751,7 +746,7 @@ function! ollama#edit#QuickFix() abort
     else
         let l:checker_name = type(l:checker) == v:t_dict && type(get(l:checker, 'command', v:null)) == v:t_list ? join(l:checker.command, ' ') : '[none]'
         let l:prompt = "We are in Vim-Ollama AI assisted QuickFix mode to fix script-language issues.\n\n"
-                    \ .. "Current checker results from " .. l:checker_name .. ":\n```" .. l:report .. "\n```\n\n"
+                    \ .. "Current checker results from " .. l:checker_name .. ":\n```\n" .. l:report .. "\n```\n\n"
                     \ .. 'Fix all reported errors and warnings using the supplied OllamaEdit tools. '
                     \ .. 'Repeat the checker, diagnosis, and fix cycle until the checker succeeds. '
                     \ .. 'Use the `vim-check` tool after making changes. Do not use vim-make. '
