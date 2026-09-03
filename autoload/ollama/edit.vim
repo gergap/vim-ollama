@@ -9,6 +9,8 @@ let s:conversation_bufnr = -1
 let s:conversation_winid = -1
 let s:firstline = 0
 let s:lastline = 0
+let s:session_range_mode = v:true
+let s:session_explain_mode = v:false
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -477,7 +479,13 @@ function! ollama#edit#PromptEntered(text) abort
         echoerr 'OllamaEdit: source buffer is no longer available'
         return
     endif
-    call s:EditCodeRange(a:text, 1, line('$'), v:true)
+    if s:session_explain_mode
+        call ollama#edit#ExplainCode(s:firstline, s:lastline, v:true, a:text)
+    elseif s:session_range_mode
+        call s:EditCodeRange(a:text, s:firstline, s:lastline, v:true)
+    else
+        call s:EditWorkspace(a:text, v:true)
+    endif
 endfunction
 
 function! ollama#edit#UpdateProgress(timer) abort
@@ -534,6 +542,8 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let s:bufnr = bufnr('%')
     let s:firstline = get(a:settings, 'start_line', 1)
     let s:lastline = get(a:settings, 'end_line', line('$'))
+    let s:session_range_mode = get(a:settings, 'range_mode', v:true)
+    let s:session_explain_mode = get(a:settings, 'explain_mode', v:false)
     let g:ollama_edit_bufnr = s:bufnr
     let g:ollama_edit_firstline = s:firstline
     let g:ollama_edit_lastline = s:lastline
@@ -599,17 +609,18 @@ function! ollama#edit#EditCode(request) range abort
     call s:EditCodeRange(a:request, a:firstline, a:lastline)
 endfunction
 
-function! ollama#edit#ExplainCode(start_line, end_line) abort
+function! ollama#edit#ExplainCode(start_line, end_line, ...) abort
+    let l:request = a:0 > 1 ? a:2 : 'Explain the selected code. You can inspect related files when relevant, but avoid this if not needed.'
     let l:settings = {
                 \ 'range_mode': v:true,
                 \ 'explain_mode': v:true,
                 \ 'filename': fnamemodify(expand('%:p'), ':.'),
                 \ 'start_line': a:start_line,
                 \ 'end_line': a:end_line,
-                \ 'continue_history': v:false,
+                \ 'continue_history': a:0 > 0 ? a:1 : v:false,
                 \ }
     call s:StartEditSession(
-                \ 'Explain the selected code. You can inspect related files when relevant, but avoid this if not needed.',
+                \ l:request,
                 \ getline(a:start_line, a:end_line), &filetype, l:settings)
 endfunction
 
