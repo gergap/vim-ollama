@@ -788,7 +788,9 @@ function! ollama#edit#QuickFix() abort
             " Run the initial build before starting the worker so its first prompt
             " already contains the current diagnostics.
             let l:build_output = execute('silent make!')
-            let l:check_status = v:shell_error
+            " :make populates the quickfix list, but does not reliably expose
+            " the makeprg exit status through v:shell_error.
+            let l:check_status = empty(getqflist()) ? 0 : 1
             redraw!
             " Vim may encode line breaks in execute() output as NUL characters.
             let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')

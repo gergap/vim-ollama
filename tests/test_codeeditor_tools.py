@@ -249,6 +249,24 @@ def test_quickfix_checker_excludes_vim_make(monkeypatch):
     assert "vim-make" not in names
 
 
+def test_quickfix_mode_keeps_vim_make(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit(
+        "fix it", [], "c", {"provider": "ollama", "range_mode": False, "quickfix_mode": True}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert "vim-make" in names
+    assert "vim-check" not in names
+
+
 def test_workspace_prompt_does_not_include_buffer_snapshot():
     prompt = CodeEditor._edit_prompt(
         "fix the project", ["should not be included"], "", {"range_mode": False}
