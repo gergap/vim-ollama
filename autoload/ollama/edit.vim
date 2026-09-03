@@ -108,16 +108,31 @@ function! ollama#edit#AppendProgress(text) abort
     endif
 endfunction
 
-function! ollama#edit#AppendDiagnostic(title, content) abort
+function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     if !bufexists(s:conversation_bufnr) || empty(a:content)
         return
     endif
+    let l:append = a:0 > 0 && a:1
     let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
     call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
     try
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
-    let l:lines = ['#StartDiagnostic ' .. a:title] + split(a:content, "\n", v:true) + ['#EndDiagnostic']
-    call appendbufline(s:conversation_bufnr, l:line_count - 1, l:lines)
+    if l:append
+        let l:insert_at = -1
+        for l:idx in range(l:line_count, 1, -1)
+            if getbufline(s:conversation_bufnr, l:idx)[0] =~# '^#EndDiagnostic\>'
+                let l:insert_at = l:idx - 1
+                break
+            endif
+        endfor
+    else
+        let l:insert_at = l:line_count - 1
+    endif
+    if l:insert_at < 0
+        return
+    endif
+    let l:lines = l:append ? split(a:content, "\n", v:true) : ['#StartDiagnostic ' .. a:title] + split(a:content, "\n", v:true) + ['#EndDiagnostic']
+    call appendbufline(s:conversation_bufnr, l:insert_at, l:lines)
     if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
         " Keep diagnostic folds closed without toggling the fold under the cursor.
         call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
@@ -546,7 +561,7 @@ try:
     events = CodeEditor.get_progress_events()
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
-        if not event.get('diagnostic'):
+        if not event.get('diagnostic') and not event.get('fold') and not event.get('fold_append'):
             vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
@@ -555,6 +570,10 @@ try:
             vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ')')
         if event.get('type') == 'execute_request':
             vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+        if event.get('fold'):
+            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + json.dumps(event.get('text', '')) + ')')
+        if event.get('fold_append'):
+            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('text', '')) + ', 1)')
         if event.get('diagnostic'):
             diagnostic = event['diagnostic']
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')

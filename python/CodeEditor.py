@@ -465,6 +465,10 @@ GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
 WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
+EDIT_FOLD_TOOL_NAMES = {"replace_lines", "insert_lines", "delete_lines",
+                        "buf_replace_lines", "buf_insert_lines", "buf_delete_lines",
+                        "read_file", "write_file", "create_file",
+                        "delete_file", "chmod", "list_files"}
 
 log = None
 g_thread_lock = threading.Lock()
@@ -1301,7 +1305,9 @@ def _run_edit(request, code, filetype, settings):
             if isinstance(original_arguments, dict) and isinstance(original_arguments.get("content"), str):
                 display_arguments = dict(display_arguments)
                 display_arguments["content"] = f"<{len(original_arguments['content'])} characters>"
-            _progress(f"Tool call: {name} {json.dumps(display_arguments)}", tool=name, arguments=arguments)
+            fold_path = arguments.get("path") if isinstance(arguments, dict) else None
+            fold_title = f"{name} {fold_path}" if fold_path else name
+            _progress(f"Tool call: {name} {json.dumps(display_arguments)}", tool=name, arguments=arguments, fold=name in EDIT_FOLD_TOOL_NAMES, fold_title=fold_title)
             try:
                 if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
@@ -1322,10 +1328,17 @@ def _run_edit(request, code, filetype, settings):
                 if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
-                diagnostic = result.get("content") or result.get("output")
                 details = {"tool": name, "path": arguments.get("path")}
-                if diagnostic:
-                    details["diagnostic"] = {"title": name, "content": diagnostic}
+                if name in EDIT_FOLD_TOOL_NAMES:
+                    details["fold_append"] = name
+                    details["fold_title"] = fold_title
+                    diagnostic = result.get("content") or result.get("output")
+                    if diagnostic:
+                        details["text"] = result["message"] + "\n" + diagnostic
+                else:
+                    diagnostic = result.get("content") or result.get("output")
+                    if diagnostic:
+                        details["diagnostic"] = {"title": name, "content": diagnostic}
                 _progress(result["message"], **details)
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
