@@ -313,6 +313,24 @@ def test_final_model_response_is_not_truncated(monkeypatch):
     assert progress[-1] == "Model: " + content
 
 
+def test_context_usage_is_reported_from_ollama_counts():
+    context = CodeEditor._context_usage(
+        {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},
+        {"options": {"num_ctx": 65536}},
+    )
+
+    assert context == "Context: 48.7k / 65.5k (74%)"
+
+
+def test_context_usage_is_omitted_without_num_ctx():
+    context = CodeEditor._context_usage(
+        {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},
+        {"options": {"num_predict": 4096}},
+    )
+
+    assert context is None
+
+
 def test_filesystem_tools_are_limited_to_current_directory(tmp_path):
     apply_tool([], "create_folder", {"path": "new"}, str(tmp_path))
     apply_tool([], "create_file", {"path": "new/file.txt", "content": "hello"}, str(tmp_path))

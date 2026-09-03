@@ -1091,7 +1091,40 @@ def _ollama_request(messages, settings, tools):
         timeout=settings.get("timeout", 300),
     )
     response.raise_for_status()
-    return response.json().get("message", {})
+    payload = response.json()
+    message = dict(payload.get("message") or {})
+    usage = {
+        key: payload[key]
+        for key in ("prompt_eval_count", "eval_count")
+        if isinstance(payload.get(key), int) and not isinstance(payload.get(key), bool)
+    }
+    if usage:
+        message["_ollama_usage"] = usage
+    return message
+
+
+def _context_usage(message, settings):
+    usage = message.get("_ollama_usage") if isinstance(message, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    prompt_tokens = usage.get("prompt_eval_count")
+    response_tokens = usage.get("eval_count")
+    if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0
+               for value in (prompt_tokens, response_tokens)):
+        return None
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
+        options = json.loads(options)
+    num_ctx = options.get("num_ctx") if isinstance(options, dict) else None
+    if not isinstance(num_ctx, int) or isinstance(num_ctx, bool) or num_ctx <= 0:
+        return None
+    used = prompt_tokens + response_tokens
+
+    def format_tokens(value):
+        return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
+
+    percentage = round(used * 100 / num_ctx)
+    return f"Context: {format_tokens(used)} / {format_tokens(num_ctx)} ({percentage}%)"
 
 
 def _openai_request(messages, settings, tools):
@@ -1154,9 +1187,12 @@ def _run_edit(request, code, filetype, settings):
         if log is not None:
             log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
         message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
+        context = _context_usage(message, settings)
+        if context:
+            _progress(context, diagnostic={"title": "Context", "content": context})
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
-            messages.append(message)
+            messages.append({key: value for key, value in message.items() if key != "_ollama_usage"})
         else:
             messages.append(message.model_dump(exclude_none=True))
         if not tool_calls:
