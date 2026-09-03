@@ -11,6 +11,7 @@ let s:firstline = 0
 let s:lastline = 0
 let s:session_range_mode = v:true
 let s:session_explain_mode = v:false
+let s:sandbox_session_approvals = {}
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -311,6 +312,68 @@ function! s:CollectMakeOutput(state, channel, message) abort
     endif
 endfunction
 
+function! s:SandboxWrap(command, write_paths) abort
+    if !get(g:, 'ollama_bwrap_enabled', v:false)
+        return a:command
+    endif
+    let l:bwrap = get(g:, 'ollama_bwrap_command', 'bwrap')
+    if type(l:bwrap) != v:t_string || empty(l:bwrap) || !executable(l:bwrap)
+        throw 'bubblewrap is enabled but was not found: ' .. string(l:bwrap)
+    endif
+    let l:root = simplify(fnamemodify(g:ollama_edit_cwd, ':p'))
+    let l:command = [l:bwrap, '--die-with-parent', '--new-session', '--unshare-all',
+                \ '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp']
+    if get(g:, 'ollama_bwrap_network', v:false)
+        call filter(l:command, 'v:val !=# "--unshare-all"')
+    endif
+    for l:directory in ['/usr', '/usr/local', '/bin', '/sbin', '/lib', '/lib64', '/etc']
+        if isdirectory(l:directory)
+            call extend(l:command, ['--ro-bind', l:directory, l:directory])
+        endif
+    endfor
+    call extend(l:command, ['--ro-bind', l:root, l:root])
+    for l:relative in a:write_paths
+        if type(l:relative) != v:t_string || empty(l:relative)
+            throw 'bubblewrap write paths must be non-empty strings'
+        endif
+        let l:path = simplify(fnamemodify(l:root .. '/' .. l:relative, ':p'))
+        if l:path !=# l:root && strpart(l:path, 0, strlen(l:root) + 1) !=# l:root .. '/'
+                    \ || getftype(l:path) ==# 'link' || !isdirectory(l:path)
+            throw 'bubblewrap write path must be an existing project directory: ' .. l:relative
+        endif
+        call extend(l:command, ['--bind', l:path, l:path])
+    endfor
+    call extend(l:command, ['--chdir', l:root, '--'] + a:command)
+    return l:command
+endfunction
+
+function! s:ConfirmSandbox(tool, command) abort
+    if !get(g:, 'ollama_bwrap_enabled', v:false)
+        return v:true
+    endif
+    if !get(g:, 'ollama_bwrap_confirm', v:true)
+        return v:true
+    endif
+    let l:key = a:tool .. "\n" .. join(a:command, "\n")
+    if get(s:sandbox_session_approvals, l:key, v:false)
+        return v:true
+    endif
+    let l:summary = join(map(copy(a:command), 'shellescape(v:val)'), ' ')
+    let l:choice = confirm('Allow sandboxed ' .. a:tool .. '?\n' .. l:summary,
+                \ "Allow &Once\nAllow for &Session\n&Cancel", 3)
+    if l:choice == 2
+        let s:sandbox_session_approvals[l:key] = v:true
+        return v:true
+    endif
+    return l:choice == 1
+endfunction
+
+function! s:SandboxMakeprg(makeprg) abort
+    let l:command = s:SandboxWrap(['/bin/sh', '-c', a:makeprg .. ' "$@"', '/bin/sh'],
+                \ get(g:, 'ollama_bwrap_make_write_paths', []))
+    return join(map(copy(l:command), 'shellescape(v:val)'), ' ')
+endfunction
+
 function! s:FinishMake(request_id, state, job, status) abort
     try
         let l:output = join(a:state.output, "\n")
@@ -366,19 +429,32 @@ function! ollama#edit#RunMake(request_id, arguments) abort
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishMake', [a:request_id, l:state]),
                     \ }
+        if type(a:arguments) != v:t_string && type(a:arguments) != v:t_list
+            throw 'make arguments must be a string or list of target names'
+        endif
+        let l:targets = type(a:arguments) == v:t_list ? a:arguments : split(a:arguments)
         let l:command = getbufvar(s:bufnr, '&makeprg')
-        for l:target in split(a:arguments)
-            if l:target =~# '^-' || l:target !~# '^[A-Za-z0-9_./:+-]\+$'
+        if type(l:command) != v:t_string
+            throw 'makeprg must be a string, got ' .. typename(l:command)
+        endif
+        for l:target in l:targets
+            if type(l:target) != v:t_string || l:target =~# '^-' || l:target !~# '^[A-Za-z0-9_./:+-]\+$'
                 throw 'make tool accepts only make target names; shell commands and options are not allowed'
             endif
             let l:command .= ' ' .. shellescape(l:target)
         endfor
-        let l:job = job_start(l:command, l:options)
+        let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:command],
+                    \ get(g:, 'ollama_bwrap_make_write_paths', []))
+        if !s:ConfirmSandbox('vim-make', l:wrapped)
+            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed vim-make cancelled by user', 'output': '', 'diagnostics': []})
+            return
+        endif
+        let l:job = job_start(l:wrapped, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start configured makeprg'
         endif
     catch
-        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception, 'output': '', 'diagnostics': []})
+        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception .. ' (' .. v:throwpoint .. ')', 'output': '', 'diagnostics': []})
     endtry
 endfunction
 
@@ -441,7 +517,12 @@ function! ollama#edit#RunCheck(request_id, ...) abort
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishCheck', [a:request_id, l:state]),
                     \ }
-        let l:job = job_start(l:command, l:options)
+        let l:wrapped = s:SandboxWrap(l:command, [])
+        if !s:ConfirmSandbox('vim-check', l:wrapped)
+            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed vim-check cancelled by user', 'output': '', 'diagnostics': []})
+            return
+        endif
+        let l:job = job_start(l:wrapped, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start configured checker'
         endif
@@ -485,9 +566,10 @@ function! s:FinishExecute(request_id, state, job, status) abort
     endif
     let l:output = join(a:state.output, "\n")
     let l:timed_out = get(a:state, 'timed_out', v:false)
+    let l:label = get(a:state, 'sandboxed', v:false) ? 'Sandboxed execution' : 'Execution'
     let l:result = {
                 \ 'ok': a:status == 0 && !l:timed_out,
-                \ 'message': l:timed_out ? 'execution timed out and was terminated' : a:status == 0 ? 'execution completed successfully' : 'execution failed',
+                \ 'message': l:timed_out ? tolower(l:label) .. ' timed out and was terminated' : a:status == 0 ? tolower(l:label) .. ' completed successfully' : tolower(l:label) .. ' failed',
                 \ 'output': l:output,
                 \ 'exit_code': a:status,
                 \ 'decision': get(a:state, 'decision', 'allowed'),
@@ -543,6 +625,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         endif
         let l:state = {
                     \ 'output': [],
+                    \ 'sandboxed': get(g:, 'ollama_bwrap_enabled', v:false),
                     \ 'finished': v:false,
                     \ 'timed_out': v:false,
                     \ 'timeout_timer': -1,
@@ -556,7 +639,12 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishExecute', [a:request_id, l:state]),
                     \ }
-        let l:job = job_start([l:path] + a:arguments.arguments, l:options)
+        let l:wrapped = s:SandboxWrap([l:path] + a:arguments.arguments, [])
+        if !s:ConfirmSandbox('execute', l:wrapped)
+            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
+            return
+        endif
+        let l:job = job_start(l:wrapped, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start executable'
         endif
@@ -787,10 +875,26 @@ function! ollama#edit#QuickFix() abort
         try
             " Run the initial build before starting the worker so its first prompt
             " already contains the current diagnostics.
-            let l:build_output = execute('silent make!')
+            let l:makeprg = &l:makeprg
+            let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:makeprg .. ' "$@"', '/bin/sh'],
+                        \ get(g:, 'ollama_bwrap_make_write_paths', []))
+            if !s:ConfirmSandbox('vim-make', l:wrapped)
+                let l:build_output = 'sandboxed vim-make cancelled by user'
+                let l:check_status = -1
+            else
+                let l:original_makeprg = &l:makeprg
+                try
+                    let &l:makeprg = join(map(copy(l:wrapped), 'shellescape(v:val)'), ' ')
+                    let l:build_output = execute('silent make!')
+                finally
+                    let &l:makeprg = l:original_makeprg
+                endtry
+            endif
             " :make populates the quickfix list, but does not reliably expose
             " the makeprg exit status through v:shell_error.
-            let l:check_status = empty(getqflist()) ? 0 : 1
+            if l:check_status != -1
+                let l:check_status = empty(getqflist()) ? 0 : 1
+            endif
             redraw!
             " Vim may encode line breaks in execute() output as NUL characters.
             let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')

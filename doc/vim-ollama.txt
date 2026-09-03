@@ -552,6 +552,39 @@ g:ollama_stop_on_error
         let g:ollama_stop_on_error = v:true
 <
 
+                                                       *g:ollama_bwrap_enabled*
+g:ollama_bwrap_enabled
+    - Description: Runs `execute`, `vim-make`, and `vim-check` inside a
+      bubblewrap sandbox. The default enables it when bubblewrap is available
+      on Unix systems.
+    - Default: 'has('unix') && executable('bwrap')'
+
+                                                       *g:ollama_bwrap_command*
+g:ollama_bwrap_command
+    - Description: Path or executable name of the bubblewrap command.
+    - Default: 'bwrap'
+
+                                                       *g:ollama_bwrap_network*
+g:ollama_bwrap_network
+    - Description: Allows network access for sandboxed tools. Network access
+      is disabled by default.
+    - Default: 'v:false'
+
+                                                       *g:ollama_bwrap_confirm*
+g:ollama_bwrap_confirm
+    - Description: Prompts before launching each new sandboxed command.
+    - Default: 'v:true'
+
+                                                 *g:ollama_bwrap_make_write_paths*
+g:ollama_bwrap_make_write_paths
+    - Description: Project-relative directories mounted writable for
+      sandboxed `vim-make`. All other project files remain read-only.
+    - Default: '[]'
+    - Example:
+>
+        let g:ollama_bwrap_make_write_paths = ['build']
+<
+
                                                        *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has

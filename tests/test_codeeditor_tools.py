@@ -267,6 +267,28 @@ def test_quickfix_mode_keeps_vim_make(monkeypatch):
     assert "vim-check" not in names
 
 
+def test_execute_virtual_make_name_is_routed_to_vim_make(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "make-1", "function": {"name": "execute", "arguments": {
+            "path": "vim-make",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    make_arguments = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_request_make", lambda arguments: make_arguments.append(arguments) or {
+        "ok": True,
+        "message": "make succeeded",
+    })
+
+    operations, _messages = CodeEditor._run_edit(
+        "fix it", [], "c", {"provider": "ollama", "range_mode": False, "quickfix_mode": True}
+    )
+
+    assert operations == []
+    assert make_arguments == [{"arguments": ""}]
+
+
 def test_workspace_prompt_does_not_include_buffer_snapshot():
     prompt = CodeEditor._edit_prompt(
         "fix the project", ["should not be included"], "", {"range_mode": False}

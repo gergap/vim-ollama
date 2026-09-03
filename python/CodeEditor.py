@@ -1054,6 +1054,7 @@ def _system_prompt(settings):
         "Do not manually emit <tool_call>, <function=...>, <parameter=...>,",
         "JSON tool calls, or similar syntax.",
         "When a tool is required, invoke the supplied tool directly.",
+        "vim-make and vim-check are tool names, not executable paths; never pass either name to execute.",
         "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
         "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
@@ -1300,6 +1301,11 @@ def _run_edit(request, code, filetype, settings):
                 for key in ("expected", "replacement"):
                     if isinstance(arguments.get(key), str):
                         arguments[key] = arguments[key].splitlines()
+            if name == "execute" and isinstance(arguments, dict) and arguments.get("path") in MAKE_TOOL_NAMES | CHECK_TOOL_NAMES:
+                virtual_tool = arguments["path"]
+                if "arguments" not in arguments or not isinstance(arguments.get("arguments"), list):
+                    name = virtual_tool
+                    arguments = {"arguments": ""} if virtual_tool in MAKE_TOOL_NAMES else {}
             if log is not None:
                 log.debug(f"Tool call: {name} {json.dumps(arguments)}")
             display_arguments = dict(arguments) if isinstance(arguments, dict) else arguments

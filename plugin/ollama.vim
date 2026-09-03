@@ -160,6 +160,21 @@ endif
 if !exists('g:ollama_stop_on_error')
     let g:ollama_stop_on_error = v:false
 endif
+if !exists('g:ollama_bwrap_enabled')
+    let g:ollama_bwrap_enabled = has('unix') && executable('bwrap')
+endif
+if !exists('g:ollama_bwrap_command')
+    let g:ollama_bwrap_command = 'bwrap'
+endif
+if !exists('g:ollama_bwrap_network')
+    let g:ollama_bwrap_network = v:false
+endif
+if !exists('g:ollama_bwrap_confirm')
+    let g:ollama_bwrap_confirm = v:true
+endif
+if !exists('g:ollama_bwrap_make_write_paths')
+    let g:ollama_bwrap_make_write_paths = []
+endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif
@@ -320,6 +335,11 @@ function! PluginInit() abort
 "        nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
 "        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
 "        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
+    endif
+    if g:ollama_bwrap_enabled
+        echo("Bubblewrap Sandbox enabled")
+    else
+        echo("Bubblewrap Sandbox disabled")
     endif
 endfunction
 
