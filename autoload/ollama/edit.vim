@@ -360,7 +360,7 @@ function! s:FinishCheck(request_id, state, job, status) abort
     call s:SubmitMakeResult(a:request_id, l:result)
 endfunction
 
-function! ollama#edit#RunCheck(request_id) abort
+function! ollama#edit#RunCheck(request_id, ...) abort
     try
         let l:checker = get(g:, 'ollama_edit_checker', {})
         if type(l:checker) != v:t_dict || type(get(l:checker, 'command', v:null)) != v:t_list
@@ -371,6 +371,25 @@ function! ollama#edit#RunCheck(request_id) abort
                 throw 'checker command must be a list of non-empty strings'
             endif
         endfor
+        let l:arguments = a:0 > 0 && type(a:1) == v:t_dict ? a:1 : {}
+        let l:relative = get(l:arguments, 'path', '')
+        if empty(l:relative)
+            let l:relative = fnamemodify(bufname(s:bufnr), ':.')
+        endif
+        if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^/' || l:relative =~# '^[A-Za-z]:[\\/]'
+            throw 'checker path must be a project-relative file path'
+        endif
+        let l:path = simplify(g:ollama_edit_cwd .. '/' .. l:relative)
+        if getftype(l:path) ==# 'link' || !filereadable(l:path) || isdirectory(l:path)
+            throw 'checker path must be an existing regular file'
+        endif
+        let l:command = []
+        for l:argument in l:checker.command
+            call add(l:command, substitute(l:argument, '{path}', escape(l:relative, '\&'), 'g'))
+        endfor
+        if !executable(l:command[0])
+            throw 'checker executable was not found: ' .. l:command[0]
+        endif
         let l:state = {'output': [], 'errorformat': get(l:checker, 'errorformat', '%f:%l:%c: %m')}
         let l:options = {
                     \ 'cwd': g:ollama_edit_cwd,
@@ -378,7 +397,7 @@ function! ollama#edit#RunCheck(request_id) abort
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishCheck', [a:request_id, l:state]),
                     \ }
-        let l:job = job_start(l:checker.command, l:options)
+        let l:job = job_start(l:command, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start configured checker'
         endif
@@ -567,7 +586,7 @@ try:
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
         if event.get('type') == 'check_request':
-            vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ')')
+            vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('type') == 'execute_request':
             vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('fold'):
@@ -727,12 +746,24 @@ function! ollama#edit#QuickFix() abort
         endtry
     elseif type(l:checker) == v:t_dict && type(get(l:checker, 'command', v:null)) == v:t_list
         try
-            let l:build_output = join(systemlist(l:checker.command), "\n")
+            let l:relative = fnamemodify(expand('%:p'), ':.')
+            if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$'
+                throw 'current buffer is outside the checker workspace'
+            endif
+            let l:checker_command = []
+            for l:argument in l:checker.command
+                call add(l:checker_command, substitute(l:argument, '{path}', escape(l:relative, '\&'), 'g'))
+            endfor
+            if empty(l:checker_command) || !executable(l:checker_command[0])
+                throw 'checker executable was not found: ' .. (empty(l:checker_command) ? '[none]' : l:checker_command[0])
+            endif
+            let l:build_output = join(systemlist(l:checker_command), "\n")
             let l:check_status = v:shell_error
             call setqflist([], 'r', {'lines': split(l:build_output, "\n", v:true), 'efm': get(l:checker, 'errorformat', '%f:%l:%c: %m')})
             redraw!
         catch
             let l:build_output = 'Checker failed: ' .. v:exception
+            let l:check_status = -1
         endtry
         if l:check_status == -1
             echo l:build_output

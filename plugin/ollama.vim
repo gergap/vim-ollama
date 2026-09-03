@@ -154,7 +154,7 @@ if !exists('g:ollama_edit_instructions')
 endif
 if !exists('g:ollama_quickfix_checkers')
     let g:ollama_quickfix_checkers = {
-                \ 'python': {'command': ['ruff', 'check', '.'], 'errorformat': '%f:%l:%c: %m'},
+                \ 'python': {'command': ['ruff', 'check', '{path}'], 'errorformat': '%f:%l:%c: %m'},
                 \ }
 endif
 if !exists('g:ollama_stop_on_error')
