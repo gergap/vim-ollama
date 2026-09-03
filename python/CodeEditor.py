@@ -14,6 +14,7 @@ import ntpath
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import uuid
@@ -148,6 +149,21 @@ FILE_LINE_TOOLS = [
 ]
 
 FILE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "chmod",
+            "description": "Make an existing regular file below the current directory executable without changing its read/write permissions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -856,6 +872,13 @@ def apply_filesystem_tool(cwd, name, arguments):
             with open(path, "w", encoding="utf-8", newline="") as handle:
                 handle.write(updated_text)
         return {"ok": True, "message": f"{name} applied to file {arguments['path']}"}
+
+    if name == "chmod":
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        mode = os.stat(path, follow_symlinks=False).st_mode
+        os.chmod(path, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH, follow_symlinks=False)
+        return {"ok": True, "message": f"made file executable {arguments['path']}"}
 
     if name == "create_file":
         content = arguments.get("content")

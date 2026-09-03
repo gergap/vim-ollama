@@ -1,4 +1,5 @@
 import sys
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -372,6 +373,28 @@ def test_filesystem_delete_tools(tmp_path):
 
     apply_tool([], "delete_folder", {"path": "remove", "recursive": False}, str(tmp_path))
     assert not folder.exists()
+
+
+def test_chmod_makes_regular_files_executable(tmp_path):
+    path = tmp_path / "script.sh"
+    path.write_text("#!/bin/sh\n")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    apply_tool([], "chmod", {"path": "script.sh"}, str(tmp_path))
+
+    mode = path.stat().st_mode
+    assert mode & stat.S_IXUSR
+    assert mode & stat.S_IXGRP
+    assert mode & stat.S_IXOTH
+    assert mode & stat.S_IRUSR
+    assert mode & stat.S_IWUSR
+
+
+def test_chmod_rejects_directories(tmp_path):
+    (tmp_path / "folder").mkdir()
+
+    with pytest.raises(FileNotFoundError):
+        apply_tool([], "chmod", {"path": "folder"}, str(tmp_path))
 
 
 def test_filesystem_tools_reject_symlink_escape(tmp_path):
