@@ -1118,7 +1118,7 @@ def _edit_prompt(request, code, filetype, settings):
         return (
             f"Explain the following {filetype or 'text'} code in detail.\n\n"
             "Describe its purpose, important control flow, dependencies, and any relevant issues. "
-            "Do not call tools if not necessary."
+            "This is a read-only explanation request. Do not call tools if not necessary. "
             "Do not modify any buffers or files.\n\n"
             f"Current Vim buffer: {filename}\n"
             f"Selected range: lines {start_line}-{end_line}\n\n"
@@ -1244,9 +1244,6 @@ def _run_edit(request, code, filetype, settings):
     range_mode = settings.get("range_mode", True)
     if settings.get("explain_mode", False):
         tools = INSPECTION_TOOLS
-        # it seems to work smoother without tools, and unless very complicated stuff it should not
-        # be necessary to inspect other files. Maybe add an option later.
-        tools = []
     else:
         tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
         if settings.get("quickfix_checker", False):

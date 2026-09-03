@@ -38,16 +38,26 @@ function! s:OpenConversation(request) abort
     setlocal foldtext=ollama#edit#ConversationFoldText()
     setlocal foldlevel=0
     let b:ollama_edit_conversation = v:true
+    let b:ollama_stick_to_bottom = v:true
     augroup OllamaEditConversation
         autocmd! * <buffer>
         autocmd BufWinEnter,BufWritePost,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
                     \ call ollama#edit#SetupConversationFolding()
+        autocmd CursorMoved,CursorMovedI <buffer> call ollama#edit#UpdateStickScroll()
+        autocmd WinLeave <buffer> let b:ollama_stick_to_bottom = v:true
     augroup END
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
     call prompt_setprompt(s:conversation_bufnr, '>>> ')
+endfunction
+
+function! ollama#edit#UpdateStickScroll() abort
+    if get(b:, 'ollama_internal_update', v:false)
+        return
+    endif
+    let b:ollama_stick_to_bottom = line('.') == line('$')
 endfunction
 
 function! ollama#edit#ConversationFoldText() abort
@@ -107,16 +117,20 @@ function! s:PrepareConversation(request) abort
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
     call appendbufline(s:conversation_bufnr, l:line_count - 1,
                 \ [''] + split('Follow-up: ' .. a:request, "\n", v:true) + [''])
+    if getbufvar(s:conversation_bufnr, 'ollama_stick_to_bottom', v:true)
+        call win_execute(s:conversation_winid, 'silent! normal! G')
+    endif
 endfunction
 
 function! ollama#edit#AppendProgress(text) abort
     if bufexists(s:conversation_bufnr)
+        let l:stick = getbufvar(s:conversation_bufnr, 'ollama_stick_to_bottom', v:true)
         let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
         call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
         try
         let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
         call appendbufline(s:conversation_bufnr, l:line_count - 1, split(a:text, "\n", v:true))
-        if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+        if l:stick && s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
             call win_execute(s:conversation_winid, 'silent! normal! G')
         endif
         finally
@@ -132,6 +146,7 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     let l:append = a:0 > 0 && a:1
     let l:status = a:0 > 1 ? a:2 : ''
     let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
+    let l:stick = getbufvar(s:conversation_bufnr, 'ollama_stick_to_bottom', v:true)
     call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
     try
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
@@ -162,7 +177,7 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
             endif
         endfor
     endif
-    if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+    if l:stick && s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
         " Keep diagnostic folds closed without toggling the fold under the cursor.
         call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
         call win_execute(s:conversation_winid, 'silent! normal! G')
