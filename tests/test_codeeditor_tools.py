@@ -438,6 +438,26 @@ def test_execute_rejects_paths_outside_workspace():
     assert "remain below the current directory" in result["error"]
 
 
+@pytest.mark.parametrize("field", ["timeout", "kill_timeout"])
+def test_execute_rejects_negative_timeouts(field):
+    result = CodeEditor._request_execute({
+        "path": "program",
+        "arguments": [],
+        field: -1,
+    })
+
+    assert result["ok"] is False
+    assert field in result["error"]
+
+
+def test_execute_schema_defines_timeout_defaults():
+    execute_tool = next(tool for tool in CodeEditor.EXECUTE_TOOLS if tool["function"]["name"] == "execute")
+    properties = execute_tool["function"]["parameters"]["properties"]
+
+    assert properties["timeout"]["default"] == 30
+    assert properties["kill_timeout"]["default"] == 3
+
+
 def test_git_add_uses_structured_command_without_shell(monkeypatch, tmp_path):
     calls = []
 

@@ -286,12 +286,14 @@ EXECUTE_TOOLS = [
         "type": "function",
         "function": {
             "name": "execute",
-            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution.",
+            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution. Timeout values are in seconds.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Relative path to an executable file below the current directory."},
                     "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
+                    "timeout": {"type": "number", "minimum": 0, "default": 30, "description": "Seconds before sending SIGTERM."},
+                    "kill_timeout": {"type": "number", "minimum": 0, "default": 3, "description": "Seconds after SIGTERM before sending SIGKILL."},
                 },
                 "required": ["path", "arguments"],
                 "additionalProperties": False,
@@ -502,10 +504,23 @@ def _request_execute(arguments):
         error = "execute arguments must be a list of strings"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
+    timeout = arguments.get("timeout", 30)
+    kill_timeout = arguments.get("kill_timeout", 3)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
+        error = "execute timeout must be a non-negative number of seconds"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if isinstance(kill_timeout, bool) or not isinstance(kill_timeout, (int, float)) or kill_timeout < 0:
+        error = "execute kill_timeout must be a non-negative number of seconds"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    arguments = dict(arguments)
+    arguments["timeout"] = timeout
+    arguments["kill_timeout"] = kill_timeout
     request_id = str(uuid.uuid4())
     with g_make_condition:
         g_make_results[request_id] = None
-    _progress("Waiting for execution confirmation", type="execute_request", request_id=request_id, arguments={"path": path, "arguments": requested_arguments})
+    _progress("Waiting for execution confirmation", type="execute_request", request_id=request_id, arguments=arguments)
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()

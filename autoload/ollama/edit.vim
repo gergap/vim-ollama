@@ -347,10 +347,18 @@ function! s:SaveExecuteDecisions(decisions) abort
 endfunction
 
 function! s:FinishExecute(request_id, state, job, status) abort
+    let a:state.finished = v:true
+    if a:state.timeout_timer != -1
+        call timer_stop(a:state.timeout_timer)
+    endif
+    if a:state.kill_timer != -1
+        call timer_stop(a:state.kill_timer)
+    endif
     let l:output = join(a:state.output, "\n")
+    let l:timed_out = get(a:state, 'timed_out', v:false)
     let l:result = {
-                \ 'ok': a:status == 0,
-                \ 'message': a:status == 0 ? 'execution completed successfully' : 'execution failed',
+                \ 'ok': a:status == 0 && !l:timed_out,
+                \ 'message': l:timed_out ? 'execution timed out and was terminated' : a:status == 0 ? 'execution completed successfully' : 'execution failed',
                 \ 'output': l:output,
                 \ 'exit_code': a:status,
                 \ }
@@ -363,6 +371,14 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             throw 'execute tool requires a path and argument list'
         endif
         let l:relative = a:arguments.path
+        let l:timeout = get(a:arguments, 'timeout', 30)
+        let l:kill_timeout = get(a:arguments, 'kill_timeout', 3)
+        if type(l:timeout) != v:t_number || l:timeout < 0
+            throw 'execute timeout must be a non-negative number of seconds'
+        endif
+        if type(l:kill_timeout) != v:t_number || l:kill_timeout < 0
+            throw 'execute kill_timeout must be a non-negative number of seconds'
+        endif
         if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^/' || l:relative =~# '^[A-Za-z]:[\\/]'
             throw 'execute path must be relative and remain below the current directory'
         endif
@@ -390,7 +406,14 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             endif
         endif
 
-        let l:state = {'output': []}
+        let l:state = {
+                    \ 'output': [],
+                    \ 'finished': v:false,
+                    \ 'timed_out': v:false,
+                    \ 'timeout_timer': -1,
+                    \ 'kill_timer': -1,
+                    \ 'kill_timeout': l:kill_timeout,
+                    \ }
         let l:options = {
                     \ 'cwd': g:ollama_edit_cwd,
                     \ 'out_cb': function('s:CollectMakeOutput', [l:state]),
@@ -401,9 +424,27 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start executable'
         endif
+        let l:state.timeout_timer = timer_start(float2nr(l:timeout * 1000),
+                    \ {-> s:TimeoutExecute(a:request_id, l:state, l:job)})
     catch
         call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execute failed: ' .. v:exception, 'output': []})
     endtry
+endfunction
+
+function! s:TimeoutExecute(request_id, state, job) abort
+    if a:state.finished
+        return
+    endif
+    let a:state.timed_out = v:true
+    call job_stop(a:job, 'term')
+    let a:state.kill_timer = timer_start(float2nr(a:state.kill_timeout * 1000),
+                \ {-> s:KillExecute(a:request_id, a:state, a:job)})
+endfunction
+
+function! s:KillExecute(request_id, state, job) abort
+    if !a:state.finished
+        call job_stop(a:job, 'kill')
+    endif
 endfunction
 
 function! ollama#edit#EditCodeDone(status, ...) abort
