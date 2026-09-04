@@ -35,6 +35,7 @@ let s:help_text = {
 \ 'ollama_edit_options': 'Options for edit model.',
 \ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',
 \ 'ollama_show_llm_request': 'Show complete LLM requests in folded diagnostics.',
+\ 'ollama_edit_max_operations': 'Maximum tool calls allowed in one edit request.',
 \ 'ollama_bwrap_enabled': 'Run external tool calls inside bubblewrap.',
 \ 'ollama_bwrap_command': 'Bubblewrap executable used for sandboxed tools.',
 \ 'ollama_bwrap_network': 'Allow network access inside bubblewrap.',

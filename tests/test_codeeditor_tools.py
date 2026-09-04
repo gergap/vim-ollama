@@ -267,6 +267,21 @@ def test_quickfix_mode_keeps_vim_make(monkeypatch):
     assert "vim-check" not in names
 
 
+def test_edit_max_operations_is_configurable(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "call-1", "function": {"name": "buf_insert_lines", "arguments": {
+            "line": 1,
+            "content": ["new"],
+        }}}]},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    with pytest.raises(ValueError, match="exceeded the 1-operation limit"):
+        CodeEditor._run_edit(
+            "edit it", ["old"], "text", {"provider": "ollama", "max_operations": 1}
+        )
+
+
 def test_execute_virtual_make_name_is_routed_to_vim_make(monkeypatch):
     responses = iter([
         {"tool_calls": [{"id": "make-1", "function": {"name": "execute", "arguments": {

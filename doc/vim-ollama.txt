@@ -564,7 +564,17 @@ g:ollama_show_llm_request
         let g:ollama_show_llm_request = v:true
 <
 
-                                                       *g:ollama_bwrap_enabled*
+                                                    *g:ollama_edit_max_operations*
+g:ollama_edit_max_operations
+    - Description: Sets the maximum number of model tool calls allowed in one
+      `:OllamaEdit`, `:OllamaExplain`, or `:OllamaQuickFix` request.
+    - Default: 64
+    - Example:
+>
+        let g:ollama_edit_max_operations = 128
+<
+
+                                                        *g:ollama_bwrap_enabled*
 g:ollama_bwrap_enabled
     - Description: Runs `execute`, `vim-make`, and `vim-check` inside a
       bubblewrap sandbox. The default enables it when bubblewrap is available

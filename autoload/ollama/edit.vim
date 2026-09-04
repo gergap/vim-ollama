@@ -796,6 +796,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
+                \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
                 \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)

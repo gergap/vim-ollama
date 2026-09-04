@@ -1305,8 +1305,11 @@ def _run_edit(request, code, filetype, settings):
     tool_names = [tool["function"]["name"] for tool in tools]
     _info(f"available tools: {tool_names}")
 
-    for call_number in range(MAX_TOOL_CALLS):
-        _progress(f"Waiting for model response ({call_number + 1}/{MAX_TOOL_CALLS})")
+    max_operations = settings.get("max_operations", MAX_TOOL_CALLS)
+    if isinstance(max_operations, bool) or not isinstance(max_operations, int) or max_operations < 1:
+        raise ValueError("max_operations must be a positive integer")
+    for call_number in range(max_operations):
+        _progress(f"Waiting for model response ({call_number + 1}/{max_operations})")
         if log is not None:
             log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
         message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
@@ -1408,7 +1411,7 @@ def _run_edit(request, code, filetype, settings):
                 messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
             else:
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": json.dumps(result)})
-    raise ValueError(f"model exceeded the {MAX_TOOL_CALLS}-operation limit")
+    raise ValueError(f"model exceeded the {max_operations}-operation limit")
 
 
 def _worker(request, code, filetype, settings):
