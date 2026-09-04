@@ -558,7 +558,7 @@ def _request_check(arguments):
         return g_make_results.pop(request_id)
 
 
-def _request_execute(arguments, cwd=None):
+def _request_execute(arguments, cwd=None, allow_system_tools=False):
     if not isinstance(arguments, dict):
         error = "execute tool requires a path and argument list"
         _progress(f"Tool error: {error}", tool="execute")
@@ -569,7 +569,11 @@ def _request_execute(arguments, cwd=None):
         error = "execute path must be a non-empty string"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
-    if os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/")):
+    if any(part == ".." for part in path.replace("\\", "/").split("/")):
+        error = "execute path must be relative and remain below the current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if (os.path.isabs(path) or ntpath.isabs(path)) and not allow_system_tools:
         error = "execute path must be relative and remain below the current directory"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
@@ -591,10 +595,27 @@ def _request_execute(arguments, cwd=None):
         error = "execute requires a current directory"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
-    local_path = os.path.normpath(os.path.join(cwd, path))
+    local_path = os.path.normpath(path if os.path.isabs(path) else os.path.join(cwd, path))
     local_cwd = os.path.normpath(cwd)
-    if os.path.commonpath([local_path, local_cwd]) != local_cwd or not os.path.isfile(local_path) or not os.access(local_path, os.X_OK) or os.path.islink(local_path):
-        return {"ok": False, "message": f"execute denied: {path} is not a local executable below the current directory", "denied": path, "output": ""}
+    is_local_executable = (
+        not os.path.isabs(path)
+        and os.path.commonpath([local_path, local_cwd]) == local_cwd
+        and os.path.isfile(local_path)
+        and os.access(local_path, os.X_OK)
+        and not os.path.islink(local_path)
+    )
+    if not is_local_executable:
+        if not allow_system_tools:
+            return {"ok": False, "message": f"execute denied: {path} is not an executable below the current directory", "denied": path, "output": ""}
+        resolved = os.path.realpath(path) if os.path.isabs(path) else shutil.which(path)
+        allowed_roots = ("/usr/", "/bin/", "/sbin/", "/lib/", "/lib64/")
+        if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+            return {"ok": False, "message": f"execute denied: system tool not found: {path}", "denied": path, "output": ""}
+        resolved = os.path.realpath(resolved)
+        if not resolved.startswith(allowed_roots):
+            return {"ok": False, "message": f"execute denied: system tool is outside the sandbox system paths: {path}", "denied": path, "output": ""}
+        path = resolved
+        local_path = resolved
     arguments = dict(arguments)
     arguments["timeout"] = timeout
     arguments["kill_timeout"] = kill_timeout
@@ -1055,7 +1076,7 @@ def _system_prompt(settings):
         "JSON tool calls, or similar syntax.",
         "When a tool is required, invoke the supplied tool directly.",
         "vim-make and vim-check are tool names, not executable paths; never pass either name to execute.",
-        "Build only with the supplied vim-make tool. Never run a compiler, shell, or custom build command through another tool.",
+        "Build with the supplied vim-make tool. When bubblewrap is active, execute may run standard system tools inside the sandbox for testing, but never use it to bypass the supplied tool interfaces.",
         "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "Use buf_replace_lines instead of calling sed for the current buffer range.",
@@ -1350,7 +1371,7 @@ def _run_edit(request, code, filetype, settings):
                 elif name in CHECK_TOOL_NAMES:
                     result = _request_check(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
-                    result = _request_execute(arguments, settings.get("cwd"))
+                    result = _request_execute(arguments, settings.get("cwd"), settings.get("sandbox_system_tools", False))
                 elif name in GIT_TOOL_NAMES:
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:

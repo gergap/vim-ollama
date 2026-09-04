@@ -583,11 +583,23 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         if type(l:kill_timeout) != v:t_number || l:kill_timeout < 0
             throw 'execute kill_timeout must be a non-negative number of seconds'
         endif
-        if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^/' || l:relative =~# '^[A-Za-z]:[\\/]'
+        if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^[A-Za-z]:[\\/]'
             throw 'execute path must be relative and remain below the current directory'
         endif
-        let l:path = simplify(g:ollama_edit_cwd .. '/' .. l:relative)
-        if getftype(l:path) ==# 'link' || !filereadable(l:path) || !executable(l:path) || isdirectory(l:path)
+        if l:relative =~# '^/' && !get(g:, 'ollama_bwrap_enabled', v:false)
+            throw 'absolute system paths require bubblewrap'
+        endif
+        let l:is_absolute = l:relative =~# '^/'
+        let l:path = l:is_absolute ? simplify(l:relative) : simplify(g:ollama_edit_cwd .. '/' .. l:relative)
+        if get(g:, 'ollama_bwrap_enabled', v:false) && (l:is_absolute || l:relative !~# '[\\/]')
+                    \ && (l:is_absolute || getftype(l:path) !=# 'file' || !executable(l:path))
+            let l:path = l:is_absolute ? resolve(l:path) : exepath(l:relative)
+        endif
+        if get(g:, 'ollama_bwrap_enabled', v:false) && l:is_absolute
+                    \ && l:path !~# '^/usr/\|^/bin/\|^/sbin/\|^/lib/\|^/lib64/'
+            throw 'absolute path is outside the sandbox system paths'
+        endif
+        if empty(l:path) || getftype(l:path) ==# 'link' || !filereadable(l:path) || !executable(l:path) || isdirectory(l:path)
             throw 'execute path must be an executable regular file'
         endif
         for l:argument in a:arguments.arguments
@@ -784,6 +796,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
+                \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)
     let l:code_json = json_encode(a:code)
