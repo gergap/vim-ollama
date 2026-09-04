@@ -358,20 +358,16 @@ function! s:ConfirmSandbox(tool, command) abort
     if get(s:sandbox_session_approvals, l:key, v:false)
         return v:true
     endif
-    let l:summary = join(map(copy(a:command), 'shellescape(v:val)'), ' ')
-    let l:choice = confirm('Allow sandboxed ' .. a:tool .. '?\n' .. l:summary,
+    let l:summary = a:tool ==# 'execute'
+                \ ? 'Run the selected executable with project files read-only and network access disabled?'
+                \ : 'Run the configured checker with project files read-only and network access disabled?'
+    let l:choice = confirm(l:summary,
                 \ "Allow &Once\nAllow for &Session\n&Cancel", 3)
     if l:choice == 2
         let s:sandbox_session_approvals[l:key] = v:true
         return v:true
     endif
     return l:choice == 1
-endfunction
-
-function! s:SandboxMakeprg(makeprg) abort
-    let l:command = s:SandboxWrap(['/bin/sh', '-c', a:makeprg .. ' "$@"', '/bin/sh'],
-                \ get(g:, 'ollama_bwrap_make_write_paths', []))
-    return join(map(copy(l:command), 'shellescape(v:val)'), ' ')
 endfunction
 
 function! s:FinishMake(request_id, state, job, status) abort
@@ -445,10 +441,6 @@ function! ollama#edit#RunMake(request_id, arguments) abort
         endfor
         let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:command],
                     \ get(g:, 'ollama_bwrap_make_write_paths', []))
-        if !s:ConfirmSandbox('vim-make', l:wrapped)
-            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed vim-make cancelled by user', 'output': '', 'diagnostics': []})
-            return
-        endif
         let l:job = job_start(l:wrapped, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start configured makeprg'
@@ -878,18 +870,13 @@ function! ollama#edit#QuickFix() abort
             let l:makeprg = &l:makeprg
             let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:makeprg .. ' "$@"', '/bin/sh'],
                         \ get(g:, 'ollama_bwrap_make_write_paths', []))
-            if !s:ConfirmSandbox('vim-make', l:wrapped)
-                let l:build_output = 'sandboxed vim-make cancelled by user'
-                let l:check_status = -1
-            else
-                let l:original_makeprg = &l:makeprg
-                try
-                    let &l:makeprg = join(map(copy(l:wrapped), 'shellescape(v:val)'), ' ')
-                    let l:build_output = execute('silent make!')
-                finally
-                    let &l:makeprg = l:original_makeprg
-                endtry
-            endif
+            let l:original_makeprg = &l:makeprg
+            try
+                let &l:makeprg = join(map(copy(l:wrapped), 'shellescape(v:val)'), ' ')
+                let l:build_output = execute('silent make!')
+            finally
+                let &l:makeprg = l:original_makeprg
+            endtry
             " :make populates the quickfix list, but does not reliably expose
             " the makeprg exit status through v:shell_error.
             if l:check_status != -1

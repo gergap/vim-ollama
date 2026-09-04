@@ -572,7 +572,8 @@ g:ollama_bwrap_network
 
                                                        *g:ollama_bwrap_confirm*
 g:ollama_bwrap_confirm
-    - Description: Prompts before launching each new sandboxed command.
+    - Description: Prompts before launching sandboxed `execute` and
+      `vim-check` commands. `vim-make` is not prompted.
     - Default: 'v:true'
 
                                                  *g:ollama_bwrap_make_write_paths*
