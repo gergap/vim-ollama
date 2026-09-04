@@ -783,6 +783,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'continue_history': get(a:settings, 'continue_history', v:false),
                 \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
+                \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)
     let l:code_json = json_encode(a:code)

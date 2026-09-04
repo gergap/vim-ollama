@@ -552,6 +552,18 @@ g:ollama_stop_on_error
         let g:ollama_stop_on_error = v:true
 <
 
+                                                       *g:ollama_show_llm_request*
+g:ollama_show_llm_request
+    - Description: Shows the complete request sent to the LLM in a folded
+      diagnostic. Messages, tools, and request options have separate nested
+      folds. This is intended for debugging prompts and should not be used
+      in production. Chat buffer can get large and slow this way.
+    - Default: 'v:false'
+    - Example:
+>
+        let g:ollama_show_llm_request = v:true
+<
+
                                                        *g:ollama_bwrap_enabled*
 g:ollama_bwrap_enabled
     - Description: Runs `execute`, `vim-make`, and `vim-check` inside a

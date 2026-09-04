@@ -1153,6 +1153,21 @@ def _edit_prompt(request, code, filetype, settings):
     )
 
 
+def _request_diagnostic(request):
+    sections = []
+    for title, value in (
+        ("Messages", request.get("messages", [])),
+        ("Tools", request.get("tools", [])),
+        ("Request options", {key: value for key, value in request.items() if key not in ("messages", "tools")}),
+    ):
+        sections.extend([
+            f"#StartDiagnostic {title}",
+            json.dumps(value, indent=2),
+            "#EndDiagnostic",
+        ])
+    return "\n".join(sections)
+
+
 def _ollama_request(messages, settings, tools):
     baseurl = settings.get("url") or DEFAULT_HOST
     endpoint = baseurl.rstrip("/") + "/api/chat"
@@ -1165,10 +1180,13 @@ def _ollama_request(messages, settings, tools):
     api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
     if api_key:
         headers["Authorization"] = "Bearer " + api_key
+    request = {"model": model, "messages": messages, "tools": tools, "stream": False, "options": options}
+    if settings.get("show_llm_request", False):
+        _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     response = requests.post(
         endpoint,
         headers=headers,
-        json={"model": model, "messages": messages, "tools": tools, "stream": False, "options": options},
+        json=request,
         timeout=settings.get("timeout", 300),
     )
     response.raise_for_status()
@@ -1228,6 +1246,8 @@ def _openai_request(messages, settings, tools):
         "temperature": options.get("temperature", 0),
         "max_tokens": options.get("max_tokens", 5000),
     }
+    if settings.get("show_llm_request", False):
+        _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     message = client.chat.completions.create(**request).choices[0].message
     return message
 

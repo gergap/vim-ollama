@@ -298,6 +298,22 @@ def test_workspace_prompt_does_not_include_buffer_snapshot():
     assert "filesystem" in prompt
 
 
+def test_request_diagnostic_contains_nested_request_sections():
+    diagnostic = CodeEditor._request_diagnostic({
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "explain this"}],
+        "tools": [{"type": "function"}],
+        "stream": False,
+    })
+
+    assert "#StartDiagnostic Messages" in diagnostic
+    assert '"explain this"' in diagnostic
+    assert "#StartDiagnostic Tools" in diagnostic
+    assert '"type": "function"' in diagnostic
+    assert "#StartDiagnostic Request options" in diagnostic
+    assert '"model": "test-model"' in diagnostic
+
+
 def test_range_edit_rejects_filesystem_tools(monkeypatch):
     responses = iter([
         {"tool_calls": [{"id": "file-1", "function": {"name": "create_file", "arguments": {
