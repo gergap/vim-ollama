@@ -479,7 +479,7 @@ function! ollama#edit#RunCheck(request_id, ...) abort
             throw 'no valid checker is configured for this filetype'
         endif
         for l:argument in l:checker.command
-            if type(l:argument) != v:t_string || empty(l:argument) || stridx(l:argument, "\x00") != -1
+            if type(l:argument) != v:t_string || empty(l:argument)
                 throw 'checker command must be a list of non-empty strings'
             endif
         endfor
@@ -603,7 +603,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             throw 'execute path must be an executable regular file'
         endif
         for l:argument in a:arguments.arguments
-            if type(l:argument) != v:t_string || stridx(l:argument, "\x00") != -1
+            if type(l:argument) != v:t_string
                 throw 'execute arguments must be a list of strings'
             endif
         endfor
