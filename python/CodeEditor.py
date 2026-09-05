@@ -452,7 +452,8 @@ GIT_TOOLS = [
 ]
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
+AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
@@ -460,11 +461,11 @@ INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
 CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
-GIT_TOOL_NAMES = {tool["function"]["name"] for tool in GIT_TOOLS}
+GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
-RANGE_TOOLS += [tool for tool in GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
-WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + GIT_TOOLS
+RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -1098,9 +1099,10 @@ def _system_prompt(settings):
         "JSON tool calls, or similar syntax.",
         "When a tool is required, invoke the supplied tool directly.",
         "vim-make and vim-check are tool names, not executable paths; never pass either name to execute.",
-        "Build with the supplied vim-make tool. When bubblewrap is active, execute may run standard system tools inside the sandbox for testing, but never use it to bypass the supplied tool interfaces.",
+        "Build with the supplied vim-make tool. When bubblewrap is available, execute may run standard system tools inside the sandbox for testing, but never use it to bypass the supplied tool interfaces.",
         "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
+        "If not Git tools where supplied, don't track anything in Git.",
         "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
     # detect Windows
