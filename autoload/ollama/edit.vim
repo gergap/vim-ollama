@@ -882,24 +882,31 @@ function! ollama#edit#QuickFix() abort
         try
             " Run the initial build before starting the worker so its first prompt
             " already contains the current diagnostics.
-            let l:makeprg = &l:makeprg
-            let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:makeprg .. ' "$@"', '/bin/sh'],
-                        \ get(g:, 'ollama_bwrap_make_write_paths', []))
-            let l:original_makeprg = &l:makeprg
-            try
-                let &l:makeprg = join(map(copy(l:wrapped), 'shellescape(v:val)'), ' ')
-                let l:build_output = execute('silent make!')
-            finally
-                let &l:makeprg = l:original_makeprg
-            endtry
-            " :make populates the quickfix list, but does not reliably expose
-            " the makeprg exit status through v:shell_error.
-            if l:check_status != -1
-                let l:check_status = empty(getqflist()) ? 0 : 1
-            endif
+            call execute('silent make!')
+            let l:diagnostics = []
+            for l:item in getqflist()
+                let l:filename = get(l:item, 'filename', '')
+                if empty(l:filename) && get(l:item, 'bufnr', 0) > 0
+                    let l:filename = bufname(l:item.bufnr)
+                endif
+                let l:location = l:filename
+                if get(l:item, 'lnum', 0) > 0
+                    let l:location ..= ':' .. l:item.lnum
+                    if get(l:item, 'col', 0) > 0
+                        let l:location ..= ':' .. l:item.col
+                    endif
+                endif
+                let l:diagnostic = get(l:item, 'text', '')
+                if !empty(l:location)
+                    let l:diagnostic = l:location .. ': ' .. l:diagnostic
+                endif
+                if !empty(l:diagnostic)
+                    call add(l:diagnostics, l:diagnostic)
+                endif
+            endfor
+            let l:build_output = join(l:diagnostics, "\n")
+            let l:check_status = empty(l:diagnostics) ? 0 : 1
             redraw!
-            " Vim may encode line breaks in execute() output as NUL characters.
-            let l:build_output = substitute(l:build_output, '\%x00', "\n", 'g')
         catch
             let l:build_output = 'Vim :make failed: ' .. v:exception
         endtry
