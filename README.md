@@ -7,6 +7,30 @@ can run locally and does not require cloud services, thus preserving your privac
 <img src="screenshots/VimOllama_256x256.png" alt="Vim-Ollama Logo">
 </p>
 
+## Latest News
+
+### Vim-Ollama V1.3.0
+
+V1.3.0 introduces **OllamaEdit**, a tool-based AI coding workflow for Vim. It
+can inspect the selected code or project workspace, apply targeted changes,
+run validation tools, and iterate on compiler diagnostics with
+`:OllamaQuickFix`. The workflow keeps changes under Vim’s control while
+supporting secure sandboxed project tools where available.
+
+V1.3.0 also adds support for thinking models, presenting their reasoning output
+in folded sections that can be opened when needed.
+
+> [!WARNING]
+> OllamaEdit is a new tool-based feature. Giving an AI control over project
+> files and tools carries security risks, even when sandboxing is enabled.
+> Sandboxing reduces the attack surface but does not guarantee safety. Review
+> the requested operations and resulting changes before trusting them.
+> Don't let it run unsupervised!
+>
+> For AI-driven builds, configure Vim's `makeprg` to use the documented
+> [Secure Build Helper](doc/vim-ollama.txt). It runs `vim-make` builds inside
+> bubblewrap with project files protected from writes.
+
 ## Motivation
 
 [Copilot.vim](https://github.com/github/copilot.vim) by Tim Pope is an excellent plugin for both Vim and NeoVim.
@@ -21,10 +45,10 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 - Intelligent AI-based code completion (aka tab completion)
 - Integrated chat support for code reviews and other interactions
-- Automatic code editing based on natural language (NEW in V1.0)
-  - Supports inline-diff view for accepting changes interactively
-  - Or accept without prompt for a Git-based workflow using [vim-fugitive](https://github.com/tpope/vim-fugitive)
-    (e.g., using `:Gvdiffsplit`)
+- OllamaEdit: AI-assisted code editing based on natural language (NEW in 1.3)
+  - Edit a selected range or work across the project workspace
+  - Inspect files, apply changes, and validate the result with build tools
+  - Fix compiler diagnostics automatically with `:OllamaQuickFix`
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.
@@ -34,6 +58,10 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 ![Demo](screenshots/game.gif)
 
 ## Screencasts
+
+### OllamaEdit
+
+[![OllamaEdit](https://img.youtube.com/vi/AAOsABCvkFI/0.jpg)](https://youtu.be/AAOsABCvkFI)
 
 ### Demo of Vim-Ollama 1.0
 

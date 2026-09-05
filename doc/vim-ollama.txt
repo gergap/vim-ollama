@@ -125,26 +125,88 @@ The vim-ollama plugin provides the following commands:
         :OllamaTask "Add doxygen comments to all functions"
 <
                                                       *:OllamaEdit*
-:OllamaEdit
+:[range]OllamaEdit
     - Description: Allows editing a selected text using the AI. This command
-    works on a range and so can use the whole file `:%OllamaEdit <prompt>` or
+    can work on a range or in workspace mode. In range mode the AI only
+    gets buffer tools and so can only edit the selected range inside a Vim
+    buffer. File edits are not allowed.
+    In workspace mode it can edit all files in the current directory.
     a visual selection. Alternatively, you can use the mapping `<leader>e` to
     achieve the same, but the command has the advantage of a command history,
     which may be handy when you want to apply the same change to multiple
     locations.
     - Usage:
 >
-        :OllamaEdit [prompt]
+        :[range]OllamaEdit [prompt]
 <
     - Example:
 >
-        :OllamaEdit "add comments to this code"
+        # Range Mode
+        :%OllamaEdit "add doxygen comments to all functions"
+        # Workspace Mode (used AGENTS.md)
+        :OllamaEdit "start implementing the code"
 <
-    - Accepting and Rejecting changes: The changes made by the AI are applied
-    as an inline diff. You can accept/reject each individual change or all.
-    The dialog uses Vim's `popup_filter_yesno`, which means you can accept
-    using the keys 'y', 'Y' and reject using 'n' or 'N'. Pressing Esc and 'x'
-    works like pressing 'n'. `
+ Note: It is recommended to track all source files in Git so that you can
+ undo changes of the AI and avoid loosing data if AI goes crazy.
+
+                                                      *:OllamaExplain*
+:[range]OllamaExplain
+    - Description: Explains the selected code using the configured edit model.
+      The command is read-only: the AI receives only file inspection tools and
+      cannot modify buffers or files. Related project files may be inspected
+      when relevant. The explanation is written to the OllamaEdit chat buffer.
+
+    - Usage:
+>
+        :[range]OllamaExplain
+<
+
+                                                      *:OllamaQuickFix*
+:OllamaQuickFix
+    - Description: Builds the project with Vim's configured `makeprg`, inspects
+      compiler errors and warnings, and asks the AI to fix them. The command
+      repeats the build and fix cycle until the build succeeds.
+      It runs in workspace mode and may modify files below the current working
+      directory.
+
+    - Usage:
+>
+        :OllamaQuickFix
+<
+
+                                                     *vim-ollama-mk*
+SECURE BUILD HELPER
+    The plugin includes `scripts/mk`, a build script for Makefile projects and
+    out-of-source CMake projects. It uses a `bld` directory for out-of-source
+    builds, creating it when necessary, then runs CMake, make, and ninja inside
+    bubblewrap. Project files are read-only
+    to the build process; the build directory and CMake's install prefix are
+    writable so that build and install targets can complete.
+
+    It is recommended to use this helper for AI-driven builds, especially with
+    `:OllamaQuickFix`:
+>
+        set makeprg=<C-R>=shellescape(g:ollama_plugin_dir .. '/scripts/mk')<CR>
+<
+    Bubblewrap must be installed and available as `bwrap`. The helper disables
+    network access and clears the inherited environment inside the sandbox.
+    Set `MK_BLDDIR` to select another build directory, `MK_INSTALL_PREFIX` to
+    select the installation directory, or use `mk cmake` to configure without
+    building.
+
+                                                      *:OllamaInitAgents*
+:OllamaInitAgents
+    - Description: Starts a workspace edit to create a AGENTS.md file.
+      Therefore it inspects all files in the current directory.
+      It will also create a local git repo and add a .gitignore file if it
+      does not exist yet.
+      The AGENTS.md file will be injected into the context of further
+      OllamaEdit calls.
+
+    - Usage:
+>
+        :OllamaInitAgents
+<
 
                                                       *:OllamaPull*
 :OllamaPull
@@ -483,20 +545,90 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                      *g:ollama_use_inline_diff*
-g:ollama_use_inline_diff
-    - Description: When true, the `OllamaEdit` changes are applied as inline
-      diff which can be accepted or rejected individually in an interactive
-      way. When false, the plugin will apply the changes directly without
-      asking. This may be useful when tracking the code via Git. Using
-      vim-fugitive's `:GVdiffsplit` command you can compare the changes
-      in vimdiff mode.
-    - Default: 1
+                                                      *g:ollama_quickfix_checkers*
+g:ollama_quickfix_checkers
+    - Description: Configures checker commands used by `:OllamaQuickFix` for
+      non-compiled filetypes. Each entry contains a command list and optional
+      errorformat. For example:
+>
+        let g:ollama_quickfix_checkers = {
+                \ 'python': {
+                \     'command': ['ruff', 'check', '.'],
+                \     'errorformat': '%f:%l:%c: %m'
+                \ }
+                \ }
+<
+    - Default: Python uses `ruff check .`.
+
+                                                      *g:ollama_stop_on_error*
+g:ollama_stop_on_error
+    - Description: Stops the OllamaEdit cycle immediately after a tool error
+      instead of sending the error back to the model for another attempt. This
+      is useful for investigating whether a failed tool call came from the LLM
+      or from vim-ollama.
+    - Default: 'v:false'
     - Example:
 >
-        let g:ollama_use_inline_diff = 0
+        let g:ollama_stop_on_error = v:true
 <
-                                                      *g:ollama_no_maps*
+
+                                                       *g:ollama_show_llm_request*
+g:ollama_show_llm_request
+    - Description: Shows the complete request sent to the LLM in a folded
+      diagnostic. Messages, tools, and request options have separate nested
+      folds. This is intended for debugging prompts and should not be used
+      in production. Chat buffer can get large and slow this way.
+    - Default: 'v:false'
+    - Example:
+>
+        let g:ollama_show_llm_request = v:true
+<
+
+                                                    *g:ollama_edit_max_operations*
+g:ollama_edit_max_operations
+    - Description: Sets the maximum number of model tool calls allowed in one
+      `:OllamaEdit`, `:OllamaExplain`, or `:OllamaQuickFix` request.
+    - Default: 64
+    - Example:
+>
+        let g:ollama_edit_max_operations = 128
+<
+
+                                                        *g:ollama_bwrap_enabled*
+g:ollama_bwrap_enabled
+    - Description: Runs `execute`, `vim-make`, and `vim-check` inside a
+      bubblewrap sandbox. The default enables it when bubblewrap is available
+      on Unix systems.
+    - Default: 'has('unix') && executable('bwrap')'
+
+                                                       *g:ollama_bwrap_command*
+g:ollama_bwrap_command
+    - Description: Path or executable name of the bubblewrap command.
+    - Default: 'bwrap'
+
+                                                       *g:ollama_bwrap_network*
+g:ollama_bwrap_network
+    - Description: Allows network access for sandboxed tools. Network access
+      is disabled by default.
+    - Default: 'v:false'
+
+                                                       *g:ollama_bwrap_confirm*
+g:ollama_bwrap_confirm
+    - Description: Prompts before launching sandboxed `execute` and
+      `vim-check` commands. `vim-make` is not prompted.
+    - Default: 'v:true'
+
+                                                 *g:ollama_bwrap_make_write_paths*
+g:ollama_bwrap_make_write_paths
+    - Description: Project-relative directories mounted writable for
+      sandboxed `vim-make`. All other project files remain read-only.
+    - Default: '[]'
+    - Example:
+>
+        let g:ollama_bwrap_make_write_paths = ['build']
+<
+
+                                                       *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts

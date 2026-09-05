@@ -5,9 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased] - Planned changes and ideas...
 - Cycle through different suggestions in code completion.
 - Generic template support read from the model itself.
-- Add repo completion with multiple files
-- Insert contexts into chat window using special keywords (e.g. @Files)
-- AI Tool support for agentic behavior
+
+## [Version 1.3] - 2026-09-05
+
+- Add agentic workflow similar to OpenCode. This requires models with tool support.
+- Provide various tools for Vim buffer editing, file editing, compiling, and Git integration.
+- Introduce bubblewrap sandbox support (Linux only).
+- Introduce `mk`, a secure wrapper for Makefile and CMake-based projects.
+  It also uses bubblewrap to secure the build process.
+- Add support for thinking models (based on PR-114).
+- Replace the old diff-based OllamaEdit functionality with the new tool-based workflow.
 
 ## [Version 1.2] - 2025-10-31
 

@@ -145,12 +145,41 @@ if !exists('g:ollama_edit_options')
                 \ 'temperature': 0,
                 \ 'top_p': 0.95,
                 \ 'num_predict': 4096,
-                \ 'num_ctx': 8192,
+                \ 'num_ctx': 65536,
                 \ 'keep_alive': 1800,
                 \ }
 endif
-if !exists('g:ollama_use_inline_diff')
-    let g:ollama_use_inline_diff = 1
+if !exists('g:ollama_edit_instructions')
+    let g:ollama_edit_instructions = ''
+endif
+if !exists('g:ollama_show_llm_request')
+    let g:ollama_show_llm_request = v:false
+endif
+if !exists('g:ollama_edit_max_operations')
+    let g:ollama_edit_max_operations = 64
+endif
+if !exists('g:ollama_quickfix_checkers')
+    let g:ollama_quickfix_checkers = {
+                \ 'python': {'command': ['ruff', 'check', '{path}'], 'errorformat': '%f:%l:%c: %m'},
+                \ }
+endif
+if !exists('g:ollama_stop_on_error')
+    let g:ollama_stop_on_error = v:false
+endif
+if !exists('g:ollama_bwrap_enabled')
+    let g:ollama_bwrap_enabled = has('unix') && executable('bwrap')
+endif
+if !exists('g:ollama_bwrap_command')
+    let g:ollama_bwrap_command = 'bwrap'
+endif
+if !exists('g:ollama_bwrap_network')
+    let g:ollama_bwrap_network = v:false
+endif
+if !exists('g:ollama_bwrap_confirm')
+    let g:ollama_bwrap_confirm = v:true
+endif
+if !exists('g:ollama_bwrap_make_write_paths')
+    let g:ollama_bwrap_make_write_paths = []
 endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
@@ -214,10 +243,6 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
     vnoremap <Plug>(ollama-review)         :call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
-    nnoremap <Plug>(ollama-accept-changes) <Cmd>call ollama#edit#AcceptCurrent()<CR>
-    nnoremap <Plug>(ollama-reject-changes) <Cmd>call ollama#edit#RejectCurrent()<CR>
-    nnoremap <Plug>(ollama-accept-all-changes) <Cmd>call ollama#edit#AcceptAll()<CR>
-    nnoremap <Plug>(ollama-reject-all-changes) <Cmd>call ollama#edit#RejectAll()<CR>
     nnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
     vnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
 
@@ -277,21 +302,21 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
-command! -nargs=1 -range=% OllamaEdit <line1>,<line2>call ollama#edit#EditCode(<f-args>)
+command! -nargs=+ -range OllamaEdit call ollama#edit#EditCommand(<q-args>, <line1>, <line2>, <range>)
+command! -range=% OllamaExplain <line1>,<line2>call ollama#edit#ExplainCode(<line1>, <line2>)
+command! OllamaQuickFix call ollama#edit#QuickFix()
+command! OllamaInitAgents call ollama#edit#InitAgents()
 command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 
-" Define new signs for diffs
-sign define NewLine text=+ texthl=DiffAdd
-sign define ChangedLine text=~ texthl=DiffChange
-sign define DeletedLine text=- texthl=DiffDelete
-" Define inline diff property types
-highlight OllamaButton ctermfg=White ctermbg=Blue guifg=#FFFFFF guibg=#0000FF
-" Italic rendering for the reasoning/thinking output in the chat buffer
-call prop_type_add("OllamaDiffDel", {"highlight": "DiffDelete"})
-call prop_type_add("OllamaDiffAdd", {"highlight": "DiffAdd"})
-call prop_type_add("OllamaButton", {"highlight": "OllamaButton"})
+function! s:ShowSandboxStatus(timer) abort
+    echohl ModeMsg
+    echo g:ollama_bwrap_enabled
+          \ ? 'Bubblewrap Sandbox enabled.'
+          \ : 'Bubblewrap Sandbox disabled. Use on own risk.'
+    echohl None
+endfunction
 
 " expand does funky stuff inside of a function need to set it here
 let s:ollama_plugin_dir=expand('<sfile>:p:h:h')
@@ -325,6 +350,7 @@ function! PluginInit() abort
 "        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
 "        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
     endif
+    call timer_start(0, function('<SID>ShowSandboxStatus'))
 endfunction
 
 call PluginInit()

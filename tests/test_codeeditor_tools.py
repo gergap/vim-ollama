@@ -1,0 +1,715 @@
+import sys
+import stat
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
+
+import CodeEditor
+from CodeEditor import apply_tool
+
+
+def test_insert_lines():
+    document = ["one", "three"]
+
+    result = apply_tool(document, "buf_insert_lines", {"line": 2, "content": ["two"]})
+
+    assert result["ok"]
+    assert document == ["one", "two", "three"]
+
+
+def test_replace_lines_requires_exact_expected_text():
+    document = ["one", "two", "three"]
+
+    with pytest.raises(ValueError):
+        apply_tool(
+            document,
+            "buf_replace_lines",
+            {"start_line": 2, "end_line": 2, "expected": ["wrong"], "replacement": ["new"]},
+        )
+
+    assert document == ["one", "two", "three"]
+
+
+def test_delete_and_replace_lines():
+    document = ["one", "two", "three", "four"]
+
+    apply_tool(document, "buf_delete_lines", {"start_line": 2, "end_line": 2, "expected": ["two"]})
+    apply_tool(
+        document,
+        "buf_replace_lines",
+        {"start_line": 2, "end_line": 3, "expected": ["three", "four"], "replacement": ["3", "4"]},
+    )
+
+    assert document == ["one", "3", "4"]
+
+
+def test_replace_lines_accepts_omitted_trailing_blank_expected_line():
+    document = ["one", "two", "three", ""]
+
+    apply_tool(
+        document,
+        "buf_replace_lines",
+        {"start_line": 2, "end_line": 4, "expected": ["two", "three"], "replacement": ["new"]},
+    )
+
+    assert document == ["one", "new"]
+
+
+def test_replace_lines_accepts_extra_trailing_blank_expected_line():
+    document = ["one", "two", "three"]
+
+    apply_tool(
+        document,
+        "buf_replace_lines",
+        {"start_line": 2, "end_line": 3, "expected": ["two", "three", ""], "replacement": ["new"]},
+    )
+
+    assert document == ["one", "new"]
+
+
+def test_replace_lines_rejects_nonblank_expected_length_mismatch():
+    document = ["one", "two", "three"]
+
+    with pytest.raises(ValueError, match="expected length"):
+        apply_tool(
+            document,
+            "buf_replace_lines",
+            {"start_line": 2, "end_line": 3, "expected": ["two"], "replacement": ["new"]},
+        )
+
+
+def test_insert_at_end():
+    document = ["one"]
+
+    apply_tool(document, "buf_insert_lines", {"line": 2, "content": ["two", "three"]})
+
+    assert document == ["one", "two", "three"]
+
+
+def test_insert_lines_accepts_string_content_from_model(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "insert-1", "function": {"name": "buf_insert_lines", "arguments": {
+            "line": 2,
+            "content": "two",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    operations, _messages = CodeEditor._run_edit("insert it", ["one"], "text", {"provider": "ollama"})
+
+    assert operations == [{"tool": "buf_insert_lines", "arguments": {"line": 2, "content": ["two"]}}]
+
+
+def test_replace_lines_accepts_multiline_string_arguments(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "replace-1", "function": {"name": "buf_replace_lines", "arguments": {
+            "start_line": 1,
+            "end_line": 2,
+            "expected": "old\nvalue",
+            "replacement": "new\ntext",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, _messages = CodeEditor._run_edit("replace it", ["old", "value"], "text", {"provider": "ollama"})
+
+    assert operations == [{"tool": "buf_replace_lines", "arguments": {
+        "start_line": 1,
+        "end_line": 2,
+        "expected": ["old", "value"],
+        "replacement": ["new", "text"],
+    }}]
+
+
+def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Use the project style.")
+
+    settings = {
+        "cwd": str(tmp_path),
+        "provider": "ollama",
+        "model": "test-model",
+        "range_mode": True,
+        "filename": "src/main.c",
+        "start_line": 4,
+        "end_line": 6,
+    }
+    system = CodeEditor._system_prompt(settings)
+    prompt = CodeEditor._edit_prompt("fix it", ["old"], "c", settings)
+
+    assert "Working directory:" in system
+    assert "Use the project style." in system
+    assert "src/main.c" in prompt
+    assert "lines 4-6" in prompt
+    assert "4|old" in prompt
+    assert "tool line 1 is Vim line 4" in prompt
+    assert "Do not create, delete, or modify any files." in prompt
+
+
+def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, _messages = CodeEditor._run_edit(
+        "fix the project", [], "", {"provider": "ollama", "range_mode": False}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert operations == []
+    assert "create_file" in names
+    assert "insert_lines" in names
+    assert "buf_insert_lines" not in names
+
+
+def test_file_line_tools_use_absolute_file_lines(tmp_path):
+    path = tmp_path / "source.c"
+    path.write_text("one\ntwo\nthree\n")
+
+    apply_tool([], "replace_lines", {
+        "path": "source.c",
+        "start_line": 2,
+        "end_line": 2,
+        "expected": ["two"],
+        "replacement": ["changed"],
+    }, str(tmp_path))
+    apply_tool([], "insert_lines", {
+        "path": "source.c",
+        "line": 4,
+        "content": ["four"],
+    }, str(tmp_path))
+    apply_tool([], "delete_lines", {
+        "path": "source.c",
+        "start_line": 3,
+        "end_line": 3,
+        "expected": ["three"],
+    }, str(tmp_path))
+
+    assert path.read_text() == "one\nchanged\nfour\n"
+
+
+def test_range_tools_are_prefixed_and_relative(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit("edit the range", ["old"], "text", {"provider": "ollama", "range_mode": True})
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert {"buf_insert_lines", "buf_delete_lines", "buf_replace_lines"} <= names
+    assert "insert_lines" not in names
+
+
+def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, messages = CodeEditor._run_edit(
+        "explain it", ["int main() {}"], "c",
+        {"provider": "ollama", "range_mode": True, "explain_mode": True},
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert names == {"read_file", "glob", "grep", "list_files"}
+    assert operations == []
+    assert "read-only" in messages[1]["content"]
+
+
+def test_quickfix_checker_excludes_vim_make(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit(
+        "fix it", [], "", {"provider": "ollama", "range_mode": False, "quickfix_checker": True}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert "vim-check" in names
+    assert "vim-make" not in names
+
+
+def test_quickfix_mode_keeps_vim_make(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit(
+        "fix it", [], "c", {"provider": "ollama", "range_mode": False, "quickfix_mode": True}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert "vim-make" in names
+    assert "vim-check" not in names
+
+
+def test_edit_max_operations_is_configurable(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "call-1", "function": {"name": "buf_insert_lines", "arguments": {
+            "line": 1,
+            "content": ["new"],
+        }}}]},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    with pytest.raises(ValueError, match="exceeded the 1-operation limit"):
+        CodeEditor._run_edit(
+            "edit it", ["old"], "text", {"provider": "ollama", "max_operations": 1}
+        )
+
+
+def test_execute_virtual_make_name_is_routed_to_vim_make(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "make-1", "function": {"name": "execute", "arguments": {
+            "path": "vim-make",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    make_arguments = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_request_make", lambda arguments: make_arguments.append(arguments) or {
+        "ok": True,
+        "message": "make succeeded",
+    })
+
+    operations, _messages = CodeEditor._run_edit(
+        "fix it", [], "c", {"provider": "ollama", "range_mode": False, "quickfix_mode": True}
+    )
+
+    assert operations == []
+    assert make_arguments == [{"arguments": ""}]
+
+
+def test_workspace_prompt_does_not_include_buffer_snapshot():
+    prompt = CodeEditor._edit_prompt(
+        "fix the project", ["should not be included"], "", {"range_mode": False}
+    )
+
+    assert "should not be included" not in prompt
+    assert "filesystem" in prompt
+
+
+def test_request_diagnostic_contains_nested_request_sections():
+    diagnostic = CodeEditor._request_diagnostic({
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "explain this"}],
+        "tools": [{"type": "function"}],
+        "stream": False,
+    })
+
+    assert "#StartDiagnostic Messages" in diagnostic
+    assert '"explain this"' in diagnostic
+    assert "#StartDiagnostic Tools" in diagnostic
+    assert '"type": "function"' in diagnostic
+    assert "#StartDiagnostic Request options" in diagnostic
+    assert '"model": "test-model"' in diagnostic
+
+
+def test_range_edit_rejects_filesystem_tools(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "file-1", "function": {"name": "create_file", "arguments": {
+            "path": "outside.txt",
+            "content": "not allowed",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, messages = CodeEditor._run_edit("edit it", ["old"], "text", {"provider": "ollama"})
+
+    assert operations == []
+    tool_result = next(message for message in messages if message.get("role") == "tool")
+    assert "filesystem tools are not allowed" in tool_result["content"]
+
+
+def test_tool_error_can_stop_edit_cycle(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "bad-1", "function": {"name": "buf_replace_lines", "arguments": {
+            "start_line": 1,
+            "end_line": 1,
+            "expected": ["wrong"],
+            "replacement": ["new"],
+        }}}]},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    with pytest.raises(ValueError, match="buf_replace_lines failed"):
+        CodeEditor._run_edit(
+            "edit it", ["old"], "text", {"provider": "ollama", "stop_on_error": True}
+        )
+
+
+def test_tool_loop_returns_validated_operations(monkeypatch):
+    responses = iter(
+        [
+            {"tool_calls": [{"id": "call-1", "function": {"name": "buf_replace_lines", "arguments": {
+                "start_line": 1,
+                "end_line": 1,
+                "expected": ["old"],
+                "replacement": ["new"],
+            }}}]},
+            {"tool_calls": []},
+        ]
+    )
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, _messages = CodeEditor._run_edit("change it", ["old"], "text", {"provider": "ollama"})
+
+    assert operations == [{
+        "tool": "buf_replace_lines",
+        "arguments": {
+            "start_line": 1,
+            "end_line": 1,
+            "expected": ["old"],
+            "replacement": ["new"],
+        },
+    }]
+
+
+def test_tool_fold_reports_success(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "read-1", "function": {"name": "read_file", "arguments": {
+            "path": "main.c",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("inspect it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    result_event = next(event for event in progress if event.get("fold_append") == "read_file")
+    assert result_event["fold_status"] == "SUCCESS"
+
+
+def test_grep_fold_title_includes_pattern(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "grep-1", "function": {"name": "grep", "arguments": {
+            "pattern": "main",
+            "path": ".",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("search it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    start_event = next(event for event in progress if event.get("fold") and event.get("tool") == "grep")
+    assert start_event["fold_title"] == "grep . main"
+
+
+def test_glob_fold_title_includes_pattern(monkeypatch, tmp_path):
+    (tmp_path / "main.c").write_text("int main(void) {}\n")
+    responses = iter([
+        {"tool_calls": [{"id": "glob-1", "function": {"name": "glob", "arguments": {
+            "pattern": "*.c",
+            "path": ".",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("find it", [], "", {"provider": "ollama", "range_mode": False, "cwd": str(tmp_path)})
+
+    start_event = next(event for event in progress if event.get("fold") and event.get("tool") == "glob")
+    assert start_event["fold_title"] == "glob . *.c"
+
+
+def test_tool_fold_reports_failure(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "read-1", "function": {"name": "read_file", "arguments": {
+            "path": "missing.c",
+        }}}]},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    with pytest.raises(ValueError, match="read_file failed"):
+        CodeEditor._run_edit("inspect it", [], "", {"provider": "ollama", "range_mode": False, "cwd": ".", "stop_on_error": True})
+
+    result_event = next(event for event in progress if event.get("fold_append") == "read_file")
+    assert result_event["fold_status"] == "FAILED"
+
+
+def test_final_model_response_is_not_truncated(monkeypatch):
+    content = "x" * 300
+    progress = []
+    responses = iter([{"tool_calls": [], "content": content}])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(text))
+
+    operations, _messages = CodeEditor._run_edit("summarize", [], "text", {"provider": "ollama"})
+
+    assert operations == []
+    assert progress[-1] == "Model: " + content
+
+
+def test_context_usage_is_reported_from_ollama_counts():
+    context = CodeEditor._context_usage(
+        {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},
+        {"options": {"num_ctx": 65536}},
+    )
+
+    assert context == "Context: 48.7k / 65.5k (74%)"
+
+
+def test_context_usage_is_omitted_without_num_ctx():
+    context = CodeEditor._context_usage(
+        {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},
+        {"options": {"num_predict": 4096}},
+    )
+
+    assert context is None
+
+
+def test_filesystem_tools_are_limited_to_current_directory(tmp_path):
+    apply_tool([], "create_folder", {"path": "new"}, str(tmp_path))
+    apply_tool([], "create_file", {"path": "new/file.txt", "content": "hello"}, str(tmp_path))
+
+    assert (tmp_path / "new" / "file.txt").read_text() == "hello"
+
+    with pytest.raises(ValueError):
+        apply_tool([], "create_file", {"path": "../outside.txt", "content": "nope"}, str(tmp_path))
+    with pytest.raises(ValueError):
+        apply_tool([], "create_file", {"path": str(tmp_path / "absolute.txt"), "content": "nope"}, str(tmp_path))
+
+
+def test_filesystem_delete_tools(tmp_path):
+    folder = tmp_path / "remove"
+    folder.mkdir()
+    (folder / "file.txt").write_text("content")
+
+    apply_tool([], "delete_file", {"path": "remove/file.txt"}, str(tmp_path))
+    with pytest.raises(OSError):
+        apply_tool([], "delete_file", {"path": "remove/file.txt"}, str(tmp_path))
+
+    apply_tool([], "delete_folder", {"path": "remove", "recursive": False}, str(tmp_path))
+    assert not folder.exists()
+
+
+def test_chmod_makes_regular_files_executable(tmp_path):
+    path = tmp_path / "script.sh"
+    path.write_text("#!/bin/sh\n")
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    apply_tool([], "chmod", {"path": "script.sh"}, str(tmp_path))
+
+    mode = path.stat().st_mode
+    assert mode & stat.S_IXUSR
+    assert mode & stat.S_IXGRP
+    assert mode & stat.S_IXOTH
+    assert mode & stat.S_IRUSR
+    assert mode & stat.S_IWUSR
+
+
+def test_chmod_rejects_directories(tmp_path):
+    (tmp_path / "folder").mkdir()
+
+    with pytest.raises(FileNotFoundError):
+        apply_tool([], "chmod", {"path": "folder"}, str(tmp_path))
+
+
+def test_filesystem_tools_reject_symlink_escape(tmp_path):
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    try:
+        (tmp_path / "link").symlink_to(outside, target_is_directory=True)
+        with pytest.raises(ValueError):
+            apply_tool([], "create_file", {"path": "link/file.txt", "content": "nope"}, str(tmp_path))
+    finally:
+        outside.rmdir()
+
+
+def test_read_file_glob_and_grep(tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "main.c").write_text("int main(void) {\n    return 0;\n}\n")
+    (source / "notes.txt").write_text("main is documented here\n")
+    nested = source / "nested"
+    nested.mkdir()
+    (nested / "other.c").write_text("int main_nested(void) {}\n")
+
+    read_result = apply_tool([], "read_file", {"path": "src/main.c"}, str(tmp_path))
+    glob_result = apply_tool([], "glob", {"pattern": "*.c", "path": "src"}, str(tmp_path))
+    recursive_glob_result = apply_tool([], "glob", {"pattern": "**/*.c", "path": "src"}, str(tmp_path))
+    grep_result = apply_tool([], "grep", {"pattern": r"main", "path": ".", "recursive": True}, str(tmp_path))
+
+    assert "int main" in read_result["content"]
+    assert glob_result["content"] == "src/main.c"
+    assert recursive_glob_result["content"].splitlines() == ["src/main.c", "src/nested/other.c"]
+    assert "src/main.c:1" in grep_result["content"]
+    assert "src/notes.txt:1" in grep_result["content"]
+    assert "src/nested/other.c:1" in grep_result["content"]
+
+
+def test_grep_supports_file_paths(tmp_path):
+    path = tmp_path / "main.c"
+    path.write_text("int main(void) {}\n")
+
+    grep_result = apply_tool([], "grep", {"pattern": r"main", "path": "main.c"}, str(tmp_path))
+
+    assert grep_result["content"] == "main.c:1:int main(void) {}"
+
+    with pytest.raises(ValueError, match="regular directory"):
+        apply_tool([], "glob", {"pattern": "*.c", "path": "main.c"}, str(tmp_path))
+
+
+def test_list_files_supports_non_recursive_and_recursive_modes(tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    nested = source / "nested"
+    nested.mkdir()
+    (tmp_path / "README.md").write_text("readme")
+    (source / "main.c").write_text("main")
+    (nested / "detail.txt").write_text("detail")
+
+    immediate = apply_tool([], "list_files", {"path": "."}, str(tmp_path))
+    recursive = apply_tool([], "list_files", {"path": ".", "recursive": True}, str(tmp_path))
+
+    assert immediate["content"] == "README.md"
+    assert recursive["content"].splitlines() == ["README.md", "src/main.c", "src/nested/detail.txt"]
+
+
+def test_list_files_ignores_git_directories(tmp_path):
+    (tmp_path / "visible.txt").write_text("visible")
+    (tmp_path / ".hidden.txt").write_text("hidden")
+    git_directory = tmp_path / ".git"
+    git_directory.mkdir()
+    (git_directory / "config").write_text("internal")
+    nested_git_directory = tmp_path / "src" / ".git"
+    nested_git_directory.mkdir(parents=True)
+    (nested_git_directory / "index").write_text("internal")
+    (tmp_path / "src" / ".hidden.txt").write_text("hidden")
+
+    result = apply_tool([], "list_files", {"path": ".", "recursive": True}, str(tmp_path))
+
+    assert result["content"].splitlines() == ["visible.txt"]
+
+
+def test_inspection_tools_reject_paths_outside_workspace(tmp_path):
+    with pytest.raises(ValueError):
+        apply_tool([], "read_file", {"path": "../outside.txt"}, str(tmp_path))
+    with pytest.raises(ValueError):
+        apply_tool([], "grep", {"pattern": "x", "path": "../"}, str(tmp_path))
+    with pytest.raises(ValueError):
+        apply_tool([], "list_files", {"path": "../"}, str(tmp_path))
+
+
+def test_make_result_is_returned_to_model_without_becoming_buffer_operation(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "make-1", "function": {"name": "vim-make", "arguments": {"arguments": ""}}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_request_make", lambda arguments: {
+        "ok": False,
+        "message": "Vim :make returned diagnostics",
+        "diagnostics": [{"filename": "main.cpp", "lnum": 4, "text": "error"}],
+    })
+
+    operations, messages = CodeEditor._run_edit("build it", ["code"], "cpp", {"provider": "ollama"})
+
+    assert operations == []
+    tool_result = next(message for message in messages if message.get("role") == "tool")
+    assert "diagnostics" in tool_result["content"]
+
+
+@pytest.mark.parametrize("arguments", ["all && touch hacked", "-f Makefile", "all; clean"])
+def test_make_rejects_command_arguments(arguments):
+    result = CodeEditor._request_make({"arguments": arguments})
+
+    assert result["ok"] is False
+    assert "only make target names" in result["error"]
+
+
+def test_execute_rejects_paths_outside_workspace():
+    result = CodeEditor._request_execute({"path": "../program", "arguments": []})
+
+    assert result["ok"] is False
+    assert "remain below the current directory" in result["error"]
+
+
+@pytest.mark.parametrize("field", ["timeout", "kill_timeout"])
+def test_execute_rejects_negative_timeouts(field):
+    result = CodeEditor._request_execute({
+        "path": "program",
+        "arguments": [],
+        field: -1,
+    })
+
+    assert result["ok"] is False
+    assert field in result["error"]
+
+
+def test_execute_schema_defines_timeout_defaults():
+    execute_tool = next(tool for tool in CodeEditor.EXECUTE_TOOLS if tool["function"]["name"] == "execute")
+    properties = execute_tool["function"]["parameters"]["properties"]
+
+    assert properties["timeout"]["default"] == 30
+    assert properties["kill_timeout"]["default"] == 3
+
+
+def test_git_add_uses_structured_command_without_shell(monkeypatch, tmp_path):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(CodeEditor.subprocess, "run", run)
+    result = CodeEditor._run_git_tool(str(tmp_path), "git_add", {"paths": ["main.c", "src"]})
+
+    assert result["ok"]
+    assert calls == [(["git", "add", "--", "main.c", "src"], {
+        "cwd": str(tmp_path), "capture_output": True, "text": True, "timeout": 120, "check": False,
+    })]
+
+
+def test_git_restore_requires_paths_and_supports_staged_restore(monkeypatch, tmp_path):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(CodeEditor.subprocess, "run", run)
+    result = CodeEditor._run_git_tool(
+        str(tmp_path), "git_restore", {"paths": ["main.c"], "staged": True}
+    )
+
+    assert result["ok"]
+    assert calls == [["git", "restore", "--staged", "--", "main.c"]]
+    with pytest.raises(ValueError, match="non-empty list of paths"):
+        CodeEditor._run_git_tool(str(tmp_path), "git_restore", {"paths": []})

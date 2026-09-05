@@ -33,8 +33,16 @@ let s:help_text = {
 \ 'ollama_edit_provider': 'Provider for edit tasks: "ollama" or "openai".',
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
+\ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',
+\ 'ollama_show_llm_request': 'Show complete LLM requests in folded diagnostics.',
+\ 'ollama_edit_max_operations': 'Maximum tool calls allowed in one edit request.',
+\ 'ollama_bwrap_enabled': 'Run external tool calls inside bubblewrap.',
+\ 'ollama_bwrap_command': 'Bubblewrap executable used for sandboxed tools.',
+\ 'ollama_bwrap_network': 'Allow network access inside bubblewrap.',
+\ 'ollama_bwrap_confirm': 'Confirm sandboxed tool launches.',
+\ 'ollama_bwrap_make_write_paths': 'Project directories writable during sandboxed make.',
+\ 'ollama_stop_on_error': 'Stop OllamaEdit immediately after a tool error (default=v:false).',
 \ 'ollama_nothinking': 'Disable thinking output of reasoning models (default=v:false)',
-\ 'ollama_use_inline_diff': 'Use inline diff for edits (default=1).',
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
 \ 'ollama_logfile': 'Logfile path for debugging.',
 \ 'ollama_review_logfile': 'Review-specific logfile path.',
@@ -217,4 +225,3 @@ function! ollama#config#ShowHelp() abort
 endfunction
 
 " vim: filetype=vim
-

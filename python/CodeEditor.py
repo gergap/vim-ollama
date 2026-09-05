@@ -1,801 +1,1551 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+"""Tool-driven code editing for vim-ollama.
+
+The worker operates exclusively on a Python snapshot.  Vim is touched only by
+the polling callback in the main thread after all requested operations have
+been validated.
+"""
+
 import json
+import glob as glob_module
+import ntpath
 import os
-import requests
+import re
+import shutil
+import stat
+import subprocess
 import threading
-from difflib import ndiff
-from ChatTemplate import ChatTemplate
-from OllamaLogger import OllamaLogger
+import uuid
+
+import requests
+
 from OllamaCredentials import OllamaCredentials
+from OllamaLogger import OllamaLogger
 
-# create logger
-log = None
-
-# Try to import OpenAI SDK
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
 
-# Default values
-DEFAULT_HOST = 'http://localhost:11434'
-DEFAULT_PROVIDER = "ollama"
-DEFAULT_MODEL = 'qwen2.5-coder:14b'
-DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
-# default options if missing
-DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
-# default parameters if options is given, but missing these entries
-DEFAULT_TEMPERATURE = 0
-DEFAULT_MAX_TOKENS = 5000
-CONTEXT_LINES = 10
 
-# Shared variable to indicate whether the editing thread is active
+DEFAULT_PROVIDER = "ollama"
+DEFAULT_HOST = "http://localhost:11434"
+DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+DEFAULT_OPTIONS = {"temperature": 0, "top_p": 0.95, "num_predict": 4096}
+MAX_TOOL_CALLS = 64
+
+BUFFER_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "buf_insert_lines",
+            "description": "Insert one or more lines before a 1-based line number relative to the editable buffer range. Use range length+1 to append.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "line": {"type": "integer", "minimum": 1},
+                    "content": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["line", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buf_delete_lines",
+            "description": "Delete an exact inclusive range of lines from the editable buffer range. Line numbers are relative to that range and expected text must match exactly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["start_line", "end_line", "expected"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buf_replace_lines",
+            "description": "Replace an exact inclusive range of lines in the editable buffer range. Line numbers are relative to that range.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                    "replacement": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["start_line", "end_line", "expected", "replacement"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+FILE_LINE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "insert_lines",
+            "description": "Insert one or more lines into a project file before an absolute 1-based line number. Use line number length+1 to append.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "line": {"type": "integer", "minimum": 1},
+                    "content": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "line", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_lines",
+            "description": "Delete an exact inclusive range of lines from a project file using absolute 1-based line numbers. The expected text must match exactly.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "start_line", "end_line", "expected"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_lines",
+            "description": "Replace an exact inclusive range of lines in a project file using absolute 1-based line numbers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                    "expected": {"type": "array", "items": {"type": "string"}},
+                    "replacement": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["path", "start_line", "end_line", "expected", "replacement"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+FILE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "chmod",
+            "description": "Make an existing regular file below the current directory executable without changing its read/write permissions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_file",
+            "description": "Create a new UTF-8 text file below the current directory. The relative path must not already exist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_folder",
+            "description": "Create a new folder below the current directory. The relative path must not already exist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_file",
+            "description": "Delete an existing file below the current directory. Never use this for folders.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_folder",
+            "description": "Delete an existing folder below the current directory. Set recursive only when all contents should be removed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path below the current directory."},
+                    "recursive": {"type": "boolean"},
+                },
+                "required": ["path", "recursive"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+INSPECTION_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read a UTF-8 text file below the current directory. Use this to inspect existing project files before editing them.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path below the current directory."},
+                    "start_line": {"type": "integer", "minimum": 1},
+                    "end_line": {"type": "integer", "minimum": 1},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "glob",
+            "description": "Search for filenames in a directory using wildcards. Use ** in the pattern for recursive searches.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Wildcard filename pattern, for example '*.c'."},
+                    "path": {"type": "string", "description": "Relative directory below the current directory."},
+                },
+                "required": ["pattern", "path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep",
+            "description": "Search file contents using a regular expression. Path may be a file or directory; directory recursion is controlled by recursive.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Python regular expression to search for."},
+                    "path": {"type": "string", "description": "Relative file or directory below the current directory."},
+                    "recursive": {"type": "boolean", "default": False},
+                },
+                "required": ["pattern", "path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "List files below a directory. Use recursive=true to include files in nested directories.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative directory below the current directory, or '.'."},
+                    "recursive": {"type": "boolean"},
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+MAKE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "vim-make",
+            "description": "Builds the project using Vim's configured makeprg and inspect its compiler errors and warnings. Optional arguments are whitespace-separated make target names only. Use it after changing code and before finishing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arguments": {"type": "string", "description": "Optional whitespace-separated make target names, for example 'all', 'clean', or 'distclean'. Shell commands and options are not allowed."},
+                },
+                "required": ["arguments"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+CHECK_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "vim-check",
+            "description": "Run the configured language checker and inspect its diagnostics. Use after changing script-language files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Optional project-relative file path. If omitted, check the current buffer file."},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+EXECUTE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "execute",
+            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution. Timeout values are in seconds. NEVER invoke system tools!",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path to an executable file below the current directory."},
+                    "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
+                    "timeout": {"type": "number", "minimum": 0, "default": 30, "description": "Seconds before sending SIGTERM."},
+                    "kill_timeout": {"type": "number", "minimum": 0, "default": 3, "description": "Seconds after SIGTERM before sending SIGKILL."},
+                },
+                "required": ["path", "arguments"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+GIT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "git_init",
+            "description": "Initialize a Git repository in the current project directory.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_add",
+            "description": "Stage the specified project-relative paths with Git.",
+            "parameters": {
+                "type": "object",
+                "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_rm",
+            "description": "Remove the specified project-relative paths from Git and the working tree.",
+            "parameters": {
+                "type": "object",
+                "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_restore",
+            "description": "Restore specified project-relative paths from Git. This discards working-tree changes unless staged=true, which restores the index.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paths": {"type": "array", "items": {"type": "string"}},
+                    "staged": {"type": "boolean"},
+                },
+                "required": ["paths"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit",
+            "description": "Create a Git commit with the supplied commit message.",
+            "parameters": {
+                "type": "object",
+                "properties": {"message": {"type": "string"}},
+                "required": ["message"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_status",
+            "description": "Show the current Git branch and working-tree status.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_log",
+            "description": "Show recent Git commits from the current project.",
+            "parameters": {
+                "type": "object",
+                "properties": {"max_count": {"type": "integer", "minimum": 1, "maximum": 100}},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_diff",
+            "description": "Show Git changes in the current project. Set staged=true to show staged changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"staged": {"type": "boolean"}},
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
+AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
+FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
+FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
+INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
+MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
+CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
+EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
+GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
+GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
+RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+
+log = None
 g_thread_lock = threading.Lock()
 g_editing_thread = None
-# We bring the worker thread results into the main thread using these variables
 g_result = None
-g_errormsg = ''
-g_start_line = 0 # start line of edit
-g_end_line = 0 # end line of edit
-g_restored_lines = 0 # number of restored lines (undone deletes)
-g_new_code_lines = []
-g_diff = []
-g_groups = []
-g_original_content = []
-g_debug_mode = False  # You can turn this on/off as needed
-g_change_index = -1
-g_dialog_callback = None
+g_operations = []
+g_errormsg = ""
+g_progress_events = []
+g_messages = []
+g_make_condition = threading.Condition()
+g_make_results = {}
+g_cancel_event = threading.Event()
+
+
+class EditCancelled(Exception):
+    """Raised when the active Vim-Ollama edit is interrupted."""
+
+
+def _check_cancelled():
+    if g_cancel_event.is_set():
+        raise EditCancelled("edit cancelled by user")
+
+
+def cancel_edit():
+    g_cancel_event.set()
+    with g_make_condition:
+        g_make_condition.notify_all()
+
 
 def CreateLogger():
     global log
-    log = OllamaLogger('/tmp/logs', 'edit.log')
+    log = OllamaLogger("/tmp/logs", "edit.log")
     log.setLevel(0)
 
+
 def SetLogLevel(level):
-    if log == None:
+    if log is None:
         CreateLogger()
     log.setLevel(level)
 
-# Debug prints for development. This output is shown as Vim message.
-def debug_print(*args):
-    global g_debug_mode
-    if g_debug_mode:
-        print(' '.join(map(str, args)))
 
-def compute_diff(old_lines, new_lines):
-    """
-    Compute differences between old and new lines.
+def _progress(text, **details):
+    with g_thread_lock:
+        event = {"text": text}
+        event.update(details)
+        g_progress_events.append(event)
 
-    Args:
-        old_lines (list): The original code as a list of strings.
-        new_lines (list): The modified code as a list of strings.
+def _info(text, **details):
+    with g_thread_lock:
+        event = {"text": text}
+        event.update(details)
+        g_progress_events.append(event)
 
-    Returns:
-        list: A list of dictionaries describing the changes.
-    """
-    diff = list(ndiff(old_lines, new_lines))
-    return diff
+def submit_make_result(request_id, result):
+    """Deliver a main-thread Vim :make result to the waiting worker."""
+    with g_make_condition:
+        if request_id in g_make_results:
+            g_make_results[request_id] = result
+            g_make_condition.notify_all()
 
-def group_diff(diff, starting_line=1):
-    """
-    Group consecutive changes into chunks, excluding unchanged lines.
 
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        starting_line (int): Line number offset for the original code.
+def _request_make(arguments):
+    if not isinstance(arguments, dict):
+        error = "make tool requires make target arguments"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
+    requested = arguments.get("arguments", "")
+    if requested in (None, ""):
+        requested = ""
+    if not isinstance(requested, str):
+        error = "make targets must be provided as a string"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
+    targets = requested.split()
+    if any(not re.fullmatch(r"[A-Za-z0-9_./:+-]+", target) or target.startswith("-") for target in targets):
+        error = "make tool accepts only make target names; shell commands and options are not allowed"
+        _progress(f"Tool error: {error}", tool="make")
+        return {"ok": False, "message": error, "error": error, "diagnostics": []}
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Running configured makeprg", type="make_request", request_id=request_id, arguments={"arguments": " ".join(targets)})
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
+        return g_make_results.pop(request_id)
 
-    Returns:
-        list: A list of dictionaries, where each dictionary contains:
-              - 'start_line': The starting line number of the group.
-              - 'end_line': The ending line number of the group.
-              - 'changes': A list of strings representing the changes in the group.
-    """
-    grouped_diff = []
-    current_group = []
-    current_start_line = None
-    line_number = starting_line
 
-    for line in diff:
-        if line.startswith('- ') or line.startswith('+ '):
-            # Start a new group if this is the first change in a group
-            if not current_group:
-                current_start_line = line_number
-            current_group.append(line)
-        elif line.startswith('  '):
-            # Unchanged line stops the current group
-            if current_group:
-                grouped_diff.append({
-                    'start_line': current_start_line,
-                    'end_line': line_number,
-                    'changes': current_group
-                })
-                current_group = []
-        elif line.startswith('? '):
-            # Context-only marker, skip it
-            continue
+def _request_check(arguments):
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise ValueError("vim-check requires an argument object")
+    path = arguments.get("path")
+    if path is not None and (not isinstance(path, str) or not path or "\x00" in path):
+        raise ValueError("vim-check path must be a non-empty string")
+    if isinstance(path, str) and (os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/"))):
+        raise ValueError("vim-check path must remain below the current directory")
+    arguments = {"path": path} if path is not None else {}
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Running configured checker", type="check_request", request_id=request_id, arguments=arguments)
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
+        return g_make_results.pop(request_id)
 
-        # Increment line number for each line processed
-        if not line.startswith('? ') and not line.startswith('- '):
-            line_number += 1
 
-    # Add the remaining group if it has any lines
-    if current_group:
-        grouped_diff.append({
-            'start_line': current_start_line,
-            'end_line': line_number - 1,
-            'changes': current_group
-        })
+def _request_execute(arguments, cwd=None, allow_system_tools=False):
+    if not isinstance(arguments, dict):
+        error = "execute tool requires a path and argument list"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    path = arguments.get("path")
+    requested_arguments = arguments.get("arguments")
+    if not isinstance(path, str) or not path or "\x00" in path:
+        error = "execute path must be a non-empty string"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if any(part == ".." for part in path.replace("\\", "/").split("/")):
+        error = "execute path must be relative and remain below the current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if (os.path.isabs(path) or ntpath.isabs(path)) and not allow_system_tools:
+        error = "execute path must be relative and remain below the current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if not isinstance(requested_arguments, list) or not all(isinstance(item, str) and "\x00" not in item for item in requested_arguments):
+        error = "execute arguments must be a list of strings"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    timeout = arguments.get("timeout", 30)
+    kill_timeout = arguments.get("kill_timeout", 3)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
+        error = "execute timeout must be a non-negative number of seconds"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if isinstance(kill_timeout, bool) or not isinstance(kill_timeout, (int, float)) or kill_timeout < 0:
+        error = "execute kill_timeout must be a non-negative number of seconds"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if cwd is None:
+        error = "execute requires a current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    local_path = os.path.normpath(path if os.path.isabs(path) else os.path.join(cwd, path))
+    local_cwd = os.path.normpath(cwd)
+    is_local_executable = (
+        not os.path.isabs(path)
+        and os.path.commonpath([local_path, local_cwd]) == local_cwd
+        and os.path.isfile(local_path)
+        and os.access(local_path, os.X_OK)
+        and not os.path.islink(local_path)
+    )
+    if not is_local_executable:
+        if not allow_system_tools:
+            return {"ok": False, "message": f"execute denied: {path} is not an executable below the current directory", "denied": path, "output": ""}
+        resolved = os.path.realpath(path) if os.path.isabs(path) else shutil.which(path)
+        allowed_roots = ("/usr/", "/bin/", "/sbin/", "/lib/", "/lib64/")
+        if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+            return {"ok": False, "message": f"execute denied: system tool not found: {path}", "denied": path, "output": ""}
+        resolved = os.path.realpath(resolved)
+        if not resolved.startswith(allowed_roots):
+            return {"ok": False, "message": f"execute denied: system tool is outside the sandbox system paths: {path}", "denied": path, "output": ""}
+        path = resolved
+        local_path = resolved
+    arguments = dict(arguments)
+    arguments["timeout"] = timeout
+    arguments["kill_timeout"] = kill_timeout
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Waiting for execution confirmation", type="execute_request", request_id=request_id, arguments=arguments)
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            g_make_condition.wait()
+        return g_make_results.pop(request_id)
 
-    return grouped_diff
 
-def apply_diff(diff, buf, line_offset=0):
-    """
-    Apply differences directly to a Vim buffer as inline diff.
+def _run_git_tool(cwd, name, arguments):
+    if not isinstance(arguments, dict):
+        raise ValueError(f"{name} requires an argument object")
 
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        buf: The Vim buffer to apply changes to.
-        line_offset (int): Line offset for the current buffer.
-    """
-    debug_print("\n".join(diff))
-    deleted_lines = []  # Collect deleted lines for multi-line display
-
-    for line in diff:
-
-        if line.startswith('+ '):
-            debug_print(f"add line: '{line}'")
-            # Added line
-            lineno = line_offset
-            content = line[2:].rstrip()
-            VimHelper.InsertLine(lineno, content, buf)
-            VimHelper.HighlightLine(lineno, 'OllamaDiffAdd', len(content), buf)
-            if deleted_lines:
-                # Show the collected deleted lines above the current added line
-                for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(lineno, 'OllamaDiffDel', deleted_line, buf)
-                deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'ChangedLine', buf)
-            else:
-                VimHelper.PlaceSign(lineno, 'NewLine', buf)
-
-            line_offset += 1
-
-        elif line.startswith('- '):
-            debug_print("delete line")
-            # Deleted line
-            lineno = line_offset
-            old_content = VimHelper.DeleteLine(lineno, buf)
-            if old_content != line[2:]:
-                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
-            deleted_lines.append(old_content)  # Collect the deleted line content
-
-        elif line.startswith('? '):
-            debug_print("info line")
-            # This line is a marker for the previous change (not handled)
-            continue
-
-        elif line.startswith('  '):
-            debug_print("unchanged line")
-            # Unchanged line
-            if deleted_lines:
-                # Show the collected deleted lines above the current unchanged line
-                for i, deleted_line in enumerate(deleted_lines):
-                    VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
-                deleted_lines = []  # Reset deleted lines
-                VimHelper.PlaceSign(lineno, 'DeletedLine', buf)
-
-            lineno = line_offset
-            old_content = VimHelper.GetLine(lineno, buf)
-            debug_print(f"line {lineno}: '{old_content}'")
-            debug_print(f"diffline {lineno}: '{line}'")
-            content = line[2:]
-            if content != old_content:
-                debug_print(f"existing line: '{old_content}'")
-                debug_print(f"expected line: '{content}'")
-                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
-            line_offset += 1
+    command = ["git"]
+    if name == "git_init":
+        command += ["init", "."]
+    elif name in ("git_add", "git_rm", "git_restore"):
+        paths = arguments.get("paths")
+        if not isinstance(paths, list) or not paths:
+            raise ValueError(f"{name} requires a non-empty list of paths")
+        for path in paths:
+            if not isinstance(path, str) or not path or "\x00" in path:
+                raise ValueError(f"{name} paths must be non-empty strings")
+            if os.path.isabs(path) or ntpath.isabs(path) or any(part == ".." for part in path.replace("\\", "/").split("/")):
+                raise ValueError(f"{name} paths must stay below the current directory")
+        if name == "git_add":
+            command += ["add", "--"] + paths
+        elif name == "git_rm":
+            command += ["rm", "--"] + paths
         else:
-            debug_print(f"other: '{line}'")
-            line_offset += 1
+            staged = arguments.get("staged", False)
+            if not isinstance(staged, bool):
+                raise ValueError("git_restore staged must be boolean")
+            command += ["restore"]
+            if staged:
+                command.append("--staged")
+            command += ["--"] + paths
+    elif name == "git_commit":
+        message = arguments.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("git_commit requires a non-empty commit message")
+        command += ["commit", "-m", message]
+    elif name == "git_status":
+        command += ["status", "--short", "--branch"]
+    elif name == "git_log":
+        max_count = arguments.get("max_count", 10)
+        if isinstance(max_count, bool) or not isinstance(max_count, int) or not 1 <= max_count <= 100:
+            raise ValueError("git_log max_count must be an integer from 1 to 100")
+        command += ["log", "--oneline", f"--max-count={max_count}"]
+    elif name == "git_diff":
+        staged = arguments.get("staged", False)
+        if not isinstance(staged, bool):
+            raise ValueError("git_diff staged must be boolean")
+        command += ["diff"]
+        if staged:
+            command.append("--cached")
+    else:
+        raise ValueError(f"unknown Git tool: {name}")
 
-    # Handle any remaining deleted lines at the end
-    if deleted_lines:
-        for i, deleted_line in enumerate(deleted_lines):
-            VimHelper.ShowTextAbove(line_offset, 'OllamaDiffDel', deleted_line, buf)
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=120, check=False)
+    output = "\n".join(part for part in (completed.stdout.rstrip(), completed.stderr.rstrip()) if part)
+    return {
+        "ok": completed.returncode == 0,
+        "message": f"{name} completed" if completed.returncode == 0 else f"{name} failed",
+        "output": output,
+        "exit_code": completed.returncode,
+    }
 
-def apply_change(diff, buf, line_offset=0):
-    """
-    Apply differences directly to a Vim buffer without inline diff.
 
-    Args:
-        diff (iterable): The result of ndiff comparing old and new lines.
-        buf: The Vim buffer to apply changes to.
-        line_offset (int): Line offset for the current buffer.
-    """
-    debug_print("\n".join(diff))
+def _check_range(document, start_line, end_line, expected):
+    if start_line < 1 or end_line < start_line or end_line > len(document):
+        raise ValueError("line range is outside the editable snapshot")
+    actual = document[start_line - 1:end_line]
+    if actual != expected:
+        raise ValueError("expected text does not match the editable snapshot")
 
-    for line in diff:
 
-        if line.startswith('+ '):
-            debug_print(f"add line: '{line}'")
-            # Added line
-            lineno = line_offset
-            content = line[2:].rstrip()
-            VimHelper.InsertLine(lineno, content, buf)
+def _normalize_expected(document, start_line, end_line, expected):
+    """Allow omitted trailing blank lines without relaxing content checks."""
+    if start_line < 1 or end_line < start_line or end_line > len(document):
+        raise ValueError("line range is outside the editable snapshot")
 
-            line_offset += 1
+    actual = document[start_line - 1:end_line]
+    if len(expected) < len(actual):
+        missing = actual[len(expected):]
+        if expected == actual[:len(expected)] and all(line == "" for line in missing):
+            return expected + missing
+    elif len(expected) > len(actual):
+        extra = expected[len(actual):]
+        if expected[:len(actual)] == actual and all(line == "" for line in extra):
+            return expected[:len(actual)]
+    return expected
 
-        elif line.startswith('- '):
-            debug_print("delete line")
-            # Deleted line
-            lineno = line_offset
-            old_content = VimHelper.DeleteLine(lineno, buf)
-            if old_content != line[2:]:
-                raise Exception(f"error: diff does not apply at deleted line {lineno}: {line} != {old_content}")
 
-        elif line.startswith('? '):
-            debug_print("info line")
-            # This line is a marker for the previous change (not handled)
+def _safe_path(cwd, value, allow_root=False):
+    """Resolve a workspace-relative path without allowing traversal or links out."""
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError("path must be a non-empty string")
+    if os.path.isabs(value) or ntpath.isabs(value):
+        raise ValueError("absolute paths are not allowed")
+    if any(part == ".." for part in value.replace("\\", "/").split("/")):
+        raise ValueError("parent-directory components are not allowed")
+
+    root = os.path.realpath(cwd)
+    candidate = os.path.realpath(os.path.join(root, value))
+    try:
+        inside = os.path.commonpath([root, candidate]) == root
+    except ValueError:
+        inside = False
+    if not inside or (candidate == root and not allow_root):
+        raise ValueError("path must stay below the current directory")
+    return candidate
+
+
+def _read_file(cwd, arguments):
+    path = _safe_path(cwd, arguments.get("path"))
+    if not os.path.isfile(path) or os.path.islink(path):
+        raise ValueError("path is not a regular file")
+    if os.path.getsize(path) > 1024 * 1024:
+        raise ValueError("file is larger than the 1 MiB inspection limit")
+    with open(path, "r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+    start = arguments.get("start_line", 1)
+    end = arguments.get("end_line", max(len(lines), 1))
+    if not isinstance(start, int) or not isinstance(end, int) or start < 1 or end < start:
+        raise ValueError("invalid line range")
+    content = "".join(lines[start - 1:end])
+    return {"ok": True, "message": f"read {arguments['path']} lines {start}-{min(end, len(lines))}", "content": content}
+
+
+def _inspection_files(root, recursive):
+    if os.path.isfile(root):
+        yield root
+        return
+
+    directories = [root]
+    while directories:
+        directory = directories.pop()
+        try:
+            entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
+        except OSError:
             continue
+        for entry in entries:
+            if entry.is_symlink():
+                continue
+            if entry.is_file(follow_symlinks=False):
+                yield entry.path
+            elif recursive and entry.is_dir(follow_symlinks=False):
+                directories.append(entry.path)
 
-        elif line.startswith('  '):
-            debug_print("unchanged line")
 
-            lineno = line_offset
-            old_content = VimHelper.GetLine(lineno, buf)
-            debug_print(f"line {lineno}: '{old_content}'")
-            debug_print(f"diffline {lineno}: '{line}'")
-            content = line[2:]
-            if content != old_content:
-                debug_print(f"existing line: '{old_content}'")
-                debug_print(f"expected line: '{content}'")
-                raise Exception(f"error: diff does not apply at unmodified line {lineno}: {content}")
-            line_offset += 1
+def _glob_files(cwd, arguments):
+    root = _safe_path(cwd, arguments.get("path"), allow_root=True)
+    if os.path.islink(root) or not os.path.isdir(root):
+        raise ValueError("glob path is not a regular directory")
+    pattern = arguments.get("pattern")
+    if not isinstance(pattern, str) or not pattern:
+        raise ValueError("glob pattern must be a non-empty string")
+    if os.path.isabs(pattern) or ntpath.isabs(pattern) or any(part == ".." for part in pattern.replace("\\", "/").split("/")):
+        raise ValueError("glob pattern must remain below the search directory")
+
+    matches = []
+    for path in glob_module.iglob(os.path.join(root, pattern), recursive=True):
+        if os.path.islink(path) or not os.path.isfile(path):
+            continue
+        matches.append(os.path.relpath(path, cwd))
+        if len(matches) >= 1000:
+            return {"ok": True, "message": "glob reached the 1000 match limit", "content": "\n".join(matches)}
+    content = "\n".join(matches) if matches else "No matches found."
+    return {"ok": True, "message": f"found {len(matches)} match(es)", "content": content}
+
+
+def _grep_files(cwd, arguments):
+    root = _safe_path(cwd, arguments.get("path"), allow_root=True)
+    if os.path.islink(root) or not (os.path.isfile(root) or os.path.isdir(root)):
+        raise ValueError("grep path is not a regular file or directory")
+    try:
+        pattern = re.compile(arguments.get("pattern", ""))
+    except re.error as error:
+        raise ValueError(f"invalid regular expression: {error}") from error
+    recursive = arguments.get("recursive", False)
+    if not isinstance(recursive, bool):
+        raise ValueError("grep recursive must be boolean")
+
+    matches = []
+    for path in _inspection_files(root, recursive):
+        if os.path.getsize(path) > 1024 * 1024:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, 1):
+                    if pattern.search(line):
+                        relative = os.path.relpath(path, cwd)
+                        matches.append(f"{relative}:{line_number}:{line.rstrip()}")
+                        if len(matches) >= 100:
+                            return {"ok": True, "message": "grep reached the 100 match limit", "content": "\n".join(matches)}
+        except (UnicodeDecodeError, OSError):
+            continue
+    content = "\n".join(matches) if matches else "No matches found."
+    return {"ok": True, "message": f"found {len(matches)} match(es)", "content": content}
+
+
+def _list_files(cwd, arguments):
+    root = _safe_path(cwd, arguments.get("path"), allow_root=True)
+    if not os.path.isdir(root) or os.path.islink(root):
+        raise ValueError("list path is not a regular directory")
+    recursive = arguments.get("recursive", False)
+    if not isinstance(recursive, bool):
+        raise ValueError("recursive must be boolean")
+
+    files = []
+    directories = [root]
+    while directories:
+        directory = directories.pop()
+        try:
+            entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name.startswith(".") or entry.is_symlink():
+                continue
+            if entry.is_file(follow_symlinks=False):
+                files.append(os.path.relpath(entry.path, cwd))
+                if len(files) >= 1000:
+                    files.sort()
+                    content = "\n".join(files)
+                    return {"ok": True, "message": "file listing reached the 1000 file limit", "content": content}
+            elif recursive and entry.name != ".git" and entry.is_dir(follow_symlinks=False):
+                directories.append(entry.path)
+
+    files.sort()
+    content = "\n".join(files) if files else "No files found."
+    return {"ok": True, "message": f"listed {len(files)} file(s)", "content": content}
+
+
+def apply_filesystem_tool(cwd, name, arguments):
+    """Apply one explicitly requested filesystem operation inside cwd."""
+    path = _safe_path(cwd, arguments.get("path"))
+    if os.path.lexists(path):
+        if os.path.islink(path):
+            raise ValueError("symbolic links are not allowed")
+        exists = True
+    else:
+        exists = False
+
+    if name in FILE_LINE_TOOL_NAMES:
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        if os.path.getsize(path) > 1024 * 1024:
+            raise ValueError("file is larger than the 1 MiB editing limit")
+
+        with open(path, "r", encoding="utf-8", newline="") as handle:
+            original_text = handle.read()
+        newline = "\r\n" if "\r\n" in original_text else "\n"
+        document = original_text.splitlines()
+
+        if name == "insert_lines":
+            line = arguments.get("line")
+            content = arguments.get("content")
+            if not isinstance(line, int) or not isinstance(content, list):
+                raise ValueError("insert_lines has invalid file arguments")
+            if line < 1 or line > len(document) + 1:
+                raise ValueError("insert line is outside the file")
+            if not all(isinstance(item, str) for item in content):
+                raise ValueError("insert content must contain strings")
+            document[line - 1:line - 1] = content
         else:
-            debug_print(f"other: '{line}'")
-            line_offset += 1
+            start = arguments.get("start_line")
+            end = arguments.get("end_line")
+            expected = arguments.get("expected")
+            if not all(isinstance(value, int) for value in (start, end)):
+                raise ValueError(f"{name} has invalid file line range")
+            if not isinstance(expected, list):
+                raise ValueError(f"{name}: expected must be a list of strings, got {type(expected).__name__}")
+            if not all(isinstance(item, str) for item in expected):
+                raise ValueError(f"{name}: every expected item must be a string")
+            expected = _normalize_expected(document, start, end, expected)
+            if end - start + 1 != len(expected):
+                raise ValueError(f"{name} expected length does not match file line range")
+            _check_range(document, start, end, expected)
 
-def accept_changes(buffer):
+            replacement = [] if name == "delete_lines" else arguments.get("replacement")
+            if not isinstance(replacement, list):
+                raise ValueError(f"{name}: replacement must be a list of strings, got {type(replacement).__name__}")
+            if not all(isinstance(item, str) for item in replacement):
+                raise ValueError(f"{name}: every replacement item must be a string")
+            document[start - 1:end] = replacement
+
+        updated_text = newline.join(document)
+        if document and original_text.endswith(("\n", "\r")):
+            updated_text += newline
+        if updated_text != original_text:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(updated_text)
+        return {"ok": True, "message": f"{name} applied to file {arguments['path']}"}
+
+    if name == "chmod":
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        mode = os.stat(path, follow_symlinks=False).st_mode
+        os.chmod(path, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH, follow_symlinks=False)
+        return {"ok": True, "message": f"made file executable {arguments['path']}"}
+
+    if name == "create_file":
+        content = arguments.get("content")
+        if not isinstance(content, str):
+            raise ValueError("file content must be a string")
+        if exists:
+            raise FileExistsError(f"path already exists: {arguments['path']}")
+        parent = os.path.dirname(path)
+        if not os.path.isdir(parent) or os.path.islink(parent):
+            raise ValueError("file parent folder does not exist or is a symbolic link")
+        with open(path, "x", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+        return {"ok": True, "message": f"created file {arguments['path']}"}
+
+    if name == "create_folder":
+        if exists:
+            raise FileExistsError(f"path already exists: {arguments['path']}")
+        parent = os.path.dirname(path)
+        if not os.path.isdir(parent) or os.path.islink(parent):
+            raise ValueError("parent folder does not exist or is a symbolic link")
+        os.mkdir(path)
+        return {"ok": True, "message": f"created folder {arguments['path']}"}
+
+    if name == "delete_file":
+        if not exists or not os.path.isfile(path):
+            raise FileNotFoundError(f"file does not exist: {arguments['path']}")
+        os.remove(path)
+        return {"ok": True, "message": f"deleted file {arguments['path']}"}
+
+    if name == "delete_folder":
+        recursive = arguments.get("recursive")
+        if not isinstance(recursive, bool):
+            raise ValueError("recursive must be boolean")
+        if not exists or not os.path.isdir(path):
+            raise FileNotFoundError(f"folder does not exist: {arguments['path']}")
+        if recursive:
+            shutil.rmtree(path)
+        else:
+            os.rmdir(path)
+        return {"ok": True, "message": f"deleted folder {arguments['path']}"}
+
+    raise ValueError(f"unknown filesystem tool: {name}")
+
+
+def apply_tool(document, name, arguments, cwd=None):
+    """Validate and apply one tool call using 1-based snapshot line numbers.
+
+    In range-edit mode, ``document`` is only the selected Vim range, so all
+    buffer-tool line arguments are relative to that range rather than the full
+    Vim buffer.
     """
-    Apply accepted changes to the Vim buffer.
+    if name == "read_file":
+        if cwd is None:
+            raise ValueError("read_file requires a current directory")
+        return _read_file(cwd, arguments)
+    if name == "glob":
+        if cwd is None:
+            raise ValueError("glob requires a current directory")
+        return _glob_files(cwd, arguments)
+    if name == "grep":
+        if cwd is None:
+            raise ValueError("grep requires a current directory")
+        return _grep_files(cwd, arguments)
+    if name == "list_files":
+        if cwd is None:
+            raise ValueError("list_files requires a current directory")
+        return _list_files(cwd, arguments)
+    if name in MAKE_TOOL_NAMES:
+        raise ValueError("make must be executed by Vim's main thread")
+    if name in CHECK_TOOL_NAMES:
+        raise ValueError("vim-check must be executed by Vim's main thread")
+    if name in FILE_TOOL_NAMES:
+        if cwd is None:
+            raise ValueError("filesystem tools require a current directory")
+        return apply_filesystem_tool(cwd, name, arguments)
 
-    Args:
-        buffer (list): The original Vim buffer as a list.
-        diff (list): The computed diff (ndiff output).
-        start (int): The starting line number.
-    """
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
+    if name == "buf_insert_lines":
+        line = arguments.get("line")
+        content = arguments.get("content")
+        if not isinstance(line, int) or not isinstance(content, list):
+            raise ValueError("buf_insert_lines has invalid arguments")
+        if line < 1 or line > len(document) + 1:
+            raise ValueError("insert line is outside the editable snapshot")
+        if not all(isinstance(item, str) for item in content):
+            raise ValueError("insert content must contain strings")
+        document[line - 1:line - 1] = content
+        return {"ok": True, "message": f"inserted {len(content)} line(s) at {line}"}
 
-    bufno = buffer.number
-    # remove properties from all lines
-    vim.command(f"call prop_clear(1, line('$'))")
-    debug_print("Changes accepted: All annotations and signs removed.")
+    if name in ("buf_delete_lines", "buf_replace_lines"):
+        start = arguments.get("start_line")
+        end = arguments.get("end_line")
+        expected = arguments.get("expected")
+        if not all(isinstance(value, int) for value in (start, end)):
+            raise ValueError(f"{name} has invalid line range")
+        if not isinstance(expected, list):
+            raise ValueError(f"{name}: expected must be a list of strings, got {type(expected).__name__}")
+        if not all(isinstance(item, str) for item in expected):
+            raise ValueError(f"{name}: every expected item must be a string")
+        expected = _normalize_expected(document, start, end, expected)
+        if end - start + 1 != len(expected):
+            raise ValueError(f"{name} expected length does not match line range")
+        _check_range(document, start, end, expected)
 
-def reject_changes(buffer, original_lines, start):
-    """
-    Revert to the original lines.
+        if name == "buf_delete_lines":
+            replacement = []
+        else:
+            replacement = arguments.get("replacement")
+            if not isinstance(replacement, list):
+                raise ValueError(f"{name}: replacement must be a list of strings, got {type(replacement).__name__}")
+            if not all(isinstance(item, str) for item in replacement):
+                raise ValueError(f"{name}: every replacement item must be a string")
+        document[start - 1:end] = replacement
+        return {"ok": True, "message": f"{name} applied to lines {start}-{end}"}
 
-    Args:
-        buffer (list): The Vim buffer as a list.
-        original_lines (list): The original lines to restore.
-        start (int): The starting line number.
-    """
-#    line_offset = start - 1  # Adjust to 0-based index
-#    debug_print(f"Reverting changes starting from line {start}")
-#
-#    # Compute the range to replace in the buffer
-#    num_lines_to_replace = len(original_lines)
-#    buffer[line_offset:line_offset + num_lines_to_replace] = original_lines
+    raise ValueError(f"unknown edit tool: {name}")
 
-    # Clear all signs in the buffer
-    VimHelper.SignClear(buffer)
 
-    # simply undo last change
-    vim.command(f"undo")
-    debug_print("Changes rejected. Original content restored.")
+def _load_project_instructions(cwd):
+    instructions = []
+    current = os.path.realpath(cwd)
+    while True:
+        for filename in ("AGENTS.md", "CLAUDE.md"):
+            path = os.path.join(current, filename)
+            if not os.path.isfile(path) or os.path.islink(path):
+                continue
+            try:
+                if os.path.getsize(path) <= 128 * 1024:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        instructions.append((os.path.relpath(path, cwd), handle.read()))
+            except (OSError, UnicodeDecodeError):
+                continue
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return list(reversed(instructions))
 
-def create_prompt(template_name, request, preamble, code, postamble, ft) -> str:
-    """
-    Creates a prompt for the LLM based on the given parameters.
 
-    Args:
-        request (str): The request to be satisfied by the translation.
-        preamble (str): The preamble to be included in the code block.
-        code (str): The code block to be changed.
-        postamble (str): The postamble to be included in the code block.
-        ft (str): The file type of the code block.
-
-    Returns:
-        str: The prompt for the code editing task.
-    """
-
-    # Get the directory where the Python script resides
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the full path to the config file relative to the script directory
-    template_path = os.path.join(script_dir, "chat_templates", template_name)
-    chat_template = ChatTemplate(template_path)
-    chat = [
-            { "role": "system", "content": "You are a Vim code assistant plugin." },
-            { "role": "user", "content":
-f"""```{ft}
-{preamble}
-<START_EDIT_HERE>{code}
-<STOP_EDIT_HERE>
-{postamble}
-```
-Please rewrite the code between the tags `<START_EDIT_HERE>` and `<STOP_EDIT_HERE>`, **{request}**. Ensure that no comments remain and that the code is still functional. Output only the modified raw text. Don't surrend it with markdown backticks.
-"""}
+def _system_prompt(settings):
+    cwd = settings.get("cwd") or os.getcwd()
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+    model = settings.get("model") or (DEFAULT_MODEL if provider == "ollama" else DEFAULT_OPENAI_MODEL)
+    lines = [
+        "You are a precise coding agent operating inside Vim.",
+        f"Provider: {provider}; model: {model}.",
+        f"Working directory: {cwd}",
+        f"Operating system: {os.name}",
+        "Use only the supplied tools for changes and execution. Do not return rewritten files as a substitute for tool calls.",
+        "Use tools only through the provided tool-calling interface.",
+        "Never write or imitate tool-call markup in normal response text.",
+        "Do not manually emit <tool_call>, <function=...>, <parameter=...>,",
+        "JSON tool calls, or similar syntax.",
+        "When a tool is required, invoke the supplied tool directly.",
+        "vim-make and vim-check are tool names, not executable paths; never pass either name to execute.",
+        "Build with the supplied vim-make tool. When bubblewrap is available, execute may run standard system tools inside the sandbox for testing, but never use it to bypass the supplied tool interfaces.",
+        "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
+        "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
+        "If not Git tools where supplied, don't track anything in Git.",
+        "Use buf_replace_lines instead of calling sed for the current buffer range.",
     ]
-
-    prompt = chat_template.render(messages=chat, add_generation_prompt=True)
-    # Start the answer of the assistant to set it on the right path...
-    prompt += f"""Sure! Here's the rewritten code block:
-```{ft}
-{preamble}
-<START_EDIT_HERE>"""
-    debug_print(prompt)
-    return prompt
-
-def generate_code_completion(prompt, baseurl, model, options):
-    """
-    Calls the Ollama REST API with the given prompt.
-
-    Args:
-        prompt (str): The prompt for Ollama model.
-        baseurl (str): The base URL of the Ollama server.
-        model (str): The name of the model to use.
-        options (dict): Additional options for the API call.
-
-    Returns:
-        str: The completion from the OpenAI API.
-    """
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Host': baseurl.split('//')[1].split('/')[0]
-    }
-    endpoint = baseurl + "/api/generate"
-    log.debug('endpoint: ' + endpoint)
-
-    if model is None:
-        model = DEFAULT_MODEL
-    if options is None:
-        options = json.loads(DEFAULT_OPTIONS)
-
-    log.debug('model: ' + str(model))
-    data = {
-        'model': model,
-        'prompt': prompt,
-        'stream': False,
-        'raw' : True,
-        'options': options
-    }
-    log.debug('request: ' + json.dumps(data, indent=4))
-
-    response = requests.post(endpoint, headers=headers, json=data)
-
-    if response.status_code == 200:
-        json_response = response.json()
-        log.debug('response: ' + json.dumps(json_response, indent=4))
-        completion = response.json().get('response')
-        if completion is None:
-            error = response.json().get('error', 'no response')
-            raise Exception(f"Error: {error}")
-
-        log.debug(completion)
-        # find index of sub string
-        index = completion.find('<|endoftext|>')
-        if index == -1:
-            index = completion.find('<EOT>')
-        if index != -1:
-            completion = completion[:index]
-
-        return completion.rstrip()
+    # detect Windows
+    if os.name == "nt":
+        lines.extend(["Always add a shebang to Python files: `#/usr/bin/env python3`"])
     else:
-        raise Exception(f"Error: {response.status_code} - {response.text}")
+        lines.extend(["Always add a shebang to Python files: `#/usr/bin/env python3` and make the file executable."])
 
-def generate_code_completion_openai(prompt, baseurl='', model='', options=None, credentialname=None):
-    """
-    Calls OpenAI API with the given prompt.
-    Returns the raw completion text.
-    """
-    if OpenAI is None:
-        raise ImportError("OpenAI package not found. Install via `pip install openai`.")
-
-    if model is None:
-        model = DEFAULT_OPENAI_MODEL
-
-    log.debug('Using OpenAI completion endpoint')
-    cred = OllamaCredentials()
-    api_key = cred.GetApiKey('openai', credentialname)
-
-    if baseurl:
-        log.info('Using OpenAI endpoint '+baseurl)
-        client = OpenAI(base_url=baseurl, api_key=api_key)
+    if settings.get("explain_mode", False):
+        lines.extend([
+            "This is a read-only code explanation request.",
+            "Use only the supplied inspection tools to inspect the selected code or related files.",
+            "Do not modify buffers or files and do not call tools that are not supplied.",
+        ])
+    elif settings.get("range_mode", True):
+        lines.extend([
+            "This is a range edit inside the current Vim buffer.",
+            "Modify only the specified buffer range with the buffer edit tools. Do not create, delete, or modify files.",
+            "Reading and searching other files is allowed for context.",
+        ])
     else:
-        log.info('Using official OpenAI endpoint')
-        client = OpenAI(api_key=api_key)
+        lines.extend([
+            "This is a workspace edit. You may read and modify project files below the working directory with the filesystem tools.",
+            "Keep all paths relative to the working directory and never use absolute paths or '..'.",
+            "Use insert_lines, delete_lines, and replace_lines for files; their line numbers are absolute 1-based file line numbers.",
+            "When a language checker is configured, use vim-check after changes instead of vim-make.",
+        ])
+    configured = settings.get("instructions")
+    if configured:
+        lines.append("Configured instructions:\n" + configured)
+    for filename, content in _load_project_instructions(cwd):
+        lines.append(f"Instructions from {filename}:\n{content}")
+    return "\n\n".join(lines)
 
-    # Extract options
-    if options is None:
-        options = json.loads(DEFAULT_OPTIONS)
 
-    temperature = options.get("temperature", DEFAULT_TEMPERATURE)
-    max_tokens = options.get("max_tokens", DEFAULT_MAX_TOKENS)
+def _edit_prompt(request, code, filetype, settings):
+    if not settings.get("range_mode", True):
+        return (
+            f"User request:\n{request}\n\n"
+            "Work across the project as needed using the filesystem and inspection tools. "
+            "Validate changes with vim-make before finishing."
+        )
 
-    log.debug('model: ' + str(model))
-    log.debug('temperature: ' + str(temperature))
-    log.debug('max_tokens: ' + str(max_tokens))
-    response = client.chat.completions.create(
-        model=model or DEFAULT_OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
+    start_line = settings.get("start_line", 1)
+    # The model sees absolute Vim numbers for context, but tool arguments use
+    # positions relative to the editable snapshot passed in as ``code``.
+    numbered = "\n".join(
+        f"{index}|{line}" for index, line in enumerate(code, start_line)
     )
 
-    # OpenAI returns a list of choices
-    completion = response.choices[0].message.content
-    log.debug(completion)
-    # convert response to lines
-    lines = completion.splitlines()
-    if lines:
-        # remove 1st element from array if it starts with ```
-        if lines[0].startswith("```"):
-            lines.pop(0)
-        # remove last element from array if it starts with ```
-        if lines[-1].startswith("```"):
-            lines.pop()
+    filename = settings.get("filename") or "[No filename]"
+    end_line = settings.get("end_line", len(code))
 
-        completion = "\n".join(lines)
-    completion = completion.strip()
-    log.debug(completion)
+    if settings.get("explain_mode", False):
+        return (
+            f"Explain the following {filetype or 'text'} code in detail.\n\n"
+            "Describe its purpose, important control flow, dependencies, and any relevant issues. "
+            "This is a read-only explanation request. Do not call tools if not necessary. "
+            "Do not modify any buffers or files.\n\n"
+            f"Current Vim buffer: {filename}\n"
+            f"Selected range: lines {start_line}-{end_line}\n\n"
+            f"{numbered}"
+        )
 
-    # Strip any end markers
-    for end_marker in ["<|endoftext|>", "<STOP_EDIT_HERE>", "<EOT>"]:
-        idx = completion.find(end_marker)
-        if idx != -1:
-            completion = completion[:idx]
+    return (
+        f"User request:\n{request}\n\n"
+        f"Current Vim buffer: {filename}\n"
+        f"Filetype: {filetype or 'text'}\n"
+        f"Editable range: lines {start_line}-{end_line}\n\n"
 
-    return completion.rstrip()
+        "Modify only this range in the current Vim buffer with the buffer edit tools. "
+        "Do not create, delete, or modify any files. "
+        "Reading and searching other files is allowed.\n\n"
 
-def edit_code(request, preamble, code, postamble, ft, settings, credentialname):
-    """
-    Edit code with Ollama or OpenAI LLM.
+        "The buffer snapshot below uses this format:\n"
+        "<vim-line-number>|<exact-buffer-content>\n\n"
+        "The line number and '|' separator are metadata and are not part of the buffer. "
+        "Everything after '|' is the exact buffer content. "
+        "Preserve it exactly when constructing expected text, including leading whitespace, "
+        "tabs, trailing whitespace, and empty lines.\n\n"
 
-    Args:
-        request (str): The request to be satisfied by the translation.
-        preamble (str): The preamble to be included in the code block.
-        code (str): The code block to be changed.
-        postamble (str): The postamble to be included in the code block.
-        ft (str): The file type of the code block.
+        "Buffer edit tool line numbers are relative to the editable range: "
+        f"tool line 1 is Vim line {start_line}, "
+        f"tool line 2 is Vim line {start_line + 1}, and so on. "
+        "Do not use the displayed Vim line numbers as tool line arguments.\n\n"
 
-    Returns:
-        Array of lines containing the changed code.
-    """
+        "For buf_delete_lines and buf_replace_lines, expected must match the current buffer text exactly. "
+        "Prefer the smallest possible edit and avoid including unchanged surrounding lines "
+        "unless necessary. "
+        "Validate changes with vim-make when appropriate, then stop.\n\n"
 
-    provider = settings.get("provider", DEFAULT_PROVIDER)
+        f"{numbered}"
+    )
 
-    if settings.get('simulate', 0):
-        response = settings['response']
-    else:
-        # TODO: choose correct template based on selected model
-        prompt = create_prompt('chatml.jinja', request, preamble, code, postamble, ft)
-        url = settings.get('url', None)
-        model = settings.get('model', None)
-        options = settings.get('options', None)
+
+def _request_diagnostic(request):
+    sections = []
+    for title, value in (
+        ("Messages", request.get("messages", [])),
+        ("Tools", request.get("tools", [])),
+        ("Request options", {key: value for key, value in request.items() if key not in ("messages", "tools")}),
+    ):
+        sections.extend([
+            f"#StartDiagnostic {title}",
+            json.dumps(value, indent=2),
+            "#EndDiagnostic",
+        ])
+    return "\n".join(sections)
+
+
+def _ollama_request(messages, settings, tools):
+    baseurl = settings.get("url") or DEFAULT_HOST
+    endpoint = baseurl.rstrip("/") + "/api/chat"
+    model = settings.get("model") or DEFAULT_MODEL
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
         options = json.loads(options)
-        if provider == "openai":
-            response = generate_code_completion_openai(prompt, url, model, options, credentialname)
+    headers = {"Content-Type": "application/json"}
+    credentialname = settings.get("credentialname")
+    api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+    request = {"model": model, "messages": messages, "tools": tools, "stream": True, "options": options}
+    if settings.get("show_llm_request", False):
+        _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
+    content = []
+    tool_calls = []
+    usage = {}
+    with requests.post(
+        endpoint,
+        headers=headers,
+        json=request,
+        stream=True,
+        timeout=settings.get("timeout", 300),
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines(decode_unicode=True):
+            _check_cancelled()
+            if not line:
+                continue
+            payload = json.loads(line)
+            chunk = payload.get("message") or {}
+            if chunk.get("content"):
+                content.append(chunk["content"])
+            for index, call in enumerate(chunk.get("tool_calls") or []):
+                while len(tool_calls) <= index:
+                    tool_calls.append({"function": {}})
+                target = tool_calls[index]
+                if call.get("id"):
+                    target["id"] = call["id"]
+                function = call.get("function") or {}
+                if function.get("name"):
+                    target["function"]["name"] = function["name"]
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    target["function"]["arguments"] = target["function"].get("arguments", "") + arguments
+                elif isinstance(arguments, dict):
+                    target["function"]["arguments"] = arguments
+            for key in ("prompt_eval_count", "eval_count"):
+                if isinstance(payload.get(key), int) and not isinstance(payload.get(key), bool):
+                    usage[key] = payload[key]
+    message = {"role": "assistant", "content": "".join(content)}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    if usage:
+        message["_ollama_usage"] = usage
+    return message
+
+
+def _context_usage(message, settings):
+    usage = message.get("_ollama_usage") if isinstance(message, dict) else None
+    if not isinstance(usage, dict):
+        return None
+    prompt_tokens = usage.get("prompt_eval_count")
+    response_tokens = usage.get("eval_count")
+    if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0
+               for value in (prompt_tokens, response_tokens)):
+        return None
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
+        options = json.loads(options)
+    num_ctx = options.get("num_ctx") if isinstance(options, dict) else None
+    if not isinstance(num_ctx, int) or isinstance(num_ctx, bool) or num_ctx <= 0:
+        return None
+    used = prompt_tokens + response_tokens
+
+    def format_tokens(value):
+        return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
+
+    percentage = round(used * 100 / num_ctx)
+    return f"Context: {format_tokens(used)} / {format_tokens(num_ctx)} ({percentage}%)"
+
+
+def _openai_request(messages, settings, tools):
+    if OpenAI is None:
+        raise ImportError("OpenAI package not found. Install it with pip install openai.")
+    credentialname = settings.get("credentialname")
+    api_key = OllamaCredentials().GetApiKey("openai", credentialname)
+    client_options = {"api_key": api_key}
+    if settings.get("url"):
+        client_options["base_url"] = settings["url"]
+    client = OpenAI(**client_options)
+    options = settings.get("options") or DEFAULT_OPTIONS
+    if isinstance(options, str):
+        options = json.loads(options)
+    request = {
+        "model": settings.get("model") or DEFAULT_OPENAI_MODEL,
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": "auto",
+        "temperature": options.get("temperature", 0),
+        "max_tokens": options.get("max_tokens", 5000),
+    }
+    if settings.get("show_llm_request", False):
+        _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
+    message = client.chat.completions.create(**request).choices[0].message
+    return message
+
+
+def _run_edit(request, code, filetype, settings):
+    provider = settings.get("provider", DEFAULT_PROVIDER)
+    if provider != "ollama" and not provider.startswith("openai"):
+        raise ValueError(f"Tool-based editing is not supported for provider '{provider}'")
+
+    previous_messages = settings.get("messages")
+    range_mode = settings.get("range_mode", True)
+    if settings.get("explain_mode", False):
+        tools = INSPECTION_TOOLS
+    else:
+        tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
+        if settings.get("quickfix_checker", False):
+            tools = [tool for tool in tools if tool["function"]["name"] != "vim-make"]
+        elif settings.get("quickfix_mode", False):
+            tools = [tool for tool in tools if tool["function"]["name"] != "vim-check"]
+    if previous_messages:
+        messages = list(previous_messages)
+        messages.append({"role": "user", "content": _edit_prompt(request, code, filetype, settings)})
+    else:
+        messages = [
+            {"role": "system", "content": _system_prompt(settings)},
+            {"role": "user", "content": _edit_prompt(request, code, filetype, settings)},
+        ]
+    # Keep tool coordinates relative to this range while the model is editing.
+    document = list(code)
+    operations = []
+    _progress(f"Starting {provider} request with {settings.get('model') or DEFAULT_MODEL}")
+    _info(f"range_mode: {range_mode}")
+
+    tool_names = [tool["function"]["name"] for tool in tools]
+    _info(f"available tools: {tool_names}")
+
+    max_operations = settings.get("max_operations", MAX_TOOL_CALLS)
+    if isinstance(max_operations, bool) or not isinstance(max_operations, int) or max_operations < 1:
+        raise ValueError("max_operations must be a positive integer")
+    for call_number in range(max_operations):
+        _check_cancelled()
+        _progress(f"Waiting for model response ({call_number + 1}/{max_operations})")
+        if log is not None:
+            log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
+        message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
+        context = _context_usage(message, settings)
+        if context:
+            _progress(context)
+        tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
+        if isinstance(message, dict):
+            messages.append({key: value for key, value in message.items() if key != "_ollama_usage"})
         else:
-            response = generate_code_completion(prompt, url, model, options)
+            messages.append(message.model_dump(exclude_none=True))
+        if not tool_calls:
+            content = message.get("content", "") if isinstance(message, dict) else (message.content or "")
+            _progress("Model finished" if not content else f"Model: {content.strip()}")
+            return operations, messages
 
-    # check if we got a valid response
-    if response is None or len(response) == 0:
-        return []
+        for call in tool_calls:
+            _check_cancelled()
+            if isinstance(call, dict):
+                name = call.get("function", {}).get("name")
+                raw_arguments = call.get("function", {}).get("arguments", "{}")
+                call_id = call.get("id", "")
+            else:
+                name = call.function.name
+                raw_arguments = call.function.arguments
+                call_id = call.id
+            arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+            original_arguments = arguments
+            if name in ("buf_insert_lines", "insert_lines") and isinstance(arguments, dict) and isinstance(arguments.get("content"), str):
+                arguments = dict(arguments)
+                arguments["content"] = arguments["content"].splitlines()
+            if name in ("buf_delete_lines", "buf_replace_lines", "delete_lines", "replace_lines") and isinstance(arguments, dict):
+                arguments = dict(arguments)
+                for key in ("expected", "replacement"):
+                    if isinstance(arguments.get(key), str):
+                        arguments[key] = arguments[key].splitlines()
+            if name == "execute" and isinstance(arguments, dict) and arguments.get("path") in MAKE_TOOL_NAMES | CHECK_TOOL_NAMES:
+                virtual_tool = arguments["path"]
+                if "arguments" not in arguments or not isinstance(arguments.get("arguments"), list):
+                    name = virtual_tool
+                    arguments = {"arguments": ""} if virtual_tool in MAKE_TOOL_NAMES else {}
+            if log is not None:
+                log.debug(f"Tool call: {name} {json.dumps(arguments)}")
+            display_arguments = dict(arguments) if isinstance(arguments, dict) else arguments
+            if isinstance(original_arguments, dict) and isinstance(original_arguments.get("content"), str):
+                display_arguments = dict(display_arguments)
+                display_arguments["content"] = f"<{len(original_arguments['content'])} characters>"
+            fold_path = arguments.get("path") if isinstance(arguments, dict) else None
+            fold_title = f"{name} {fold_path}" if fold_path else name
+            if name in ("grep", "glob") and isinstance(arguments, dict) and arguments.get("pattern"):
+                fold_title += f" {arguments['pattern']}"
+            call_json = json.dumps(display_arguments, indent=2)
+            _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
+            try:
+                if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
+                    raise ValueError("filesystem tools are not allowed during a range edit")
+                if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:
+                    raise ValueError("buffer edit tools require an editable range")
+                if settings.get("range_mode", True) and name in GIT_TOOL_NAMES - GIT_READ_TOOL_NAMES:
+                    raise ValueError("Git write tools are not allowed during a range edit")
+                if name in MAKE_TOOL_NAMES:
+                    result = _request_make(arguments)
+                elif name in CHECK_TOOL_NAMES:
+                    result = _request_check(arguments)
+                elif name in EXECUTE_TOOL_NAMES:
+                    result = _request_execute(arguments, settings.get("cwd"), settings.get("sandbox_system_tools", False))
+                elif name in GIT_TOOL_NAMES:
+                    result = _run_git_tool(settings.get("cwd"), name, arguments)
+                else:
+                    result = apply_tool(document, name, arguments, settings.get("cwd"))
+                _check_cancelled()
+                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
+                    operation = {"tool": name, "arguments": arguments}
+                    operations.append(operation)
+                details = {
+                    "tool": name,
+                    "path": arguments.get("path"),
+                    "fold_append": name,
+                    "fold_title": fold_title,
+                    "fold_status": "SUCCESS" if result.get("ok", False) else "FAILED",
+                }
+                diagnostic = result.get("content") or result.get("output")
+                details["fold_content"] = result["message"]
+                if diagnostic:
+                    details["fold_content"] += "\n" + diagnostic
+                _progress(result["message"], **details)
+            except EditCancelled:
+                raise
+            except Exception as error:
+                result = {"ok": False, "error": str(error)}
+                _progress(
+                    f"Tool error: {error}; request: {json.dumps(arguments)}",
+                    tool=name,
+                    arguments=arguments,
+                    fold_append=name,
+                    fold_title=fold_title,
+                    fold_status="FAILED",
+                    fold_content=f"Tool error: {error}",
+                )
+                if settings.get("stop_on_error", False):
+                    raise ValueError(f"{name} failed: {error}") from error
+            if provider == "ollama":
+                messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
+            else:
+                messages.append({"role": "tool", "tool_call_id": call_id, "content": json.dumps(result)})
+    raise ValueError(f"model exceeded the {max_operations}-operation limit")
 
-    # split repsonse into lines
-    lines = response.split('\n')
-    # search for our end marker, the LLM often produces more then we need
-    num_lines=0
-    last_line=None
-    for line in lines:
-        # find end tag in line
-        pos = line.find('<STOP_EDIT_HERE>')
-        if (pos == 0):
-            break;
-        elif (pos > 0):
-            last_line = line[:pos]
-            break;
-        num_lines += 1
-    # remove remainder
-    lines = lines[:num_lines]
-    if last_line:
-        lines.append(last_line)
-    return lines
 
-def vim_edit_code(request, firstline, lastline, settings, credentialname):
-    """
-    Vim function to edit a selected range of code.
-
-    Args:
-        request (str): The request to be satisfied by the translation.
-        firstline: first line to change
-        lastline: last line to change
-        settings: Ollama settings
-
-    This function extracts the selected range, adds context lines, calls edit_code, and replaces the selection with the result.
-    """
-    global g_result
-    global g_errormsg
-    global g_original_content
-    global g_new_code_lines
-    global g_diff
-    new_code_lines = ''
-    diff = ''
-    result = ''
-    errormsg = ''
+def _worker(request, code, filetype, settings):
+    global g_result, g_operations, g_errormsg, g_messages
     try:
-        buffer = vim.current.buffer
-        filetype = vim.eval('&filetype')
-        (start, end) = int(firstline) - 1, int(lastline) - 1
+        operations, messages = _run_edit(request, code, filetype, settings)
+        _progress(f"Validated {len(operations)} operation(s)")
+        with g_thread_lock:
+            g_operations = operations
+            g_messages = messages
+            g_result = "Done"
+    except EditCancelled as error:
+        _progress("Edit cancelled by user")
+        with g_thread_lock:
+            g_operations = []
+            g_errormsg = str(error)
+            g_result = "Cancelled"
+    except Exception as error:
+        log.error(f"Error in tool-based edit: {error}")
+        _progress(f"Error: {error}")
+        with g_thread_lock:
+            g_operations = []
+            g_errormsg = str(error)
+            g_result = "Error"
 
-        # Add context lines
-        preamble_start = max(0, start - CONTEXT_LINES)
-        postamble_end = min(len(buffer), end + CONTEXT_LINES + 1)
 
-        # Note in python vim lines are zero based
-        preamble_lines  = buffer[preamble_start:start]
-        code_lines      = buffer[start:end + 1]
-        postamble_lines = buffer[end + 1:postamble_end]
-
-        # Join arrays to strings
-        preamble  = "\n".join(preamble_lines)
-        code      = "\n".join(code_lines)
-        postamble = "\n".join(postamble_lines)
-
-        log.debug('preamble: ' + preamble)
-        log.debug('code: ' + code)
-        log.debug('postamble: ' + postamble)
-
-        # Edit the code
-        new_code_lines = edit_code(request, preamble, code, postamble, filetype, settings, credentialname)
-
-        # Produce diff
-        diff = compute_diff(code_lines, new_code_lines)
-
-        # Finish operation
-        result = 'Done'
-    except Exception as e:
-        log.error(f"Error in vim_edit_code: {e}")
-        # Finish operation with error
-        result = 'Error'
-        errormsg = str(e)
-
-    # write results to global vars
-    with g_thread_lock:
-        # backup existing code
-        g_original_content = code_lines
-        # save new code in global variables
-        g_new_code_lines = new_code_lines
-        # save diff and result
-        g_diff = diff
-        g_result = result
-        g_errormsg = errormsg
-
-def start_vim_edit_code(request, firstline, lastline, settings, credentialname):
-    global log
-    global g_editing_thread
-    global g_result
-    global g_errormsg
-    global g_start_line
-    global g_end_line
-
-    if log == None:
+def start_vim_edit_code(request, code, filetype, settings):
+    global g_editing_thread, g_result, g_operations, g_errormsg, g_progress_events, g_messages
+    if log is None:
         CreateLogger()
-    log.debug(f'*** vim_edit_code: request={request}')
-
-    g_errormsg =''
-    g_result = 'InProgress'
-    g_start_line = int(firstline)
-    g_end_line = int(lastline)
-    # Start the thread
-    g_editing_thread = threading.Thread(target=vim_edit_code, args=(request, firstline, lastline, settings, credentialname))
+    settings = dict(settings)
+    with g_thread_lock:
+        if settings.get("continue_history") and g_messages:
+            settings["messages"] = list(g_messages)
+        elif not settings.get("continue_history"):
+            g_messages = []
+    with g_thread_lock:
+        g_result = "InProgress"
+        g_operations = []
+        g_errormsg = ""
+        g_progress_events = []
+    g_cancel_event.clear()
+    g_editing_thread = threading.Thread(target=_worker, args=(request, list(code), filetype, settings), daemon=True)
     g_editing_thread.start()
 
+
 def get_job_status():
-    """
-    Check if the editing thread is still running.
-
-    Returns:
-        str: Job status: 'InProgress', 'Done', 'Error'
-    """
-    global g_editing_thread
-    global g_result
-    global g_errormsg
-    global g_start_line
-    global g_end_line
-    global g_restored_lines
-    global g_new_code_lines
-    global g_diff
-    global g_groups
-    global g_change_index
-
-    log.debug(f"result={g_result}")
-    groups = None
-    try:
-        is_running = False
-        if g_editing_thread:
-            with g_thread_lock:
-                is_running = g_editing_thread.is_alive()
-
-        if (is_running):
-            return "InProgress", None, ''
-
-        # Job Complete
-        if g_result != 'Done':
-            # Error
-            return g_result, None, g_errormsg
-
-        # Success:
-        use_inline_diff = int(vim.eval('g:ollama_use_inline_diff'))
-        if use_inline_diff:
-            apply_diff(g_diff, vim.current.buffer, g_start_line)
-        else:
-            apply_change(g_diff, vim.current.buffer, g_start_line)
-
-        g_groups = group_diff(g_diff, g_start_line)
-        log.debug(g_groups)
-        g_change_index = 0
-        g_restored_lines = 0
-
-        result = 'Done'
-    except Exception as e:
-        log.error(f"Error in get_job_status: {e}")
-        g_errormsg = str(e)
-        result = 'Error'
-
-    return result, g_groups, g_errormsg
-
-def AcceptAllChanges():
-    accept_changes(vim.current.buffer)
-
-def RejectAllChanges():
-    reject_changes(vim.current.buffer, g_original_content, g_start_line)
-
-def ShowAcceptDialog(dialog_callback, index):
-    global g_groups, g_dialog_callback
-    if not g_groups:
-        print("No groups, ignoring ShowAcceptDialog.")
-        return
-
-    # get current group
-    group = g_groups[index]
-    start_line = group.get('start_line', 1)
-
-    # move cursor to line lineno
-    vim.command(f'execute "normal! {start_line}G"')
-    # move cursor to col 0
-    vim.command(f'execute "normal! 0"')
-    vim.command(f'redraw')
-
-    # save callback for later calls
-    g_dialog_callback = dialog_callback
-    count = len(g_groups)
-    msg = f"Accept change {index+1} of {count}? y/n"
-    # show popup
-    vim.command(f'call popup_dialog("{msg}", {{ "line": {start_line}, "filter": "popup_filter_yesno", "callback": "{dialog_callback}", "padding": [2, 4, 2, 4] }})')
-
-def DialogCallback(id, result):
-    global g_change_index, g_groups
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring callback.")
-        return
-
-    # Handle based on result
-    if result == 1:  # 'y' pressed, meaning accept
-        AcceptChange(g_change_index)
-    elif result == 0:  # 'n' pressed, meaning reject
-        RejectChange(g_change_index)
-    else:
-        print(f"Unexpected result: {result}")
-    NextChange()
-
-def NextChange():
-    global g_change_index, g_groups, g_dialog_callback
-    count = len(g_groups)
-    if (count == 0):
-        # no more changes left
-        return
-
-    # update index
-    g_change_index += 1
-    if (g_change_index >= len(g_groups)):
-        # not more changes
-        g_groups = None
-        g_change_index = -1
-        VimHelper.SignClear(vim.current.buffer)
-        print("No more changes.")
-        return
-
-    ShowAcceptDialog(g_dialog_callback, g_change_index)
-
-def AcceptChange(index):
-    global g_change_index, g_groups
-    global g_restored_lines
-
-    # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring AcceptChange.")
-        return
-
-    log.debug("AcceptChange")
-    # get current change
-    group = g_groups[g_change_index]
-    log.debug(group)
-    # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
-    buf = vim.current.buffer
-
-    log.debug(f"remove signs from {start_line} to {end_line}")
-    # remove signs
-    for line in range(start_line, end_line + 1):
-        VimHelper.UnplaceSign(line, buf)
-
-    # remove abovetext
-    log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
-
-def RejectChange(index):
-    global g_change_index, g_groups
-    global g_restored_lines
-
-    # sanity check
-    if not g_groups or g_change_index is None:
-        print("No groups or invalid index, ignoring RejectChange.")
-        return
-
-    log.debug("RejectChange")
-    # get current change
-    group = g_groups[g_change_index]
-    log.debug(group)
-    # compute start and end lines
-    start_line = group.get('start_line', 1) + g_restored_lines
-    end_line = group.get('end_line', 1) + g_restored_lines
-    buf = vim.current.buffer
-
-    # remove any abovetext
-    log.debug(f"remove abovetext from {start_line} to {end_line}")
-    vim.command(f'call prop_clear({start_line}, {end_line})')
-
-    # undo all changes of current group
-    lineno = start_line
-    for line in group.get('changes'):
-        log.debug(f"remove signs from line {lineno}")
-        VimHelper.UnplaceSign(lineno, buf)
-        # undo change
-        if (line.startswith('- ')):
-            content = line[2:]
-            # restore deleted line
-            log.debug(f"restore line {lineno}")
-            VimHelper.InsertLine(lineno, content)
-            lineno += 1
-            g_restored_lines += 1
-        elif (line.startswith('+ ')):
-            # remove added line
-            log.debug(f"delete line {lineno}")
-            VimHelper.DeleteLine(lineno)
-            g_restored_lines -= 1
-    log.debug(f"restored_lines={g_restored_lines}")
+    with g_thread_lock:
+        if g_editing_thread and g_editing_thread.is_alive():
+            return "InProgress", [], ""
+        return g_result, list(g_operations), g_errormsg
 
 
-# Main entry point
-if __name__ == "__main__":
-    print("The script works only inside Vim.")
-else:
-    # importing to Vim
+def get_progress_events():
+    with g_thread_lock:
+        return list(g_progress_events)
+
+
+def apply_operations(bufnr, firstline, lastline, operations):
+    """Apply validated relative-range operations to the actual Vim buffer."""
     import vim
-    import VimHelper
+
+    buffer = vim.buffers[bufnr]
+    original = list(buffer[firstline - 1:lastline])
+    document = list(original)
+    changed_ranges = []
+    for operation in operations:
+        if operation["tool"] not in FILE_TOOL_NAMES:
+            arguments = operation["arguments"]
+            if operation["tool"] == "buf_insert_lines":
+                start = firstline + arguments["line"] - 1
+                end = start + max(len(arguments["content"]) - 1, 0)
+            else:
+                # Tool arguments address the sliced document; changed signs
+                # must use the corresponding absolute Vim line numbers.
+                start = firstline + arguments["start_line"] - 1
+                replacement = arguments.get("replacement", [])
+                end = start + max(len(replacement) - 1, 0)
+            changed_ranges.append([start, end])
+            apply_tool(document, operation["tool"], operation["arguments"])
+    if document != original:
+        buffer[firstline - 1:lastline] = document
+    return changed_ranges
