@@ -380,12 +380,17 @@ function! s:FinishMake(request_id, state, job, status) abort
         for l:item in getqflist()
             let l:type = toupper(get(l:item, 'type', ''))
             let l:text = get(l:item, 'text', '')
-            if l:type ==# 'E' || l:text =~? '\<\(error\|fatal\)\>'
+            let l:is_error = l:type ==# 'E' || l:text =~? '\<\(error\|fatal\)\>'
+            let l:is_warning = l:type ==# 'W' || l:text =~? '\<warning\>'
+            if l:is_error
                 let l:error_count += 1
-            elseif l:type ==# 'W' || l:text =~? '\<warning\>'
+            elseif l:is_warning
                 let l:warning_count += 1
             elseif a:status != 0
                 let l:error_count += 1
+            endif
+            if !l:is_error && !l:is_warning && a:status == 0
+                continue
             endif
             call add(l:diagnostics, {
                         \ 'filename': get(l:item, 'filename', ''),
@@ -398,9 +403,10 @@ function! s:FinishMake(request_id, state, job, status) abort
         if empty(l:diagnostics) && a:status != 0
             let l:error_count = 1
         endif
+        let l:ok = a:status == 0
         let l:result = {
-                    \ 'ok': empty(l:diagnostics) && a:status == 0,
-                    \ 'message': empty(l:diagnostics) && a:status == 0 ? 'Vim makeprg completed without diagnostics' : printf('Vim makeprg returned diagnostics (errors: %d, warnings: %d)', l:error_count, l:warning_count),
+                    \ 'ok': l:ok,
+                    \ 'message': l:ok ? (l:warning_count > 0 ? printf('Vim makeprg completed with warnings (%d)', l:warning_count) : 'Vim makeprg completed successfully') : printf('Vim makeprg failed (errors: %d, warnings: %d)', l:error_count, l:warning_count),
                     \ 'output': l:output,
                     \ 'diagnostics': l:diagnostics,
                     \ }
@@ -439,9 +445,9 @@ function! ollama#edit#RunMake(request_id, arguments) abort
             endif
             let l:command .= ' ' .. shellescape(l:target)
         endfor
-        let l:wrapped = s:SandboxWrap(['/bin/sh', '-c', l:command],
-                    \ get(g:, 'ollama_bwrap_make_write_paths', []))
-        let l:job = job_start(l:wrapped, l:options)
+        " makeprg may point to the secure scripts/mk helper, which provides
+        " its own bubblewrap sandbox and lives outside the project directory.
+        let l:job = job_start(['/bin/sh', '-c', l:command], l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start configured makeprg'
         endif
@@ -885,6 +891,11 @@ function! ollama#edit#QuickFix() abort
             call execute('silent make!')
             let l:diagnostics = []
             for l:item in getqflist()
+                let l:type = toupper(get(l:item, 'type', ''))
+                let l:text = get(l:item, 'text', '')
+                if l:type !~# '^[EW]$' && l:text !~? '\<\(error\|fatal\|warning\)\>'
+                    continue
+                endif
                 let l:filename = get(l:item, 'filename', '')
                 if empty(l:filename) && get(l:item, 'bufnr', 0) > 0
                     let l:filename = bufname(l:item.bufnr)
