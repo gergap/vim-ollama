@@ -340,12 +340,6 @@ function! PluginInit() abort
         if empty(mapcheck('<leader>e', 'v'))
             vmap <leader>e <Plug>(ollama-edit)
         endif
-
-"       These mappings are currently not used
-"        nmap <silent> <C-M-y> <Plug>(ollama-accept-changes)
-"        nmap <silent> <C-M-n> <Plug>(ollama-reject-changes)
-"        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
-"        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
     endif
     call timer_start(0, function('<SID>ShowSandboxStatus'))
 endfunction
