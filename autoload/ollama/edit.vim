@@ -12,6 +12,10 @@ let s:lastline = 0
 let s:session_range_mode = v:true
 let s:session_explain_mode = v:false
 let s:sandbox_session_approvals = {}
+let s:spinner_active = v:false
+let s:spinner_frame = 0
+let s:spinner_text = ''
+let s:spinner_line = 0
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -22,6 +26,49 @@ function! s:CloseProgress() abort
     if s:timer != 0
         call timer_stop(s:timer)
         let s:timer = 0
+    endif
+    call ollama#edit#StopSpinner(v:false)
+endfunction
+
+function! ollama#edit#StartSpinner(text) abort
+    let s:spinner_active = v:true
+    let s:spinner_frame = 0
+    let s:spinner_text = 'Waiting for model response...'
+    let s:spinner_line = 0
+endfunction
+
+function! ollama#edit#StopSpinner(...) abort
+    if !s:spinner_active
+        return
+    endif
+    let s:spinner_active = v:false
+    if s:spinner_line > 0 && bufexists(s:conversation_bufnr)
+        let l:symbol = a:0 > 0 && a:1 ? '✓' : '✗'
+        call setbufline(s:conversation_bufnr, s:spinner_line, l:symbol .. ' ' .. s:spinner_text)
+        call setbufvar(s:conversation_bufnr, 'ollama_fold_cache_tick', getbufvar(s:conversation_bufnr, 'changedtick'))
+    endif
+endfunction
+
+function! ollama#edit#ShowSpinner() abort
+    if !s:spinner_active || !bufexists(s:conversation_bufnr)
+        return
+    endif
+    let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+    if s:spinner_line == 0
+        call appendbufline(s:conversation_bufnr, l:line_count - 1, ['⣾ ' .. s:spinner_text])
+        let s:spinner_line = l:line_count
+    endif
+endfunction
+
+function! s:Spin() abort
+    if !s:spinner_active
+        return
+    endif
+    let l:frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
+    let s:spinner_frame = (s:spinner_frame + 1) % len(l:frames)
+    if s:spinner_line > 0 && bufexists(s:conversation_bufnr)
+        call setbufline(s:conversation_bufnr, s:spinner_line, l:frames[s:spinner_frame] .. ' ' .. s:spinner_text)
+        call setbufvar(s:conversation_bufnr, 'ollama_fold_cache_tick', getbufvar(s:conversation_bufnr, 'changedtick'))
     endif
 endfunction
 
@@ -750,8 +797,16 @@ try:
     events = CodeEditor.get_progress_events()
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
+        if event.get('text', '').startswith('Waiting for model response'):
+            vim.command('call ollama#edit#StartSpinner(' + json.dumps(event.get('text', '')) + ')')
+        else:
+            failed = event.get('fold_status') == 'FAILED' or event.get('text', '').startswith('Error:')
+            vim.command('call ollama#edit#StopSpinner(' + str(0 if failed else 1) + ')')
+
         if not event.get('diagnostic') and not event.get('fold') and not event.get('fold_append'):
             vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
+        if event.get('text', '').startswith('Waiting for model response'):
+            vim.command('call ollama#edit#ShowSpinner()')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
@@ -791,6 +846,7 @@ try:
 except Exception as exception:
     vim.command('call ollama#edit#EditCodeDone("Error", ' + json.dumps(str(exception)) + ')')
 EOF
+    call s:Spin()
 endfunction
 
 function! s:StartEditSession(request, code, filetype, settings) abort
