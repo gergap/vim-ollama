@@ -1,4 +1,4 @@
-" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2025-03-18
+" vim-ollama.txt   For Vim version 8.0 or later  Last change: 2026-09-05
 
 *vim-ollama*
 
@@ -52,7 +52,7 @@ will display completions automatically as ghost text. Hit the <Tab> key to
 accept the completion suggestion.
 
 You can also visually select parts of your code and use :OllamaEdit or the key
-`<leader>e` to start editing this code by using a LLM prompt. Is can be useful e.g.
+`<leader>e` to start editing this code by using an LLM prompt. It can be useful, e.g.,
 for adding comments, translating text, refactoring code and much more.
 
 ==============================================================================
@@ -84,7 +84,7 @@ The vim-ollama plugin provides the following commands:
 <
                                                       *:OllamaChat*
 :OllamaChat
-    - Description: Creates a split windows for interactive conversations with
+    - Description: Creates a split window for interactive conversations with
     the configured chat model. Use `:bd` to delete the chat buffer when you
     don't need anymore.
 
@@ -93,7 +93,7 @@ The vim-ollama plugin provides the following commands:
     - Description: Reviews the selected text. It opens a chat window like
     OllamaChat, but with a predefined prompt that asks for a code review of
     the selected text. The selection may be a few lines, a function or the
-    whole file (`:%OllamaRewiew`).
+    whole file (`:%OllamaReview`).
 
     - Usage:
 >
@@ -102,7 +102,7 @@ The vim-ollama plugin provides the following commands:
                                                       *:OllamaSpellCheck*
 :OllamaSpellCheck
     - Description: Checks the selected text for spelling errors.
-    Like OllamaReview this command using the OllamaChat window but with a
+    Like OllamaReview, this command uses the OllamaChat window but with a
     predefined prompt for spell checking. The selection may be a few lines, a
     paragraph or the whole file (`:%OllamaSpellCheck`).
 
@@ -114,8 +114,10 @@ The vim-ollama plugin provides the following commands:
 :OllamaTask
     - Description: Creates a chat window with a custom prompt. This command
     also works on a range like `:OllamaReview` but takes an additional
-    argument for the prompt. The selected range will automatically pasted
-    into the chat buffer.
+    argument for the prompt. The selected range will automatically be pasted
+    into the chat buffer. This command does not support tools; all
+    results are printed to the chat buffer and have to be copied manually.
+    See |:OllamaEdit| for more powerful edits.
     - Usage:
 >
         :OllamaTask [prompt]
@@ -142,8 +144,8 @@ The vim-ollama plugin provides the following commands:
         # Workspace Mode (used AGENTS.md)
         :OllamaEdit "start implementing the code"
 <
- Note: It is recommended to track all source files in Git so that you can
- undo changes of the AI and avoid loosing data if AI goes crazy.
+    Note: It is recommended to track all source files in Git so that you can
+    undo changes made by the AI and avoid losing data if the AI goes wrong.
 
                                                       *:OllamaExplain*
 :[range]OllamaExplain
@@ -246,12 +248,6 @@ Other Maps ~
 <leader>e               Starts editing the current selection or the whole file
                         if there is not visual selection.
 <Plug>(ollama-edit)
-
-<C-Y>                   Accept all changes.
-<Plug>(ollama-accept-all-changes)
-
-<C-N>                   Reject all changes.
-<Plug>(ollama-reject-all-changes)
 
 ==============================================================================
 6. Configuration                                      *vim-ollama-config*
@@ -527,7 +523,7 @@ g:ollama_edit_model
     - Default: 'qwen2.5-coder:7b'
     - Example:
 >
-        let g:ollama_chat_model = 'qwen2.5-coder:7b'
+        let g:ollama_edit_model = 'qwen2.5-coder:7b'
 <
                                                       *g:ollama_edit_options*
 g:ollama_edit_options
@@ -554,7 +550,7 @@ g:ollama_quickfix_checkers
                 \ }
                 \ }
 <
-    - Default: Python uses `ruff check .`.
+    - Default: Python uses `ruff check {path}`.
 
                                                       *g:ollama_stop_on_error*
 g:ollama_stop_on_error
@@ -592,9 +588,10 @@ g:ollama_edit_max_operations
 
                                                         *g:ollama_bwrap_enabled*
 g:ollama_bwrap_enabled
-    - Description: Runs `execute`, `vim-make`, and `vim-check` inside a
-      bubblewrap sandbox. The default enables it when bubblewrap is available
-      on Unix systems.
+    - Description: Runs `execute` and `vim-check` inside a bubblewrap sandbox.
+      The default enables it when bubblewrap is available on Unix systems.
+      For sandboxed `vim-make` builds, configure Vim's `makeprg` to use the
+      |vim-ollama-mk| Secure Build Helper.
     - Default: 'has('unix') && executable('bwrap')'
 
                                                        *g:ollama_bwrap_command*
@@ -614,17 +611,7 @@ g:ollama_bwrap_confirm
       `vim-check` commands. `vim-make` is not prompted.
     - Default: 'v:true'
 
-                                                 *g:ollama_bwrap_make_write_paths*
-g:ollama_bwrap_make_write_paths
-    - Description: Project-relative directories mounted writable for
-      sandboxed `vim-make`. All other project files remain read-only.
-    - Default: '[]'
-    - Example:
->
-        let g:ollama_bwrap_make_write_paths = ['build']
-<
-
-                                                       *g:ollama_no_maps*
+                                                        *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts
