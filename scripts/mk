@@ -35,6 +35,8 @@ else
         BUILD_DIR=$(realpath "$MK_BLDDIR")
     elif [ -d "$SOURCE_DIR/../bld" ]; then
         BUILD_DIR=$(realpath "$SOURCE_DIR/../bld")
+    elif [ -f "$SOURCE_DIR/CMakeLists.txt" ]; then
+        BUILD_DIR=$(realpath -m "$SOURCE_DIR/$MK_BLDDIR")
     else
         TOPLEVEL_GIT_DIR=$(git -C "$SOURCE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
         if [ -n "$TOPLEVEL_GIT_DIR" ]; then
