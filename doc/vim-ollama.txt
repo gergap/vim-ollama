@@ -174,6 +174,26 @@ The vim-ollama plugin provides the following commands:
         :OllamaQuickFix
 <
 
+                                                     *vim-ollama-mk*
+SECURE BUILD HELPER
+    The plugin includes `scripts/mk`, a build script for Makefile projects and
+    out-of-source CMake projects. It uses a `bld` directory for out-of-source
+    builds, creating it when necessary, then runs CMake, make, and ninja inside
+    bubblewrap. Project files are read-only
+    to the build process; the build directory and CMake's install prefix are
+    writable so that build and install targets can complete.
+
+    It is recommended to use this helper for AI-driven builds, especially with
+    `:OllamaQuickFix`:
+>
+        set makeprg=<C-R>=shellescape(g:ollama_plugin_dir .. '/scripts/mk')<CR>
+<
+    Bubblewrap must be installed and available as `bwrap`. The helper disables
+    network access and clears the inherited environment inside the sandbox.
+    Set `MK_BLDDIR` to select another build directory, `MK_INSTALL_PREFIX` to
+    select the installation directory, or use `mk cmake` to configure without
+    building.
+
                                                       *:OllamaInitAgents*
 :OllamaInitAgents
     - Description: Starts a workspace edit to create a AGENTS.md file.

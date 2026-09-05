@@ -1,0 +1,133 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Build helper for Vim's makeprg.  It follows the usual project/bld layout and
+# runs every build command inside bubblewrap to secure it.
+# This is an important security measure in AI-drive builds,
+# otherwise AI could call arbitrary commands to modify the system.
+
+set -u
+
+if ! command -v bwrap >/dev/null 2>&1; then
+    printf 'mk: bubblewrap (bwrap) is required\n' >&2
+    exit 127
+fi
+
+if [ "$#" -gt 0 ] && [ "$1" = cmake ]; then
+    shift
+    ONLY_CMAKE=1
+else
+    ONLY_CMAKE=0
+fi
+
+case "${MK_BLDDIR:-}" in
+    '') MK_BLDDIR=bld ;;
+esac
+
+SOURCE_DIR=$PWD
+BUILD_DIR=''
+
+# A Makefile in the current directory takes precedence over CMake discovery.
+if [ -f "$SOURCE_DIR/Makefile" ]; then
+    BUILD_DIR=$SOURCE_DIR
+else
+    if [ -d "$MK_BLDDIR" ]; then
+        BUILD_DIR=$(realpath "$MK_BLDDIR")
+    elif [ -d "$SOURCE_DIR/../bld" ]; then
+        BUILD_DIR=$(realpath "$SOURCE_DIR/../bld")
+    else
+        TOPLEVEL_GIT_DIR=$(git -C "$SOURCE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+        if [ -n "$TOPLEVEL_GIT_DIR" ]; then
+            if [ -f "$TOPLEVEL_GIT_DIR/CMakeLists.txt" ]; then
+                SOURCE_DIR=$TOPLEVEL_GIT_DIR
+            elif [ -f "$TOPLEVEL_GIT_DIR/src/CMakeLists.txt" ]; then
+                SOURCE_DIR=$TOPLEVEL_GIT_DIR/src
+            elif [ -f "$TOPLEVEL_GIT_DIR/output/src/CMakeLists.txt" ]; then
+                SOURCE_DIR=$TOPLEVEL_GIT_DIR/output/src
+                MK_BLDDIR=output/$MK_BLDDIR
+            fi
+            BUILD_DIR=$(realpath -m "$TOPLEVEL_GIT_DIR/$MK_BLDDIR")
+        fi
+    fi
+fi
+
+if [ -z "$BUILD_DIR" ]; then
+    printf 'mk: could not find a Makefile or CMake project\n' >&2
+    exit 1
+fi
+
+if [ ! -d "$BUILD_DIR" ]; then
+    mkdir -p "$BUILD_DIR" || exit 1
+fi
+
+PROJECT_DIR=$(realpath "$SOURCE_DIR")
+BUILD_DIR=$(realpath "$BUILD_DIR")
+INSTALL_PREFIX=${MK_INSTALL_PREFIX:-${TOPLEVEL_GIT_DIR:-$PROJECT_DIR}}
+INSTALL_PREFIX=$(realpath -m "$INSTALL_PREFIX")
+
+if [ ! -d "$INSTALL_PREFIX" ]; then
+    mkdir -p "$INSTALL_PREFIX" || exit 1
+fi
+
+# Keep the project read-only except for build output and the install prefix.
+WRITABLE_DIRS=("$BUILD_DIR")
+if [ "$INSTALL_PREFIX" != "$BUILD_DIR" ]; then
+    WRITABLE_DIRS+=("$INSTALL_PREFIX")
+fi
+
+bwrap_run() {
+    local executable=$1
+    shift
+    local -a sandbox=(
+        bwrap --die-with-parent --new-session --unshare-all
+        --proc /proc --dev /dev --tmpfs /tmp --clearenv
+        --setenv PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        --setenv HOME /tmp --setenv TMPDIR /tmp
+    )
+    local directory
+    for directory in /usr /usr/local /bin /sbin /lib /lib64 /etc; do
+        if [ -d "$directory" ]; then
+            sandbox+=(--ro-bind "$directory" "$directory")
+        fi
+    done
+    sandbox+=(--ro-bind "$PROJECT_DIR" "$PROJECT_DIR")
+    for directory in "${WRITABLE_DIRS[@]}"; do
+        sandbox+=(--bind "$directory" "$directory")
+    done
+    sandbox+=(--chdir "$BUILD_DIR" -- "$executable" "$@")
+    "${sandbox[@]}"
+}
+
+if [ "$BUILD_DIR" != "$PROJECT_DIR" ] && [ ! -f "$BUILD_DIR/Makefile" ] && [ ! -f "$BUILD_DIR/build.ninja" ]; then
+    CMAKE=$(command -v cmake)
+    if [ -z "$CMAKE" ]; then
+        printf 'mk: cmake is required to configure this project\n' >&2
+        exit 127
+    fi
+    bwrap_run "$CMAKE" -DCMAKE_BUILD_TYPE=Debug \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        "-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX" "$PROJECT_DIR" || exit 1
+fi
+
+if [ -f "$BUILD_DIR/Makefile" ] && [ ! -f "$BUILD_DIR/compile_commands.json" ]; then
+    CMAKE=$(command -v cmake)
+    [ -n "$CMAKE" ] && bwrap_run "$CMAKE" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON . || exit 1
+fi
+
+[ "$ONLY_CMAKE" -eq 1 ] && exit 0
+
+if [ -f "$BUILD_DIR/Makefile" ]; then
+    MAKE=$(command -v make)
+    [ -n "$MAKE" ] || { printf 'mk: make is required\n' >&2; exit 127; }
+    if [ -r /proc/cpuinfo ]; then
+        JOBS=$(grep -c '^processor' /proc/cpuinfo)
+    else
+        JOBS=1
+    fi
+    [ "$JOBS" -gt 0 ] || JOBS=1
+    bwrap_run "$MAKE" "-j$JOBS" "$@"
+else
+    NINJA=$(command -v ninja)
+    [ -n "$NINJA" ] || { printf 'mk: ninja is required\n' >&2; exit 127; }
+    bwrap_run "$NINJA" "$@"
+fi
