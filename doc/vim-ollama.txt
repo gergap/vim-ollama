@@ -131,10 +131,6 @@ The vim-ollama plugin provides the following commands:
     gets buffer tools and so can only edit the selected range inside a Vim
     buffer. File edits are not allowed.
     In workspace mode it can edit all files in the current directory.
-    a visual selection. Alternatively, you can use the mapping `<leader>e` to
-    achieve the same, but the command has the advantage of a command history,
-    which may be handy when you want to apply the same change to multiple
-    locations.
     - Usage:
 >
         :[range]OllamaEdit [prompt]
