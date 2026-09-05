@@ -178,9 +178,6 @@ endif
 if !exists('g:ollama_bwrap_confirm')
     let g:ollama_bwrap_confirm = v:true
 endif
-if !exists('g:ollama_bwrap_make_write_paths')
-    let g:ollama_bwrap_make_write_paths = []
-endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif
