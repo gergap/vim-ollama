@@ -51,6 +51,8 @@ function! s:OpenConversation(request) abort
     let s:conversation_winid = win_getid()
     call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
+    call prompt_setinterrupt(s:conversation_bufnr, function('ollama#edit#Interrupt'))
+    nnoremap <silent><buffer> <C-C> :call ollama#edit#Interrupt(0)<CR>
     call prompt_setprompt(s:conversation_bufnr, '>>> ')
 endfunction
 
@@ -696,6 +698,8 @@ function! ollama#edit#EditCodeDone(status, ...) abort
 
     if a:status ==# 'Done'
         echo 'OllamaEdit completed.'
+    elseif a:status ==# 'Cancelled'
+        echo 'OllamaEdit cancelled.'
     else
         let l:error = a:0 > 0 && !empty(a:1) ? a:1 : 'Unknown editing error'
         echohl ErrorMsg
@@ -727,6 +731,14 @@ function! ollama#edit#PromptEntered(text) abort
     else
         call s:EditWorkspace(a:text, v:true)
     endif
+endfunction
+
+function! ollama#edit#Interrupt(channel) abort
+    python3 << EOF
+import CodeEditor
+CodeEditor.cancel_edit()
+EOF
+    call ollama#edit#AppendProgress('Cancelling OllamaEdit...')
 endfunction
 
 function! ollama#edit#UpdateProgress(timer) abort

@@ -476,6 +476,22 @@ g_progress_events = []
 g_messages = []
 g_make_condition = threading.Condition()
 g_make_results = {}
+g_cancel_event = threading.Event()
+
+
+class EditCancelled(Exception):
+    """Raised when the active Vim-Ollama edit is interrupted."""
+
+
+def _check_cancelled():
+    if g_cancel_event.is_set():
+        raise EditCancelled("edit cancelled by user")
+
+
+def cancel_edit():
+    g_cancel_event.set()
+    with g_make_condition:
+        g_make_condition.notify_all()
 
 
 def CreateLogger():
@@ -533,7 +549,10 @@ def _request_make(arguments):
     _progress("Running configured makeprg", type="make_request", request_id=request_id, arguments={"arguments": " ".join(targets)})
     with g_make_condition:
         while g_make_results[request_id] is None:
-            g_make_condition.wait()
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
         return g_make_results.pop(request_id)
 
 
@@ -554,7 +573,10 @@ def _request_check(arguments):
     _progress("Running configured checker", type="check_request", request_id=request_id, arguments=arguments)
     with g_make_condition:
         while g_make_results[request_id] is None:
-            g_make_condition.wait()
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
         return g_make_results.pop(request_id)
 
 
@@ -1201,23 +1223,48 @@ def _ollama_request(messages, settings, tools):
     api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
     if api_key:
         headers["Authorization"] = "Bearer " + api_key
-    request = {"model": model, "messages": messages, "tools": tools, "stream": False, "options": options}
+    request = {"model": model, "messages": messages, "tools": tools, "stream": True, "options": options}
     if settings.get("show_llm_request", False):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
-    response = requests.post(
+    content = []
+    tool_calls = []
+    usage = {}
+    with requests.post(
         endpoint,
         headers=headers,
         json=request,
+        stream=True,
         timeout=settings.get("timeout", 300),
-    )
-    response.raise_for_status()
-    payload = response.json()
-    message = dict(payload.get("message") or {})
-    usage = {
-        key: payload[key]
-        for key in ("prompt_eval_count", "eval_count")
-        if isinstance(payload.get(key), int) and not isinstance(payload.get(key), bool)
-    }
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines(decode_unicode=True):
+            _check_cancelled()
+            if not line:
+                continue
+            payload = json.loads(line)
+            chunk = payload.get("message") or {}
+            if chunk.get("content"):
+                content.append(chunk["content"])
+            for index, call in enumerate(chunk.get("tool_calls") or []):
+                while len(tool_calls) <= index:
+                    tool_calls.append({"function": {}})
+                target = tool_calls[index]
+                if call.get("id"):
+                    target["id"] = call["id"]
+                function = call.get("function") or {}
+                if function.get("name"):
+                    target["function"]["name"] = function["name"]
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    target["function"]["arguments"] = target["function"].get("arguments", "") + arguments
+                elif isinstance(arguments, dict):
+                    target["function"]["arguments"] = arguments
+            for key in ("prompt_eval_count", "eval_count"):
+                if isinstance(payload.get(key), int) and not isinstance(payload.get(key), bool):
+                    usage[key] = payload[key]
+    message = {"role": "assistant", "content": "".join(content)}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
     if usage:
         message["_ollama_usage"] = usage
     return message
@@ -1309,6 +1356,7 @@ def _run_edit(request, code, filetype, settings):
     if isinstance(max_operations, bool) or not isinstance(max_operations, int) or max_operations < 1:
         raise ValueError("max_operations must be a positive integer")
     for call_number in range(max_operations):
+        _check_cancelled()
         _progress(f"Waiting for model response ({call_number + 1}/{max_operations})")
         if log is not None:
             log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
@@ -1327,6 +1375,7 @@ def _run_edit(request, code, filetype, settings):
             return operations, messages
 
         for call in tool_calls:
+            _check_cancelled()
             if isinstance(call, dict):
                 name = call.get("function", {}).get("name")
                 raw_arguments = call.get("function", {}).get("arguments", "{}")
@@ -1379,6 +1428,7 @@ def _run_edit(request, code, filetype, settings):
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"))
+                _check_cancelled()
                 if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
@@ -1394,6 +1444,8 @@ def _run_edit(request, code, filetype, settings):
                 if diagnostic:
                     details["fold_content"] += "\n" + diagnostic
                 _progress(result["message"], **details)
+            except EditCancelled:
+                raise
             except Exception as error:
                 result = {"ok": False, "error": str(error)}
                 _progress(
@@ -1423,6 +1475,12 @@ def _worker(request, code, filetype, settings):
             g_operations = operations
             g_messages = messages
             g_result = "Done"
+    except EditCancelled as error:
+        _progress("Edit cancelled by user")
+        with g_thread_lock:
+            g_operations = []
+            g_errormsg = str(error)
+            g_result = "Cancelled"
     except Exception as error:
         log.error(f"Error in tool-based edit: {error}")
         _progress(f"Error: {error}")
@@ -1447,6 +1505,7 @@ def start_vim_edit_code(request, code, filetype, settings):
         g_operations = []
         g_errormsg = ""
         g_progress_events = []
+    g_cancel_event.clear()
     g_editing_thread = threading.Thread(target=_worker, args=(request, list(code), filetype, settings), daemon=True)
     g_editing_thread.start()
 
