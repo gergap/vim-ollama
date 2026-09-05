@@ -310,6 +310,14 @@ command! OllamaChat call ollama#review#Chat()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 
+function! s:ShowSandboxStatus(timer) abort
+    echohl ModeMsg
+    echo g:ollama_bwrap_enabled
+          \ ? 'Bubblewrap Sandbox enabled.'
+          \ : 'Bubblewrap Sandbox disabled. Use on own risk.'
+    echohl None
+endfunction
+
 " expand does funky stuff inside of a function need to set it here
 let s:ollama_plugin_dir=expand('<sfile>:p:h:h')
 function! PluginInit() abort
@@ -342,11 +350,7 @@ function! PluginInit() abort
 "        nmap <silent> <C-Y> <Plug>(ollama-accept-all-changes)
 "        nmap <silent> <C-N> <Plug>(ollama-reject-all-changes)
     endif
-    if g:ollama_bwrap_enabled
-        echo("Bubblewrap Sandbox enabled")
-    else
-        echo("Bubblewrap Sandbox disabled")
-    endif
+    call timer_start(0, function('<SID>ShowSandboxStatus'))
 endfunction
 
 call PluginInit()
