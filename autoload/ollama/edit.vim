@@ -77,26 +77,35 @@ function! ollama#edit#ConversationFoldText() abort
     return l:prefix .. l:label .. '  ' .. l:status
 endfunction
 
+function! s:ConversationFoldCache() abort
+    let l:tick = b:changedtick
+    if get(b:, 'ollama_fold_cache_tick', -1) == l:tick
+        return b:ollama_fold_cache
+    endif
+
+    let l:cache = {}
+    let l:inside = v:false
+    for l:lnum in range(1, line('$'))
+        let l:line = getline(l:lnum)
+        if l:line =~# '^#StartDiagnostic\>'
+            let l:cache[l:lnum] = 'a1'
+            let l:inside = v:true
+        elseif l:line =~# '^#EndDiagnostic\>'
+            let l:cache[l:lnum] = 's1'
+            let l:inside = v:false
+        elseif l:inside
+            let l:cache[l:lnum] = '='
+        else
+            let l:cache[l:lnum] = 0
+        endif
+    endfor
+    let b:ollama_fold_cache = l:cache
+    let b:ollama_fold_cache_tick = l:tick
+    return l:cache
+endfunction
+
 function! ollama#edit#ConversationFold(lnum) abort
-    let l:line = getline(a:lnum)
-    if l:line =~# '^#StartDiagnostic\>'
-        return 'a1'
-    endif
-    if l:line =~# '^#EndDiagnostic\>'
-        return 's1'
-    endif
-    let l:index = a:lnum - 1
-    while l:index >= 1
-        let l:previous = getline(l:index)
-        if l:previous =~# '^#EndDiagnostic\>'
-            return 0
-        endif
-        if l:previous =~# '^#StartDiagnostic\>'
-            return '='
-        endif
-        let l:index -= 1
-    endwhile
-    return 0
+    return get(s:ConversationFoldCache(), a:lnum, 0)
 endfunction
 
 function! ollama#edit#SetupConversationFolding() abort
