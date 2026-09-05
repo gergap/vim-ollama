@@ -406,7 +406,7 @@ function! s:SandboxWrap(command, write_paths) abort
     return l:command
 endfunction
 
-function! s:ConfirmSandbox(tool, command) abort
+function! s:ConfirmSandbox(tool, command, ...) abort
     if !get(g:, 'ollama_bwrap_enabled', v:false)
         return v:true
     endif
@@ -420,6 +420,10 @@ function! s:ConfirmSandbox(tool, command) abort
     let l:summary = a:tool ==# 'execute'
                 \ ? 'Run the selected executable with project files read-only and network access disabled?'
                 \ : 'Run the configured checker with project files read-only and network access disabled?'
+    if a:tool ==# 'execute' && a:0 > 0
+        let l:display_command = join(map(copy(a:1), 'shellescape(v:val)'), ' ')
+        let l:summary = "Execute:\n  " .. l:display_command .. "\n\n" .. l:summary
+    endif
     let l:choice = confirm(l:summary,
                 \ "Allow &Once\nAllow for &Session\n&Cancel", 3)
     if l:choice == 2
@@ -673,28 +677,33 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             endif
         endfor
 
-        let l:key = fnamemodify(l:path, ':.')
-        let l:decisions = s:LoadExecuteDecisions()
+        let l:sandboxed = get(g:, 'ollama_bwrap_enabled', v:false)
         let l:decision = 'allowed'
-        if get(l:decisions, l:key, '') !=# 'always'
-            let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
-            if l:choice == 3 || l:choice == 0
-                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
-                return
-            endif
-            if l:choice == 1
-                let l:decision = 'allowed_once'
-            elseif l:choice == 2
+        if !l:sandboxed
+            let l:key = fnamemodify(l:path, ':.')
+            let l:decisions = s:LoadExecuteDecisions()
+            if get(l:decisions, l:key, '') !=# 'always'
+                let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
+                if l:choice == 3 || l:choice == 0
+                    call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
+                    return
+                endif
+                if l:choice == 1
+                    let l:decision = 'allowed_once'
+                elseif l:choice == 2
+                    let l:decision = 'allowed_always'
+                    let l:decisions[l:key] = 'always'
+                    call s:SaveExecuteDecisions(l:decisions)
+                endif
+            else
                 let l:decision = 'allowed_always'
-                let l:decisions[l:key] = 'always'
-                call s:SaveExecuteDecisions(l:decisions)
             endif
         else
-            let l:decision = 'allowed_always'
+            let l:decision = 'sandboxed'
         endif
         let l:state = {
                     \ 'output': [],
-                    \ 'sandboxed': get(g:, 'ollama_bwrap_enabled', v:false),
+                    \ 'sandboxed': l:sandboxed,
                     \ 'finished': v:false,
                     \ 'timed_out': v:false,
                     \ 'timeout_timer': -1,
@@ -708,12 +717,16 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishExecute', [a:request_id, l:state]),
                     \ }
-        let l:wrapped = s:SandboxWrap([l:path] + a:arguments.arguments, [])
-        if !s:ConfirmSandbox('execute', l:wrapped)
-            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
-            return
+        let l:command = [l:path] + a:arguments.arguments
+        let l:execute_command = copy(l:command)
+        if l:sandboxed
+            let l:command = s:SandboxWrap(l:command, [])
+            if !s:ConfirmSandbox('execute', l:command, l:execute_command)
+                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
+                return
+            endif
         endif
-        let l:job = job_start(l:wrapped, l:options)
+        let l:job = job_start(l:command, l:options)
         if type(l:job) == v:t_number && l:job == -1
             throw 'failed to start executable'
         endif
