@@ -77,6 +77,7 @@ function! s:OpenConversation(request) abort
     botright new
     setlocal buftype=prompt bufhidden=hide noswapfile
     setlocal filetype=markdown
+    setlocal nospell
     " avoid showing _ as errors in Markdown
     silent! syntax clear markdownError
     setlocal wrap
