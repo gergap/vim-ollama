@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import re
+import copy
 from typing import Optional
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
@@ -106,7 +107,8 @@ def fill_in_the_middle(config, prompt):
 
     return newprompt
 
-def generate_code_completion(config, prompt, baseurl, model, options, credentialname):
+
+def generate_code_completion(config, prompt, baseurl, model, options, credentialname, candidates=1):
     """ Code completion using Ollama REST API """
     cred = OllamaCredentials()
     api_key = cred.GetApiKey('ollama', credentialname)
@@ -129,12 +131,11 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
         # generate model specific prompt using our templates
         prompt = fill_in_the_middle(config, prompt)
         # Use Ollama Codegen API in raw mode, bypassing the Ollama template processing
-        data = {
+        base_data = {
             'model': model,
             'prompt': prompt,
             'stream': False,
             'raw' : True,
-            'options': options
         }
     else:
         log.info("Using Ollama's built-in templates and suffix argument.")
@@ -149,35 +150,41 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
 
         prompt = parts[0]
         suffix = parts[1]
-        data = {
+        base_data = {
             'model': model,
             'prompt': prompt,
             'suffix': suffix,
             'stream': False,
             'raw' : False,
-            'options': options
         }
-    log.debug('request: ' + json.dumps(data, indent=4))
+    completions = []
+    for candidate in range(max(1, candidates)):
+        data = copy.deepcopy(base_data)
+        data['options'] = copy.deepcopy(options)
+        if candidates > 1:
+            # Sampling is required for distinct alternatives. Keep the legacy
+            # deterministic default for the normal single-candidate path.
+            if data['options'].get('temperature', 0) == 0:
+                data['options']['temperature'] = 0.2
+            data['options']['seed'] = data['options'].get('seed', 0) + candidate
+        log.debug('request: ' + json.dumps(data, indent=4))
 
-    response = requests.post(endpoint, headers=headers, json=data)
+        response = requests.post(endpoint, headers=headers, json=data)
+        if response.status_code != 200:
+            raise Exception(f"Error: {response.status_code} - {response.text}")
 
-    if response.status_code == 200:
         json_response = response.json()
         log.debug('response: ' + json.dumps(json_response, indent=4))
-        completion = response.json().get('response')
+        completion = json_response.get('response', '')
         log.info('completion:' + completion)
 
-        # find index of sub string
-        try:
-            index = completion.find(config.get('eot', '<EOT>'))
-            if index != -1:
-                completion = completion[:index] # remove EOT marker
-        except:
-            pass
+        eot = config.get('eot', '<EOT>') if config else '<EOT>'
+        index = completion.find(eot)
+        if index != -1:
+            completion = completion[:index]
+        completions.append(completion.rstrip())
 
-        return completion.rstrip()
-    else:
-        raise Exception(f"Error: {response.status_code} - {response.text}")
+    return completions if candidates > 1 else completions[0]
 
 def generate_code_completion_mistral(prompt, baseurl, model, options, credentialname):
     """ Code completion using Mistral REST API """
@@ -390,6 +397,8 @@ if __name__ == "__main__":
                             help="Use Ollama code generation suffix (experimental)")
         parser.add_argument('-k', '--keyname', default=None,
                             help="Credential name to lookup API key and password store")
+        parser.add_argument('-n', '--candidates', type=int, default=1,
+                            help="Number of Ollama FIM candidates to generate")
         args = parser.parse_args()
 
         log = OllamaLogger(args.log_dir, args.log_filename)
@@ -411,7 +420,7 @@ if __name__ == "__main__":
                 modelname = DEFAULT_MODEL
             baseurl = args.url or DEFAULT_HOST
             config = load_config(modelname) if USE_CUSTOM_TEMPLATE else None
-            response = generate_code_completion(config, prompt, baseurl, modelname, options, args.keyname)
+            response = generate_code_completion(config, prompt, baseurl, modelname, options, args.keyname, args.candidates)
         elif args.provider == "mistral":
             if args.model:
                 modelname = args.model
@@ -437,7 +446,10 @@ if __name__ == "__main__":
             log.error(f"Unknown provider: {args.provider}")
             sys.exit(1)
 
-        print(response, end='')
+        if args.provider == 'ollama' and args.candidates > 1:
+            print(json.dumps({'candidates': response}), end='')
+        else:
+            print(response, end='')
 
     except KeyboardInterrupt:
         # Allow Ctrl+C without traceback

@@ -102,6 +102,10 @@ if !exists('g:ollama_model_options')
                 \ 'max_tokens': 500
                 \ }
 endif
+if !exists('g:ollama_completion_candidates')
+    " Number of alternatives requested for Ollama FIM completions.
+    let g:ollama_completion_candidates = 1
+endif
 " Chat specific settings
 if !exists('g:ollama_chat_provider')
     " Provider for chat models: 'ollama' or 'openai'
@@ -238,6 +242,8 @@ function! s:MapTab() abort
     inoremap <Plug>(ollama-tab-completion) <C-R>=<SID>HandleTabCompletion()<CR>
     inoremap <Plug>(ollama-insert-line)    <Cmd>call ollama#InsertNextLine()<CR>
     inoremap <Plug>(ollama-insert-word)    <Cmd>call ollama#InsertNextWord()<CR>
+    inoremap <Plug>(ollama-next-completion) <Cmd>call ollama#CycleCompletion(1)<CR>
+    inoremap <Plug>(ollama-previous-completion) <Cmd>call ollama#CycleCompletion(-1)<CR>
     vnoremap <Plug>(ollama-review)         :call ollama#review#Review()<CR>
     nnoremap <Plug>(ollama-toggle)         <Cmd>call ollama#Toggle()<CR>
     nnoremap <Plug>(ollama-edit)           :call ollama#edit#EditPrompt()<CR>
@@ -330,6 +336,12 @@ function! PluginInit() abort
         endif
         if empty(mapcheck('<M-C-Right>', 'i'))
             imap <M-C-Right> <Plug>(ollama-insert-word)
+        endif
+        if empty(mapcheck('<M-Down>', 'i'))
+            imap <M-Down> <Plug>(ollama-next-completion)
+        endif
+        if empty(mapcheck('<M-Up>', 'i'))
+            imap <M-Up> <Plug>(ollama-previous-completion)
         endif
         if empty(mapcheck('<leader>r', 'v'))
             vmap <leader>r <Plug>(ollama-review)

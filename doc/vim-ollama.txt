@@ -393,7 +393,18 @@ g:ollama_model_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                      *g:ollama_context_lines*
+                                                   *g:ollama_completion_candidates*
+g:ollama_completion_candidates
+    - Description: Number of alternative completions requested for Ollama FIM
+      completion. Alternatives can be cycled with `<M-Down>` and `<M-Up>`.
+      This only affects the `ollama` provider; OpenAI and Mistral providers
+      continue to return one completion.
+    - Default: 1
+    - Example:
+>
+        let g:ollama_completion_candidates = 3
+<
+                                                       *g:ollama_context_lines*
 g:ollama_context_lines
     - Description: Sets the number of context lines before and after the
       cursor to be transmitted to the LLM for tab completion.

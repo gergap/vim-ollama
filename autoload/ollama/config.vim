@@ -19,6 +19,7 @@ let s:help_text = {
 \ 'ollama_model_provider': 'Provider for code completions: "ollama", "mistral", "openai" or "openai_legacy".',
 \ 'ollama_model': 'Default model for <tab> completions.',
 \ 'ollama_model_options': 'Options for model customization.',
+\ 'ollama_completion_candidates': 'Number of Ollama FIM completion alternatives.',
 \ 'ollama_context_lines': 'Number of context lines to consider (default=10).',
 \ 'ollama_debounce_time': 'Debounce time for completions in [ms] (default=500).',
 \ 'ollama_completion_allowlist_filetype':

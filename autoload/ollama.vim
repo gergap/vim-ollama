@@ -16,6 +16,12 @@ let s:kill_job = v:null
 let s:prompt = ''
 " current suggestions
 let s:suggestion = ''
+let s:suggestions = []
+let s:suggestion_index = 0
+let s:suggestion_bufnr = -1
+let s:suggestion_lnum = 0
+let s:suggestion_col = 0
+let s:suggestion_changedtick = -1
 " text property id for ghost text
 let s:prop_id = -1
 " suppress internally trigger reschedules due to inserts
@@ -130,6 +136,7 @@ function! ollama#TriggerCompletion()
     endif
     call s:KillTimer()
     let s:suggestion = ''
+    let s:suggestions = []
     call ollama#UpdatePreview(s:suggestion)
     " directly call GetSuggestion without timer
     call ollama#GetSuggestion(0)
@@ -151,6 +158,7 @@ function! ollama#Schedule()
     endif
     call s:KillTimer()
     let s:suggestion = ''
+    let s:suggestions = []
     call ollama#UpdatePreview(s:suggestion)
     call ollama#logger#Debug("Scheduling debounce timer...")
     let s:timer_id = timer_start(g:ollama_debounce_time, 'ollama#GetSuggestion')
@@ -160,8 +168,19 @@ endfunction
 function! s:HandleCompletion(job, data)
     call ollama#logger#Debug("Received completion: " .. json_encode(a:data))
     if !empty(a:data)
-        "let l:suggestion = join(a:data, "\n")
-        let s:suggestion = substitute(a:data, "\r\n", "\n", "g")
+        let l:payload = {}
+        try
+            let l:payload = json_decode(a:data)
+        catch
+            let l:payload = {}
+        endtry
+        if type(l:payload) == v:t_dict && type(get(l:payload, 'candidates', v:null)) == v:t_list
+            let s:suggestions = l:payload.candidates
+        else
+            let s:suggestions = [a:data]
+        endif
+        let s:suggestion_index = 0
+        let s:suggestion = substitute(s:suggestions[0], "\r\n", "\n", "g")
         call ollama#UpdatePreview(s:suggestion)
     endif
 endfunction
@@ -195,6 +214,8 @@ function! s:HandleExit(job, exit_code)
             call ollama#logger#Debug("Process terminated as expected")
         endif
         call ollama#ClearPreview()
+        let s:suggestions = []
+        let s:suggestion = ''
     endif
     " release reference to job object
     if s:job is a:job
@@ -278,6 +299,9 @@ function! ollama#GetSuggestion(timer)
             let l:command += [ '-k', g:ollama_ollama_credentialname ]
         endif
     endif
+    if g:ollama_model_provider ==# 'ollama' && g:ollama_completion_candidates > 1
+        let l:command += ['-n', string(g:ollama_completion_candidates)]
+    endif
     call ollama#logger#Debug("command=" .. join(l:command, " "))
     let l:job_options = {
         \ 'out_mode': 'raw',
@@ -303,6 +327,10 @@ function! ollama#GetSuggestion(timer)
     endif
     " save current search
     let s:prompt = l:prompt
+    let s:suggestion_bufnr = bufnr('%')
+    let s:suggestion_lnum = line('.')
+    let s:suggestion_col = col('.')
+    let s:suggestion_changedtick = b:changedtick
 
     " Kill any running job and replace with new one
     if s:job isnot v:null
@@ -383,6 +411,25 @@ function! ollama#Clear() abort
     call s:KillJob()
     call ollama#ClearPreview()
     let s:suggestion = ''
+    let s:suggestions = []
+endfunction
+
+function! ollama#CycleCompletion(direction) abort
+    if len(s:suggestions) < 2
+        return
+    endif
+    if bufnr('%') != s:suggestion_bufnr || line('.') != s:suggestion_lnum
+                \ || col('.') != s:suggestion_col || b:changedtick != s:suggestion_changedtick
+        call ollama#Clear()
+        return
+    endif
+    let s:suggestion_index = (s:suggestion_index + a:direction) % len(s:suggestions)
+    if s:suggestion_index < 0
+        let s:suggestion_index += len(s:suggestions)
+    endif
+    let s:suggestion = substitute(s:suggestions[s:suggestion_index], "\r\n", "\n", "g")
+    call ollama#UpdatePreview(s:suggestion)
+    echo printf('Completion %d/%d', s:suggestion_index + 1, len(s:suggestions))
 endfunction
 
 function! ollama#Dismiss() abort
@@ -446,6 +493,7 @@ function! ollama#InsertSuggestion()
         " all was inserted so we can clear the current suggestion
         call ollama#ClearPreview()
         let s:suggestion = ''
+        let s:suggestions = []
         call ollama#logger#Debug("clear suggestion")
         " Empty string to indicate we inserted an AI suggestion
         return ''
