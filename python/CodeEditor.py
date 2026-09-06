@@ -18,8 +18,10 @@ import re
 import shutil
 import stat
 import subprocess
+import tarfile
 import threading
 import uuid
+import zipfile
 
 import requests
 
@@ -224,6 +226,25 @@ FILE_TOOLS = [
                     "recursive": {"type": "boolean"},
                 },
                 "required": ["path", "recursive"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+EXTRACT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "extract",
+            "description": "Extract a tar or zip archive into a project-relative directory. Archive links and paths outside the destination are rejected.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archive": {"type": "string", "description": "Relative path to an existing tar or zip archive."},
+                    "destination": {"type": "string", "description": "Relative destination directory below the current directory. Defaults to '.'."},
+                },
+                "required": ["archive"],
                 "additionalProperties": False,
             },
         },
@@ -494,10 +515,11 @@ GIT_TOOLS = [
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
 AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
+EXTRACT_TOOL_NAMES = {tool["function"]["name"] for tool in EXTRACT_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
 WEB_TOOL_NAMES = {tool["function"]["name"] for tool in WEB_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
@@ -507,7 +529,7 @@ GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
-WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -1172,7 +1194,93 @@ def apply_filesystem_tool(cwd, name, arguments):
     raise ValueError(f"unknown filesystem tool: {name}")
 
 
-def apply_tool(document, name, arguments, cwd=None):
+MAX_EXTRACT_MEMBERS = 10000
+MAX_EXTRACT_SIZE = 100 * 1024 * 1024
+
+
+def _archive_member_path(destination, member_name):
+    normalized = member_name.replace("\\", "/")
+    if not normalized or normalized.startswith("/") or ntpath.isabs(normalized):
+        raise ValueError("archive contains an absolute path")
+    parts = normalized.split("/")
+    if any(part in ("", ".") for part in parts[:-1]) or any(part == ".." for part in parts):
+        raise ValueError("archive contains a path outside the destination")
+    target = os.path.realpath(os.path.join(destination, *parts))
+    if os.path.commonpath([destination, target]) != destination:
+        raise ValueError("archive contains a path outside the destination")
+    return target
+
+
+def _extract_archive(cwd, arguments, max_size=None):
+    if not isinstance(arguments, dict):
+        raise ValueError("extract requires an argument object")
+    archive = _safe_path(cwd, arguments.get("archive"))
+    if not os.path.isfile(archive) or os.path.islink(archive):
+        raise ValueError("archive must be a regular file")
+    destination_value = arguments.get("destination", ".")
+    destination = _safe_path(cwd, destination_value, allow_root=True)
+    if max_size is None:
+        max_size = MAX_EXTRACT_SIZE
+    if isinstance(max_size, bool) or not isinstance(max_size, int) or max_size < 1:
+        raise ValueError("extract maximum size must be a positive integer")
+    os.makedirs(destination, exist_ok=True)
+    if os.path.islink(destination):
+        raise ValueError("extract destination must not be a symbolic link")
+
+    members = []
+    total_size = 0
+    try:
+        if zipfile.is_zipfile(archive):
+            with zipfile.ZipFile(archive) as handle:
+                for info in handle.infolist():
+                    if len(members) >= MAX_EXTRACT_MEMBERS:
+                        raise ValueError("archive contains too many members")
+                    target = _archive_member_path(destination, info.filename)
+                    mode = (info.external_attr >> 16) & 0o170000
+                    if mode == stat.S_IFLNK:
+                        raise ValueError("symbolic links are not allowed in archives")
+                    is_directory = info.is_dir() or info.filename.endswith(("/", "\\"))
+                    if not is_directory:
+                        total_size += info.file_size
+                        if total_size > max_size:
+                            raise ValueError("archive exceeds the configured uncompressed limit")
+                    members.append((info, target, is_directory))
+                for info, target, is_directory in members:
+                    if is_directory:
+                        os.makedirs(target, exist_ok=True)
+                        continue
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    with handle.open(info) as source, open(target, "wb") as output:
+                        shutil.copyfileobj(source, output, length=1024 * 1024)
+        else:
+            with tarfile.open(archive, "r:*") as handle:
+                for info in handle.getmembers():
+                    if len(members) >= MAX_EXTRACT_MEMBERS:
+                        raise ValueError("archive contains too many members")
+                    target = _archive_member_path(destination, info.name)
+                    if not (info.isdir() or info.isfile()):
+                        raise ValueError("only regular files and directories are allowed in archives")
+                    if info.isfile():
+                        total_size += info.size
+                        if total_size > max_size:
+                            raise ValueError("archive exceeds the configured uncompressed limit")
+                    members.append((info, target, info.isdir()))
+                for info, target, is_directory in members:
+                    if is_directory:
+                        os.makedirs(target, exist_ok=True)
+                        continue
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    source = handle.extractfile(info)
+                    if source is None:
+                        raise ValueError(f"could not read archive member: {info.name}")
+                    with source, open(target, "wb") as output:
+                        shutil.copyfileobj(source, output, length=1024 * 1024)
+    except (zipfile.BadZipFile, tarfile.TarError) as error:
+        raise ValueError(f"unsupported or invalid archive: {error}") from error
+    return {"ok": True, "message": f"extracted {len(members)} member(s) to {destination_value}"}
+
+
+def apply_tool(document, name, arguments, cwd=None, extract_max_size=None):
     """Validate and apply one tool call using 1-based snapshot line numbers.
 
     In range-edit mode, ``document`` is only the selected Vim range, so all
@@ -1199,6 +1307,10 @@ def apply_tool(document, name, arguments, cwd=None):
         return _webfetch(arguments)
     if name == "websearch":
         return _websearch(arguments)
+    if name in EXTRACT_TOOL_NAMES:
+        if cwd is None:
+            raise ValueError("extract requires a current directory")
+        return _extract_archive(cwd, arguments, extract_max_size)
     if name in MAKE_TOOL_NAMES:
         raise ValueError("make must be executed by Vim's main thread")
     if name in CHECK_TOOL_NAMES:
@@ -1601,7 +1713,7 @@ def _run_edit(request, code, filetype, settings):
             call_json = json.dumps(display_arguments, indent=2)
             _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
             try:
-                if settings.get("range_mode", True) and name in FILE_TOOL_NAMES:
+                if settings.get("range_mode", True) and name in FILE_TOOL_NAMES | EXTRACT_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
                 if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:
                     raise ValueError("buffer edit tools require an editable range")
@@ -1616,9 +1728,9 @@ def _run_edit(request, code, filetype, settings):
                 elif name in GIT_TOOL_NAMES:
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
-                    result = apply_tool(document, name, arguments, settings.get("cwd"))
+                    result = apply_tool(document, name, arguments, settings.get("cwd"), settings.get("extract_max_size"))
                 _check_cancelled()
-                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 details = {

@@ -162,6 +162,10 @@ endif
 if !exists('g:ollama_edit_max_operations')
     let g:ollama_edit_max_operations = 64
 endif
+
+if !exists('g:ollama_extract_max_size')
+    let g:ollama_extract_max_size = 100 * 1024 * 1024
+endif
 if !exists('g:ollama_quickfix_checkers')
     let g:ollama_quickfix_checkers = {
                 \ 'python': {'command': ['ruff', 'check', '{path}'], 'errorformat': '%f:%l:%c: %m'},

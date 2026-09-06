@@ -133,6 +133,10 @@ The vim-ollama plugin provides the following commands:
     gets buffer tools and so can only edit the selected range inside a Vim
     buffer. File edits are not allowed.
     In workspace mode it can edit all files in the current directory.
+    Workspace mode also provides an `extract` tool for unpacking tar and zip
+    archives into the project. The tool rejects archive links and traversal
+    paths and limits extraction to 10,000 members and 100 MiB uncompressed by
+    default. Configure |g:ollama_extract_max_size| to change the byte limit.
     - Usage:
 >
         :[range]OllamaEdit [prompt]
@@ -626,7 +630,7 @@ g:ollama_show_llm_request
         let g:ollama_show_llm_request = v:true
 <
 
-                                                    *g:ollama_edit_max_operations*
+                                                      *g:ollama_edit_max_operations*
 g:ollama_edit_max_operations
     - Description: Sets the maximum number of model tool calls allowed in one
       `:OllamaEdit`, `:OllamaExplain`, or `:OllamaQuickFix` request.
@@ -636,7 +640,18 @@ g:ollama_edit_max_operations
         let g:ollama_edit_max_operations = 128
 <
 
-                                                        *g:ollama_bwrap_enabled*
+                                                       *g:ollama_extract_max_size*
+g:ollama_extract_max_size
+    - Description: Maximum total uncompressed size allowed when the workspace
+      `extract` tool unpacks an archive. This limit is independent of the
+      archive's compressed size. Increase it only for archives you trust.
+    - Default: 104857600 (100 MiB)
+    - Example:
+>
+        let g:ollama_extract_max_size = 512 * 1024 * 1024
+<
+
+                                                       *g:ollama_bwrap_enabled*
 g:ollama_bwrap_enabled
     - Description: Runs `execute` and `vim-check` inside a bubblewrap sandbox.
       The default enables it when bubblewrap is available on Unix systems.

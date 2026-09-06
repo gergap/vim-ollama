@@ -1,5 +1,6 @@
 import sys
 import stat
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -517,6 +518,46 @@ def test_filesystem_delete_tools(tmp_path):
 
     apply_tool([], "delete_folder", {"path": "remove", "recursive": False}, str(tmp_path))
     assert not folder.exists()
+
+
+def test_extract_tar_archive_into_workspace(tmp_path):
+    archive = tmp_path / "bundle.tar"
+    source = tmp_path / "source.txt"
+    source.write_text("extracted")
+    with tarfile.open(archive, "w") as handle:
+        handle.add(source, arcname="nested/source.txt")
+
+    result = apply_tool([], "extract", {"archive": "bundle.tar", "destination": "out"}, str(tmp_path))
+
+    assert result["ok"]
+    assert (tmp_path / "out/nested/source.txt").read_text() == "extracted"
+
+
+def test_extract_rejects_archive_path_traversal(tmp_path):
+    archive = tmp_path / "unsafe.tar"
+    with tarfile.open(archive, "w") as handle:
+        info = tarfile.TarInfo("../outside.txt")
+        content = b"unsafe"
+        info.size = len(content)
+        import io
+        handle.addfile(info, io.BytesIO(content))
+
+    with pytest.raises(ValueError, match="outside the destination"):
+        apply_tool([], "extract", {"archive": "unsafe.tar"}, str(tmp_path))
+
+
+def test_extract_max_size_can_be_configured(tmp_path):
+    archive = tmp_path / "bundle.tar"
+    source = tmp_path / "source.txt"
+    source.write_text("extracted")
+    with tarfile.open(archive, "w") as handle:
+        handle.add(source, arcname="source.txt")
+
+    with pytest.raises(ValueError, match="configured uncompressed limit"):
+        apply_tool([], "extract", {"archive": "bundle.tar"}, str(tmp_path), 1)
+
+    result = apply_tool([], "extract", {"archive": "bundle.tar"}, str(tmp_path), 1024)
+    assert result["ok"]
 
 
 def test_chmod_makes_regular_files_executable(tmp_path):
