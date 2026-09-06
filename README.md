@@ -61,7 +61,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ### OllamaEdit
 
-[![OllamaEdit](https://img.youtube.com/vi/AAOsABCvkFI/0.jpg)](https://youtu.be/AAOsABCvkFI)
+[![OllamaEdit](https://img.youtube.com/vi/LzfpfntZIgk/0.jpg)](https://youtu.be/LzfpfntZIgk)
 
 ### Demo of Vim-Ollama 1.0
 
