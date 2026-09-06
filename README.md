@@ -48,6 +48,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 - OllamaEdit: AI-assisted code editing based on natural language (NEW in 1.3)
   - Edit a selected range or work across the project workspace
   - Inspect files, apply changes, and validate the result with build tools
+  - Search the web with `websearch` and retrieve pages with `webfetch`
   - Fix compiler diagnostics automatically with `:OllamaQuickFix`
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
@@ -81,12 +82,20 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
 
 ## How It Works
 
-The plugin uses Python scripts, e.g., `complete.py` and `chat.py`, to communicate with Ollama via its REST API. The
-first script handles code completion tasks, while the second script is used for interactive chat conversations. The Vim
-plugin uses these scripts via I/O redirection to integrate AI results into Vim.
+The plugin uses Python scripts, e.g., `complete.py` and `chat.py`, to
+communicate with Ollama via its REST API. The first script handles code
+completion tasks, while the second script is used for interactive chat
+conversations. The Vim plugin uses these scripts via I/O redirection to
+integrate AI results into Vim.
 
-Optionally, it supports using the OpenAI REST API for code completion, chat conversations, and code edit tasks.
-Therefore, you need to create an OpenAI account and create an OpenAI API key on https://platform.openai.com/api-keys to
+OllamaEdit provides OpenCode-like `websearch` and `webfetch` tools. Set
+`EXA_API_KEY` or `PARALLEL_API_KEY` to enable the corresponding web search
+provider; `OPENCODE_WEBSEARCH_PROVIDER=exa|parallel` can select one explicitly.
+Web fetching accepts HTTP(S) URLs and returns text, markdown, or HTML.
+
+Optionally, it supports using the OpenAI REST API for code completion, chat
+conversations, and code edit tasks. Therefore, you need to create an OpenAI
+account and create an OpenAI API key on https://platform.openai.com/api-keys to
 be able to access the REST API.
 
 The plugin now also supports Mistral AI. See [Mistral Quickstart](https://docs.mistral.ai/getting-started/quickstart)

@@ -144,8 +144,47 @@ The vim-ollama plugin provides the following commands:
         # Workspace Mode (used AGENTS.md)
         :OllamaEdit "start implementing the code"
 <
-    Note: It is recommended to track all source files in Git so that you can
-    undo changes made by the AI and avoid losing data if the AI goes wrong.
+     Note: It is recommended to track all source files in Git so that you can
+     undo changes made by the AI and avoid losing data if the AI goes wrong.
+
+                                                     *vim-ollama-websearch*
+WEB SEARCH PROVIDERS
+    OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
+    `websearch` and `webfetch` tools. `websearch` uses an OpenCode-compatible
+    MCP endpoint and supports two providers:
+
+    Exa:
+        Uses `https://mcp.exa.ai/mcp` and the `web_search_exa` MCP tool.
+        Set `EXA_API_KEY` in Vim's environment to authenticate requests. When
+        no provider is explicitly selected, Exa is preferred when this
+        variable is set.
+
+    Parallel:
+        Uses `https://search.parallel.ai/mcp` and the `web_search` MCP tool.
+        Set `PARALLEL_API_KEY` in Vim's environment to authenticate requests.
+        Parallel is the default fallback when Exa is not selected or its key
+        is not present.
+
+    Select a provider explicitly with an environment variable before starting
+    Vim:
+>
+        OPENCODE_WEBSEARCH_PROVIDER=exa vim
+        OPENCODE_WEBSEARCH_PROVIDER=parallel vim
+<
+    The provider can also be selected for the current shell:
+>
+        export EXA_API_KEY='...'
+        export OPENCODE_WEBSEARCH_PROVIDER=exa
+<
+    Provider quotas, billing, and rate limits are imposed by Exa or Parallel
+    and are not defined by vim-ollama. They can change with the provider
+    account and plan. vim-ollama does not maintain a separate websearch quota.
+    Each websearch request has a 25-second timeout. `numResults` defaults to 8
+    and controls the number requested from the provider; the provider may
+    apply its own maximum.
+
+    A single model response may contain multiple tool calls. Webfetch is
+    limited to 5 MiB per response and 120 seconds per request.
 
                                                       *:OllamaExplain*
 :[range]OllamaExplain

@@ -10,6 +10,8 @@ been validated.
 
 import json
 import glob as glob_module
+import html
+from html.parser import HTMLParser
 import ntpath
 import os
 import re
@@ -297,6 +299,45 @@ INSPECTION_TOOLS = [
     },
 ]
 
+WEB_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "webfetch",
+            "description": "Fetch content from an HTTP or HTTPS URL. Defaults to markdown output.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to fetch content from."},
+                    "format": {"type": "string", "enum": ["text", "markdown", "html"], "default": "markdown"},
+                    "timeout": {"type": "number", "minimum": 0, "maximum": 120, "description": "Optional timeout in seconds."},
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "websearch",
+            "description": "Search the web using the configured OpenCode-compatible search provider.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Websearch query."},
+                    "numResults": {"type": "number", "description": "Number of search results to return (default: 8)."},
+                    "livecrawl": {"type": "string", "enum": ["fallback", "preferred"]},
+                    "type": {"type": "string", "enum": ["auto", "fast", "deep"]},
+                    "contextMaxCharacters": {"type": "number", "description": "Maximum characters in the LLM context (default: 10000)."},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 MAKE_TOOLS = [
     {
         "type": "function",
@@ -453,19 +494,20 @@ GIT_TOOLS = [
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
 AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+TOOLS = BUFFER_TOOLS + FILE_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
 INSPECTION_TOOL_NAMES = {tool["function"]["name"] for tool in INSPECTION_TOOLS}
+WEB_TOOL_NAMES = {tool["function"]["name"] for tool in WEB_TOOLS}
 MAKE_TOOL_NAMES = {tool["function"]["name"] for tool in MAKE_TOOLS}
 CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
-RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
-WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -878,6 +920,147 @@ def _list_files(cwd, arguments):
     return {"ok": True, "message": f"listed {len(files)} file(s)", "content": content}
 
 
+class _HTMLContentParser(HTMLParser):
+    """Extract readable HTML content without adding a parser dependency."""
+
+    def __init__(self, markdown=False):
+        super().__init__(convert_charrefs=True)
+        self.markdown = markdown
+        self.parts = []
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if self.skip_depth or tag in {"script", "style", "noscript", "iframe", "object", "embed"}:
+            self.skip_depth += 1
+            return
+        if self.markdown:
+            if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+                self.parts.append("\n" + "#" * int(tag[1]) + " ")
+            elif tag == "li":
+                self.parts.append("\n- ")
+            elif tag == "br":
+                self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if self.skip_depth:
+            self.skip_depth -= 1
+            return
+        if self.markdown and tag in {"p", "div", "section", "article", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "li"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.skip_depth:
+            self.parts.append(data)
+
+    def output(self):
+        text = "".join(self.parts)
+        text = html.unescape(text)
+        if self.markdown:
+            lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+            return re.sub(r"\n{3,}", "\n\n", "\n".join(line for line in lines if line)).strip()
+        return re.sub(r"\s+", " ", text).strip()
+
+
+def _webfetch(arguments):
+    if not isinstance(arguments, dict):
+        raise ValueError("webfetch requires an argument object")
+    url = arguments.get("url")
+    if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError("URL must start with http:// or https://")
+    output_format = arguments.get("format", "markdown")
+    if output_format not in {"text", "markdown", "html"}:
+        raise ValueError("webfetch format must be text, markdown, or html")
+    timeout = arguments.get("timeout", 30)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout < 0:
+        raise ValueError("webfetch timeout must be a non-negative number of seconds")
+    timeout = min(timeout, 120)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; OllamaEdit/1.0)",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if output_format == "markdown":
+        headers["Accept"] = "text/markdown, text/x-markdown, text/plain, text/html, */*;q=0.1"
+    elif output_format == "text":
+        headers["Accept"] = "text/plain, text/markdown, text/html, */*;q=0.1"
+    else:
+        headers["Accept"] = "text/html, application/xhtml+xml, text/plain, text/markdown, */*;q=0.1"
+    response = requests.get(url, headers=headers, timeout=timeout, stream=True)
+    response.raise_for_status()
+    content_length = response.headers.get("Content-Length")
+    if content_length and int(content_length) > 5 * 1024 * 1024:
+        raise ValueError("Response too large (exceeds 5MB limit)")
+    body = response.content
+    if len(body) > 5 * 1024 * 1024:
+        raise ValueError("Response too large (exceeds 5MB limit)")
+    content_type = response.headers.get("Content-Type", "")
+    content = body.decode(response.encoding or "utf-8", errors="replace")
+    if "text/html" in content_type:
+        if output_format == "text":
+            parser = _HTMLContentParser()
+            parser.feed(content)
+            content = parser.output()
+        elif output_format == "markdown":
+            parser = _HTMLContentParser(markdown=True)
+            parser.feed(content)
+            content = parser.output()
+    return {"ok": True, "message": f"fetched {url} ({content_type or 'unknown content type'})", "content": content}
+
+
+def _parse_mcp_search_response(body):
+    payloads = [body.strip()]
+    payloads.extend(line[6:] for line in body.splitlines() if line.startswith("data: "))
+    for payload in payloads:
+        if not payload or not payload.startswith("{"):
+            continue
+        try:
+            data = json.loads(payload)
+            content = data.get("result", {}).get("content", [])
+            for item in content:
+                if item.get("text"):
+                    return item["text"]
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return None
+
+
+def _websearch(arguments):
+    if not isinstance(arguments, dict) or not isinstance(arguments.get("query"), str) or not arguments["query"].strip():
+        raise ValueError("websearch requires a non-empty query")
+    query = arguments["query"]
+    num_results = arguments.get("numResults", 8)
+    if isinstance(num_results, bool) or not isinstance(num_results, (int, float)) or num_results < 1:
+        raise ValueError("websearch numResults must be a positive number")
+    search_type = arguments.get("type", "auto")
+    livecrawl = arguments.get("livecrawl", "fallback")
+    if search_type not in {"auto", "fast", "deep"} or livecrawl not in {"fallback", "preferred"}:
+        raise ValueError("invalid websearch type or livecrawl mode")
+    provider = os.environ.get("OPENCODE_WEBSEARCH_PROVIDER")
+    if provider not in {"exa", "parallel"}:
+        provider = "exa" if os.environ.get("EXA_API_KEY") else "parallel"
+    if provider == "parallel":
+        url = "https://search.parallel.ai/mcp"
+        tool = "web_search"
+        payload = {"objective": query, "search_queries": [query]}
+        headers = {"User-Agent": "OllamaEdit/1.0"}
+        if os.environ.get("PARALLEL_API_KEY"):
+            headers["Authorization"] = "Bearer " + os.environ["PARALLEL_API_KEY"]
+    else:
+        api_key = os.environ.get("EXA_API_KEY")
+        url = "https://mcp.exa.ai/mcp" + (("?exaApiKey=" + requests.utils.quote(api_key, safe="")) if api_key else "")
+        tool = "web_search_exa"
+        payload = {"query": query, "type": search_type, "numResults": num_results, "livecrawl": livecrawl}
+        if "contextMaxCharacters" in arguments:
+            payload["contextMaxCharacters"] = arguments["contextMaxCharacters"]
+        headers = {"Accept": "application/json, text/event-stream"}
+    if provider == "parallel":
+        headers["Accept"] = "application/json, text/event-stream"
+    request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": payload}}
+    response = requests.post(url, headers=headers, json=request, timeout=25)
+    response.raise_for_status()
+    content = _parse_mcp_search_response(response.text) or "No search results found. Please try a different query."
+    return {"ok": True, "message": f"searched the web for {query}", "content": content}
+
+
 def apply_filesystem_tool(cwd, name, arguments):
     """Apply one explicitly requested filesystem operation inside cwd."""
     path = _safe_path(cwd, arguments.get("path"))
@@ -1012,6 +1195,10 @@ def apply_tool(document, name, arguments, cwd=None):
         if cwd is None:
             raise ValueError("list_files requires a current directory")
         return _list_files(cwd, arguments)
+    if name == "webfetch":
+        return _webfetch(arguments)
+    if name == "websearch":
+        return _websearch(arguments)
     if name in MAKE_TOOL_NAMES:
         raise ValueError("make must be executed by Vim's main thread")
     if name in CHECK_TOOL_NAMES:
@@ -1330,7 +1517,7 @@ def _run_edit(request, code, filetype, settings):
     previous_messages = settings.get("messages")
     range_mode = settings.get("range_mode", True)
     if settings.get("explain_mode", False):
-        tools = INSPECTION_TOOLS
+        tools = INSPECTION_TOOLS + WEB_TOOLS
     else:
         tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
         if settings.get("quickfix_checker", False):
@@ -1431,7 +1618,7 @@ def _run_edit(request, code, filetype, settings):
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"))
                 _check_cancelled()
-                if name not in INSPECTION_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 details = {

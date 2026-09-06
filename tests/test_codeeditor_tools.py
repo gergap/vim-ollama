@@ -226,7 +226,7 @@ def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     )
 
     names = {tool["function"]["name"] for tool in captured_tools}
-    assert names == {"read_file", "glob", "grep", "list_files"}
+    assert names == {"read_file", "glob", "grep", "list_files", "webfetch", "websearch"}
     assert operations == []
     assert "read-only" in messages[1]["content"]
 
@@ -572,6 +572,50 @@ def test_read_file_glob_and_grep(tmp_path):
     assert "src/main.c:1" in grep_result["content"]
     assert "src/notes.txt:1" in grep_result["content"]
     assert "src/nested/other.c:1" in grep_result["content"]
+
+
+def test_webfetch_converts_html_to_markdown(monkeypatch):
+    response = SimpleNamespace(
+        headers={"Content-Type": "text/html; charset=utf-8"},
+        content=b"<html><script>bad()</script><h1>Title</h1><p>Hello <b>world</b>.</p></html>",
+        encoding="utf-8",
+    )
+    response.raise_for_status = lambda: None
+    monkeypatch.setattr(CodeEditor.requests, "get", lambda *args, **kwargs: response)
+
+    result = CodeEditor.apply_tool([], "webfetch", {"url": "https://example.com"})
+
+    assert result["ok"]
+    assert "# Title" in result["content"]
+    assert "Hello world." in result["content"]
+    assert "bad()" not in result["content"]
+
+
+def test_webfetch_rejects_non_http_urls():
+    with pytest.raises(ValueError, match="http"):
+        CodeEditor.apply_tool([], "webfetch", {"url": "file:///tmp/secret"})
+
+
+def test_websearch_uses_exa_mcp(monkeypatch):
+    calls = []
+    response = SimpleNamespace(
+        text='{"result":{"content":[{"type":"text","text":"result"}]}}',
+    )
+    response.raise_for_status = lambda: None
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return response
+
+    monkeypatch.setenv("EXA_API_KEY", "secret")
+    monkeypatch.setenv("OPENCODE_WEBSEARCH_PROVIDER", "exa")
+    monkeypatch.setattr(CodeEditor.requests, "post", post)
+
+    result = CodeEditor.apply_tool([], "websearch", {"query": "vim ollama"})
+
+    assert result["content"] == "result"
+    assert "exaApiKey=secret" in calls[0][0]
+    assert calls[0][1]["json"]["params"]["name"] == "web_search_exa"
 
 
 def test_grep_supports_file_paths(tmp_path):
