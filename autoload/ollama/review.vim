@@ -274,9 +274,9 @@ function! s:StartChat(lines) abort
     else
         silent execute 'new' l:bufname
     endif
-    " Set the filetype to ollama-chat
-"    setlocal filetype=ollama-chat
-    setlocal filetype=markdown
+    " Keep Markdown syntax without loading vim-markdown's Markdown ftplugin.
+    setlocal filetype=ollama-chat
+    setlocal syntax=markdown
     setlocal buftype=prompt
     " enable BufDelete event when closing buffer usig :q!
     setlocal bufhidden=delete
