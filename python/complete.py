@@ -126,6 +126,13 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
     endpoint = baseurl + "/api/generate"
     log.debug('endpoint: ' + endpoint)
 
+    prompt_parts = prompt.split('<FILL_IN_HERE>')
+    stop_marker = None
+    if (config or {}).get('fim_stop_on_suffix', True) and len(prompt_parts) == 2:
+        stop_marker = extract_stop_marker(prompt_parts[1])
+    configured_stops = list((config or {}).get('fim_stop_words', []))
+    if stop_marker:
+        configured_stops.append(stop_marker)
     if USE_CUSTOM_TEMPLATE:
         log.info('Using custom prompt in raw mode')
         # generate model specific prompt using our templates
@@ -167,6 +174,8 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
             if data['options'].get('temperature', 0) == 0:
                 data['options']['temperature'] = 0.2
             data['options']['seed'] = data['options'].get('seed', 0) + candidate
+        if configured_stops and 'stop' not in data['options']:
+            data['options']['stop'] = configured_stops
         log.debug('request: ' + json.dumps(data, indent=4))
 
         response = requests.post(endpoint, headers=headers, json=data)
@@ -182,6 +191,14 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
         index = completion.find(eot)
         if index != -1:
             completion = completion[:index]
+        if stop_marker:
+            index = completion.find(stop_marker)
+            if index != -1:
+                completion = completion[:index]
+        for stop in configured_stops:
+            index = completion.find(stop)
+            if index != -1:
+                completion = completion[:index]
         completions.append(completion.rstrip())
 
     return completions if candidates > 1 else completions[0]
