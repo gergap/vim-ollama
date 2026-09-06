@@ -86,6 +86,19 @@ function! s:StartChat(lines) abort
         " Decode model line breaks; actual newlines frame channel messages.
         let l:msg = substitute(a:msg, '<OLLAMA_NL>', "\n", 'g')
         let l:lines = split(l:msg, "\n", 1)
+        let l:normalized_lines = []
+        for l:line in l:lines
+            if l:line =~# '^#\(StartThinking\|EndThinking\)'
+                call add(l:normalized_lines, matchstr(l:line, '^#\(StartThinking\|EndThinking\)'))
+                let l:remainder = substitute(l:line, '^#\(StartThinking\|EndThinking\)', '', '')
+                if !empty(l:remainder)
+                    call add(l:normalized_lines, l:remainder)
+                endif
+            else
+                call add(l:normalized_lines, l:line)
+            endif
+        endfor
+        let l:lines = l:normalized_lines
         let l:first_line = v:true
         for l:line in l:lines
             let l:idx = stridx(l:line, "<EOT>")
@@ -94,6 +107,7 @@ function! s:StartChat(lines) abort
                 let l:line = strpart(l:line, 0, l:idx)
             endif
 
+            let l:is_thinking_marker = l:line =~# '^#\(StartThinking\|EndThinking\)$'
             if !s:response_started
                 if l:line !=# ''
                     " Insert output immediately before the editable prompt line.
@@ -102,7 +116,7 @@ function! s:StartChat(lines) abort
                     let s:response_line = l:line_count
                     let s:response_started = v:true
                 endif
-            elseif !l:first_line
+            elseif !l:first_line || s:response_line == -1 || l:is_thinking_marker
                 " Each subsequent channel line starts a new output line.
                 let l:line_count = getbufinfo(s:buf)[0].linecount
                 call appendbufline(s:buf, l:line_count - 1, l:line)
@@ -113,6 +127,10 @@ function! s:StartChat(lines) abort
             endif
             let l:first_line = v:false
 
+            if l:is_thinking_marker
+                let s:response_line = -1
+            endif
+
             if l:idx != -1
                 let s:response_started = v:false
                 let s:response_line = -1
@@ -121,6 +139,11 @@ function! s:StartChat(lines) abort
                 endif
             endif
         endfor
+        let l:chat_win = s:FindBufferWindow(s:buf)
+        if l:chat_win != -1
+            call win_execute(l:chat_win, 'setlocal foldmethod=expr foldexpr=ollama#review#ThinkingFold(v:lnum) foldtext=ollama#review#ChatFoldText() foldenable foldlevel=0')
+            call win_execute(l:chat_win, 'silent! normal! zx')
+        endif
     endfunc
 
     func! Interrupt(channel) abort
@@ -234,6 +257,7 @@ function! s:StartChat(lines) abort
         else
             execute 'buffer' s:buf
         endif
+        call s:SetupThinkingFolding()
         " send lines
         if a:lines isnot v:null
             call append(line("$") - 1, a:lines)
@@ -296,16 +320,64 @@ function! s:StartChat(lines) abort
     call matchadd('OllamaThinking', '^> .*$')
     call matchadd('OllamaThinking', '^#\(StartThinking\|EndThinking\)$')
 
-    " Fold the reasoning/thinking output, closed by default
-    " The Python script wraps the thinking block in #StartThinking/#EndThinking markers
-    setlocal foldmethod=marker
-    setlocal foldmarker=#StartThinking,#EndThinking
-    setlocal foldtext=ollama#review#ChatFoldText()
-    setlocal foldlevel=0
-    setlocal foldcolumn=1
+    call s:SetupThinkingFolding()
 
     " start accepting shell commands
     startinsert
+endfunction
+
+function! s:SetupThinkingFolding() abort
+    " vim-markdown resets folding on these events; reapply our chat folds after it.
+    augroup OllamaReviewThinkingFolding
+        autocmd! * <buffer>
+        autocmd BufWinEnter,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
+                    \ call ollama#review#SetupThinkingFolds()
+    augroup END
+    call ollama#review#SetupThinkingFolds()
+endfunction
+
+function! ollama#review#SetupThinkingFolds() abort
+    " Reapply after vim-markdown's folding autocmds run.
+    setlocal nospell
+    silent! syntax clear markdownError
+    setlocal wrap
+    setlocal modifiable
+    setlocal foldmethod=expr
+    setlocal foldexpr=ollama#review#ThinkingFold(v:lnum)
+    setlocal foldtext=ollama#review#ChatFoldText()
+    setlocal foldlevel=0
+    setlocal foldcolumn=1
+    let b:ollama_thinking_fold_cache_tick = -1
+endfunction
+
+function! s:ThinkingFoldCache() abort
+    let l:tick = b:changedtick
+    if get(b:, 'ollama_thinking_fold_cache_tick', -1) == l:tick
+        return b:ollama_thinking_fold_cache
+    endif
+    let l:cache = {}
+    let l:inside = v:false
+    for l:lnum in range(1, line('$'))
+        let l:line = getline(l:lnum)
+        if l:line ==# '#StartThinking'
+            let l:cache[l:lnum] = 'a1'
+            let l:inside = v:true
+        elseif l:line ==# '#EndThinking'
+            let l:cache[l:lnum] = 's1'
+            let l:inside = v:false
+        elseif l:inside
+            let l:cache[l:lnum] = '='
+        else
+            let l:cache[l:lnum] = 0
+        endif
+    endfor
+    let b:ollama_thinking_fold_cache = l:cache
+    let b:ollama_thinking_fold_cache_tick = l:tick
+    return l:cache
+endfunction
+
+function! ollama#review#ThinkingFold(lnum) abort
+    return get(s:ThinkingFoldCache(), a:lnum, 0)
 endfunction
 
 " Compact fold label for the marker-folded thinking output
