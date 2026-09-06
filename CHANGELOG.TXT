@@ -3,7 +3,6 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - Planned changes and ideas...
-- Cycle through different suggestions in code completion.
 - Generic template support read from the model itself.
 
 ## [Version 1.3] - 2026-09-05
