@@ -2,5 +2,8 @@
     "pre": "<fim_prefix> ",
     "middle": "<fim_middle>",
     "suffix": "<fim_suffix>",
-    "eot": "<|end_of_text|>"
+    "eot": "<|end_of_text|>",
+    "fim_stop_words": ["}", "<|end_of_text|>"],
+    "fim_stop_at_closing_brace": true,
+    "fim_stop_at_absolute_path": true
 }

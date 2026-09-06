@@ -199,6 +199,14 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
             index = completion.find(stop)
             if index != -1:
                 completion = completion[:index]
+        if (config or {}).get('fim_stop_at_closing_brace', False):
+            index = completion.find('}')
+            if index != -1:
+                completion = completion[:index]
+        if (config or {}).get('fim_stop_at_absolute_path', False):
+            match = re.search(r'(?m)^[ \t]*/[^\s/]+(?:/[^\s/]+)+[ \t]*$', completion)
+            if match:
+                completion = completion[:match.start()]
         completions.append(completion.rstrip())
 
     return completions if candidates > 1 else completions[0]
