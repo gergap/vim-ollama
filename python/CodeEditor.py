@@ -436,6 +436,7 @@ EXECUTE_TOOLS = [
                 "properties": {
                     "path": {"type": "string", "description": "Relative path to an executable file below the current directory."},
                     "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
+                    "cwd": {"type": "string", "description": "Optional project-relative working directory for the executable. Defaults to Vim's current working directory."},
                     "timeout": {"type": "number", "minimum": 0, "default": 30, "description": "Seconds before sending SIGTERM."},
                     "kill_timeout": {"type": "number", "minimum": 0, "default": 3, "description": "Seconds after SIGTERM before sending SIGKILL."},
                 },
@@ -710,6 +711,15 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False):
         return {"ok": False, "message": error, "error": error}
     if (os.path.isabs(path) or ntpath.isabs(path)) and not allow_system_tools:
         error = "execute path must be relative and remain below the current directory"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    execute_cwd = arguments.get("cwd")
+    if execute_cwd is not None and (not isinstance(execute_cwd, str) or not execute_cwd or "\x00" in execute_cwd):
+        error = "execute cwd must be a non-empty string"
+        _progress(f"Tool error: {error}", tool="execute")
+        return {"ok": False, "message": error, "error": error}
+    if execute_cwd is not None and (os.path.isabs(execute_cwd) or ntpath.isabs(execute_cwd) or any(part == ".." for part in execute_cwd.replace("\\", "/").split("/"))):
+        error = "execute cwd must be project-relative and remain below the current directory"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
     if not isinstance(requested_arguments, list) or not all(isinstance(item, str) and "\x00" not in item for item in requested_arguments):

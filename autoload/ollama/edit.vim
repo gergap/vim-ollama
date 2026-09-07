@@ -371,7 +371,7 @@ function! s:CollectMakeOutput(state, channel, message) abort
     endif
 endfunction
 
-function! s:SandboxWrap(command, write_paths) abort
+function! s:SandboxWrap(command, write_paths, ...) abort
     if !get(g:, 'ollama_bwrap_enabled', v:false)
         return a:command
     endif
@@ -380,6 +380,7 @@ function! s:SandboxWrap(command, write_paths) abort
         throw 'bubblewrap is enabled but was not found: ' .. string(l:bwrap)
     endif
     let l:root = simplify(fnamemodify(g:ollama_edit_cwd, ':p'))
+    let l:working_directory = a:0 > 0 ? a:1 : l:root
     let l:command = [l:bwrap, '--die-with-parent', '--new-session', '--unshare-all',
                 \ '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp']
     if get(g:, 'ollama_bwrap_network', v:false)
@@ -402,7 +403,7 @@ function! s:SandboxWrap(command, write_paths) abort
         endif
         call extend(l:command, ['--bind', l:path, l:path])
     endfor
-    call extend(l:command, ['--chdir', l:root, '--'] + a:command)
+    call extend(l:command, ['--chdir', l:working_directory, '--'] + a:command)
     return l:command
 endfunction
 
@@ -643,12 +644,49 @@ function! s:FinishExecute(request_id, state, job, status) abort
     call ollama#edit#SubmitMakeResult(a:request_id, l:result)
 endfunction
 
+function! s:SandboxProcessTree(pid) abort
+    let l:children = []
+    let l:file = '/proc/' .. a:pid .. '/task/' .. a:pid .. '/children'
+    if filereadable(l:file)
+        for l:child in split(join(readfile(l:file), ' '))
+            if l:child =~# '^\d\+$'
+                let l:children += s:SandboxProcessTree(str2nr(l:child)) + [l:child]
+            endif
+        endfor
+    endif
+    return l:children
+endfunction
+
+function! s:SignalSandboxProcess(job, signal) abort
+    let l:info = job_info(a:job)
+    let l:pid = get(l:info, 'process', 0)
+    if l:pid <= 0
+        return
+    endif
+    let l:pids = s:SandboxProcessTree(l:pid)
+    if a:signal ==# 'term'
+        call filter(l:pids, 's:SandboxProcessName(v:val) !=# "bwrap"')
+    endif
+    if a:signal ==# 'kill'
+        let l:pids += [string(l:pid)]
+    endif
+    if !empty(l:pids)
+        call system('/bin/kill -' .. a:signal .. ' ' .. join(l:pids, ' '))
+    endif
+endfunction
+
+function! s:SandboxProcessName(pid) abort
+    let l:file = '/proc/' .. a:pid .. '/comm'
+    return filereadable(l:file) ? get(readfile(l:file), 0, '') : ''
+endfunction
+
 function! ollama#edit#RunExecute(request_id, arguments) abort
     try
         if type(a:arguments) != v:t_dict || type(get(a:arguments, 'path', v:null)) != v:t_string || type(get(a:arguments, 'arguments', v:null)) != v:t_list
             throw 'execute tool requires a path and argument list'
         endif
         let l:relative = a:arguments.path
+        let l:execute_cwd = get(a:arguments, 'cwd', getcwd())
         let l:timeout = get(a:arguments, 'timeout', 30)
         let l:kill_timeout = get(a:arguments, 'kill_timeout', 3)
         if type(l:timeout) != v:t_number || l:timeout < 0
@@ -656,6 +694,9 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         endif
         if type(l:kill_timeout) != v:t_number || l:kill_timeout < 0
             throw 'execute kill_timeout must be a non-negative number of seconds'
+        endif
+        if type(l:execute_cwd) != v:t_string || empty(l:execute_cwd) || l:execute_cwd =~# '\.\.[\\/]\|^[A-Za-z]:[\\/]\|^/'
+            throw 'execute cwd must be project-relative and remain below the current directory'
         endif
         if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^[A-Za-z]:[\\/]'
             throw 'execute path must be relative and remain below the current directory'
@@ -665,6 +706,10 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         endif
         let l:is_absolute = l:relative =~# '^/'
         let l:path = l:is_absolute ? simplify(l:relative) : simplify(g:ollama_edit_cwd .. '/' .. l:relative)
+        let l:execute_cwd = simplify(g:ollama_edit_cwd .. '/' .. l:execute_cwd)
+        if getftype(l:execute_cwd) ==# 'link' || !isdirectory(l:execute_cwd)
+            throw 'execute cwd must be an existing project directory'
+        endif
         if get(g:, 'ollama_bwrap_enabled', v:false) && (l:is_absolute || l:relative !~# '[\\/]')
                     \ && (l:is_absolute || getftype(l:path) !=# 'file' || !executable(l:path))
             let l:path = l:is_absolute ? resolve(l:path) : exepath(l:relative)
@@ -717,7 +762,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     \ 'decision': l:decision,
                     \ }
         let l:options = {
-                    \ 'cwd': g:ollama_edit_cwd,
+                    \ 'cwd': l:execute_cwd,
                     \ 'out_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'err_cb': function('s:CollectMakeOutput', [l:state]),
                     \ 'exit_cb': function('s:FinishExecute', [a:request_id, l:state]),
@@ -726,7 +771,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         let l:execute_command = copy(l:command)
         if l:sandboxed
             let l:write_paths = get(g:, 'ollama_bwrap_execute_allow_project_write', v:false) ? ['.'] : []
-            let l:command = s:SandboxWrap(l:command, l:write_paths)
+            let l:command = s:SandboxWrap(l:command, l:write_paths, l:execute_cwd)
             if !s:ConfirmSandbox('execute', l:command, l:execute_command)
                 call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
                 return

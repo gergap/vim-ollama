@@ -792,6 +792,19 @@ def test_execute_schema_defines_timeout_defaults():
 
     assert properties["timeout"]["default"] == 30
     assert properties["kill_timeout"]["default"] == 3
+    assert properties["cwd"]["type"] == "string"
+
+
+@pytest.mark.parametrize("cwd", ["", "../other", "/tmp/other", "C:\\other"])
+def test_execute_rejects_invalid_cwd(cwd):
+    result = CodeEditor._request_execute({
+        "path": "program",
+        "arguments": [],
+        "cwd": cwd,
+    })
+
+    assert result["ok"] is False
+    assert "execute cwd" in result["error"]
 
 
 def test_git_add_uses_structured_command_without_shell(monkeypatch, tmp_path):
