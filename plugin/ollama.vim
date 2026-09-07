@@ -162,6 +162,9 @@ endif
 if !exists('g:ollama_edit_max_operations')
     let g:ollama_edit_max_operations = 64
 endif
+if !exists('g:ollama_edit_mode')
+    let g:ollama_edit_mode = 'build'
+endif
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024
@@ -315,7 +318,7 @@ runtime autoload/ollama.vim
 command! -range=% OllamaReview <line1>,<line2>call ollama#review#Review()
 command! -range=% OllamaSpellCheck <line1>,<line2>call ollama#review#SpellCheck()
 command! -nargs=1 -range=% OllamaTask <line1>,<line2>call ollama#review#Task(<f-args>)
-command! -nargs=+ -range OllamaEdit call ollama#edit#EditCommand(<q-args>, <line1>, <line2>, <range>)
+command! -nargs=? -range OllamaEdit call ollama#edit#EditCommand(<q-args>, <line1>, <line2>, <range>)
 command! -range=% OllamaExplain <line1>,<line2>call ollama#edit#ExplainCode(<line1>, <line2>)
 command! OllamaQuickFix call ollama#edit#QuickFix()
 command! OllamaInitAgents call ollama#edit#InitAgents()

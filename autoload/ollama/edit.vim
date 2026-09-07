@@ -12,6 +12,7 @@ let s:firstline = 0
 let s:lastline = 0
 let s:session_range_mode = v:true
 let s:session_explain_mode = v:false
+let s:session_mode = 'build'
 let s:sandbox_session_approvals = {}
 let s:spinner_active = v:false
 let s:spinner_frame = 0
@@ -101,11 +102,33 @@ function! s:OpenConversation(request) abort
     augroup END
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
-    call setline(1, ['OllamaEdit', '=========', ''] + split('Request: ' .. a:request, "\n", v:true) + [''])
+    let l:title = 'OllamaEdit [' .. s:ModeLabel() .. ']'
+    let l:intro = empty(a:request) ? ['Type a request and press <Enter>.'] : split('Request: ' .. a:request, "\n", v:true)
+    call setline(1, [l:title, repeat('=', strdisplaywidth(l:title)), ''] + l:intro + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
     call prompt_setinterrupt(s:conversation_bufnr, function('ollama#edit#Interrupt'))
     nnoremap <silent><buffer> <C-C> :call ollama#edit#Interrupt(0)<CR>
-    call prompt_setprompt(s:conversation_bufnr, '>>> ')
+    call prompt_setprompt(s:conversation_bufnr, '[' .. s:ModeLabel() .. '] >>> ')
+    inoremap <silent><buffer> <Tab> <C-R>=ollama#edit#ToggleMode()<CR>
+endfunction
+
+function! s:ModeLabel() abort
+    return s:session_mode ==# 'plan' ? 'Plan, read-only' : 'Build, write access'
+endfunction
+
+function! ollama#edit#ToggleMode() abort
+    if g:edit_in_progress
+        return ''
+    endif
+    let s:session_mode = s:session_mode ==# 'plan' ? 'build' : 'plan'
+    if bufexists(s:conversation_bufnr)
+        let l:title = 'OllamaEdit [' .. s:ModeLabel() .. ']'
+        call setbufline(s:conversation_bufnr, 1, l:title)
+        call setbufline(s:conversation_bufnr, 2, repeat('=', strdisplaywidth(l:title)))
+        call prompt_setprompt(s:conversation_bufnr, '[' .. s:ModeLabel() .. '] >>> ')
+    endif
+    call ollama#edit#AppendProgress('Mode: ' .. s:ModeLabel())
+    return ''
 endfunction
 
 function! ollama#edit#UpdateStickScroll() abort
@@ -850,7 +873,17 @@ function! ollama#edit#PromptEntered(text) abort
         echoerr 'OllamaEdit: source buffer is no longer available'
         return
     endif
-    if s:session_explain_mode
+    if s:session_mode ==# 'plan'
+        let l:code = s:session_range_mode ? getline(s:firstline, s:lastline) : []
+        call s:StartEditSession(a:text, l:code, &filetype, {
+                    \ 'range_mode': s:session_range_mode,
+                    \ 'mode': 'plan',
+                    \ 'filename': fnamemodify(expand('%:p'), ':.') ,
+                    \ 'start_line': s:firstline,
+                    \ 'end_line': s:lastline,
+                    \ 'continue_history': v:true,
+                    \ })
+    elseif s:session_explain_mode
         call ollama#edit#ExplainCode(s:firstline, s:lastline, v:true, a:text)
     elseif s:session_range_mode
         call s:EditCodeRange(a:text, s:firstline, s:lastline, v:true)
@@ -941,6 +974,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let s:lastline = get(a:settings, 'end_line', line('$'))
     let s:session_range_mode = get(a:settings, 'range_mode', v:true)
     let s:session_explain_mode = get(a:settings, 'explain_mode', v:false)
+    let s:session_mode = get(a:settings, 'mode', get(g:, 'ollama_edit_mode', 'build'))
     let g:ollama_edit_bufnr = s:bufnr
     let g:ollama_edit_firstline = s:firstline
     let g:ollama_edit_lastline = s:lastline
@@ -961,6 +995,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
                 \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
+                \ 'mode': get(g:, 'ollama_edit_mode', 'build'),
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),
                 \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
                 \ }
@@ -1010,6 +1045,19 @@ function! s:EditWorkspace(request, ...) abort
     call s:StartEditSession(a:request, [], '', l:settings)
 endfunction
 
+function! s:StartInteractivePrompt(start_line, end_line, range_count) abort
+    let s:bufnr = bufnr('%')
+    let s:firstline = a:start_line
+    let s:lastline = a:end_line
+    let s:session_range_mode = a:range_count > 0
+    let s:session_explain_mode = v:false
+    let s:session_mode = get(g:, 'ollama_edit_mode', 'build')
+    let s:source_winid = win_getid()
+    call s:OpenConversation('')
+    call cursor(line('$'), 1)
+    startinsert
+endfunction
+
 function! ollama#edit#EditCode(request) range abort
     call s:EditCodeRange(a:request, a:firstline, a:lastline)
 endfunction
@@ -1030,6 +1078,10 @@ function! ollama#edit#ExplainCode(start_line, end_line, ...) abort
 endfunction
 
 function! ollama#edit#EditCommand(request, start_line, end_line, range_count) abort
+    if empty(a:request)
+        call s:StartInteractivePrompt(a:start_line, a:end_line, a:range_count)
+        return
+    endif
     if a:range_count == 0
         call s:EditWorkspace(a:request)
     else

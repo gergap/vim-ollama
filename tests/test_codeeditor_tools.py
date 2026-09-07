@@ -260,6 +260,65 @@ def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     assert "read-only" in messages[1]["content"]
 
 
+def test_plan_mode_exposes_only_read_tools(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, messages = CodeEditor._run_edit(
+        "plan the change", [], "", {"provider": "ollama", "range_mode": False, "mode": "plan"}
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert names == {"read_file", "glob", "grep", "list_files", "webfetch", "websearch", "git_status", "git_log", "git_diff"}
+    assert operations == []
+    assert "Plan mode" in messages[0]["content"]
+    assert "If asked to create or modify files, deny the request" in messages[0]["content"]
+    assert "If asked to create or modify files, deny the request" in messages[1]["content"]
+
+
+def test_plan_mode_rejects_write_tool_calls(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "write-1", "function": {"name": "create_file", "arguments": {"path": "new.txt", "content": "nope"}}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, messages = CodeEditor._run_edit(
+        "plan it", [], "", {"provider": "ollama", "range_mode": False, "mode": "plan"}
+    )
+
+    assert operations == []
+    assert "not available in Plan mode" in next(message["content"] for message in messages if message.get("role") == "tool")
+
+
+def test_switching_to_plan_mode_updates_system_prompt(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured = {}
+
+    def request(messages, settings, tools):
+        captured["messages"] = messages
+        captured["tools"] = tools
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit(
+        "make a plan", [], "", {
+            "provider": "ollama",
+            "range_mode": False,
+            "mode": "plan",
+            "messages": [{"role": "system", "content": "old Build prompt"}],
+        }
+    )
+
+    assert "You are planning only. Don't change any files." in captured["messages"][0]["content"]
+    assert {tool["function"]["name"] for tool in captured["tools"]} <= CodeEditor.READ_ONLY_TOOL_NAMES
+
+
 def test_quickfix_checker_excludes_vim_make(monkeypatch):
     responses = iter([{"tool_calls": []}])
     captured_tools = []

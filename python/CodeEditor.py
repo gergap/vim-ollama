@@ -560,6 +560,7 @@ CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
+READ_ONLY_TOOL_NAMES = INSPECTION_TOOL_NAMES | WEB_TOOL_NAMES | GIT_READ_TOOL_NAMES
 RANGE_TOOLS = BUFFER_TOOLS + TODO_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
 WORKSPACE_TOOLS = FILE_TOOLS + TODO_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
@@ -1482,7 +1483,16 @@ def _system_prompt(settings):
     else:
         lines.extend(["Always add a shebang to Python files: `#/usr/bin/env python3` and make the file executable."])
 
-    if settings.get("explain_mode", False):
+    if settings.get("mode", "build") == "plan":
+        lines.extend([
+            "This is Plan mode.",
+            "You are planning only. Don't change any files.",
+            "You have read-only access. Use only the supplied read tools to inspect the project and gather context.",
+            "If asked to create or modify files, deny the request and explain that Plan mode is read-only.",
+            "Do not modify buffers or files, execute commands, build, run checkers, update TODOs, or change Git state.",
+            "Finish by presenting a concrete implementation plan; do not implement it.",
+        ])
+    elif settings.get("explain_mode", False):
         lines.extend([
             "This is a read-only code explanation request.",
             "Use only the supplied inspection tools to inspect the selected code or related files.",
@@ -1510,6 +1520,24 @@ def _system_prompt(settings):
 
 
 def _edit_prompt(request, code, filetype, settings):
+    if settings.get("mode", "build") == "plan":
+        context = ""
+        if settings.get("range_mode", True):
+            start_line = settings.get("start_line", 1)
+            end_line = settings.get("end_line", len(code))
+            filename = settings.get("filename") or "[No filename]"
+            numbered = "\n".join(f"{index}|{line}" for index, line in enumerate(code, start_line))
+            context = (
+                f"\n\nCurrent Vim buffer: {filename}\n"
+                f"Selected range: lines {start_line}-{end_line}\n\n{numbered}"
+            )
+        return (
+            f"User request:\n{request}\n\n"
+            "We are in Plan mode. Inspect the current code and related project files as needed, "
+            "then produce a detailed implementation plan. If asked to create or modify files, deny the request "
+            "because Plan mode is read-only. Do not modify anything. Don't try to work around the read-only restriction."
+            + context
+        )
     if not settings.get("range_mode", True):
         return (
             f"User request:\n{request}\n\n"
@@ -1700,7 +1728,13 @@ def _run_edit(request, code, filetype, settings):
 
     previous_messages = settings.get("messages")
     range_mode = settings.get("range_mode", True)
-    if settings.get("explain_mode", False):
+    mode = settings.get("mode", "build")
+    if mode not in ("plan", "build"):
+        raise ValueError("mode must be 'plan' or 'build'")
+    if mode == "plan":
+        tools = [tool for tool in INSPECTION_TOOLS + WEB_TOOLS + AVAILABLE_GIT_TOOLS
+                 if tool["function"]["name"] in READ_ONLY_TOOL_NAMES]
+    elif settings.get("explain_mode", False):
         tools = INSPECTION_TOOLS + WEB_TOOLS
     else:
         tools = RANGE_TOOLS if range_mode else WORKSPACE_TOOLS
@@ -1710,6 +1744,11 @@ def _run_edit(request, code, filetype, settings):
             tools = [tool for tool in tools if tool["function"]["name"] != "vim-check"]
     if previous_messages:
         messages = list(previous_messages)
+        system_prompt = _system_prompt(settings)
+        if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system":
+            messages[0] = {"role": "system", "content": system_prompt}
+        else:
+            messages.insert(0, {"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": _edit_prompt(request, code, filetype, settings)})
     else:
         messages = [
@@ -1785,6 +1824,8 @@ def _run_edit(request, code, filetype, settings):
             call_json = json.dumps(display_arguments, indent=2)
             _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
             try:
+                if mode == "plan" and name not in READ_ONLY_TOOL_NAMES:
+                    raise ValueError("tool is not available in Plan mode; Plan mode is read-only")
                 if settings.get("range_mode", True) and name in FILE_TOOL_NAMES | EXTRACT_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
                 if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:

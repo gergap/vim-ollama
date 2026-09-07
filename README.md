@@ -93,6 +93,11 @@ OllamaEdit provides OpenCode-like `websearch` and `webfetch` tools. Set
 provider; `OPENCODE_WEBSEARCH_PROVIDER=exa|parallel` can select one explicitly.
 Web fetching accepts HTTP(S) URLs and returns text, markdown, or HTML.
 
+OllamaEdit supports Plan and Build modes in its conversation buffer. The header
+shows the active mode; press `<Tab>` at the prompt to switch modes before
+submitting a request. Plan mode is read-only and exposes only inspection, web,
+and read-only Git tools. Build mode provides the normal editing workflow.
+
 Optionally, it supports using the OpenAI REST API for code completion, chat
 conversations, and code edit tasks. Therefore, you need to create an OpenAI
 account and create an OpenAI API key on https://platform.openai.com/api-keys to
