@@ -635,8 +635,8 @@ function! s:FinishExecute(request_id, state, job, status) abort
     let l:timed_out = get(a:state, 'timed_out', v:false)
     let l:label = get(a:state, 'sandboxed', v:false) ? 'Sandboxed execution' : 'Execution'
     let l:result = {
-                \ 'ok': a:status == 0 && !l:timed_out,
-                \ 'message': l:timed_out ? tolower(l:label) .. ' timed out and was terminated' : a:status == 0 ? tolower(l:label) .. ' completed successfully' : tolower(l:label) .. ' failed',
+                \ 'ok': a:status == 0,
+                \ 'message': (l:timed_out ? tolower(l:label) .. ' timed out and was terminated' : a:status == 0 ? tolower(l:label) .. ' completed successfully' : tolower(l:label) .. ' failed') .. ' (Process exited with exit code ' .. a:status .. ')',
                 \ 'output': l:output,
                 \ 'exit_code': a:status,
                 \ 'decision': get(a:state, 'decision', 'allowed'),
@@ -789,18 +789,28 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
 endfunction
 
 function! s:TimeoutExecute(request_id, state, job) abort
-    if a:state.finished
+    if a:state.finished || job_status(a:job) ==# 'dead'
         return
     endif
     let a:state.timed_out = v:true
-    call job_stop(a:job, 'term')
+    call ollama#edit#AppendProgress('Terminating process...')
+    if get(a:state, 'sandboxed', v:false)
+        call s:SignalSandboxProcess(a:job, 'term')
+    else
+        call job_stop(a:job, 'term')
+    endif
     let a:state.kill_timer = timer_start(float2nr(a:state.kill_timeout * 1000),
                 \ {-> s:KillExecute(a:request_id, a:state, a:job)})
 endfunction
 
 function! s:KillExecute(request_id, state, job) abort
     if !a:state.finished
-        call job_stop(a:job, 'kill')
+        call ollama#edit#AppendProgress('Process did not terminate in time. Killing it ...')
+        if get(a:state, 'sandboxed', v:false)
+            call s:SignalSandboxProcess(a:job, 'kill')
+        else
+            call job_stop(a:job, 'kill')
+        endif
     endif
 endfunction
 
