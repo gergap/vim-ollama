@@ -676,7 +676,14 @@ g:ollama_bwrap_confirm
       `vim-check` commands. `vim-make` is not prompted.
     - Default: 'v:true'
 
-                                                        *g:ollama_no_maps*
+                                   *g:ollama_bwrap_execute_allow_project_write*
+g:ollama_bwrap_execute_allow_project_write
+    - Description: Allows sandboxed `execute` commands to write anywhere below
+      the current project directory. It is disabled by default; `vim-check`
+      remains read-only.
+    - Default: 'v:false'
+
+                                                         *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts

@@ -417,7 +417,9 @@ function! s:ConfirmSandbox(tool, command, ...) abort
     if get(s:sandbox_session_approvals, l:key, v:false)
         return v:true
     endif
-    let l:summary = a:tool ==# 'execute'
+    let l:summary = a:tool ==# 'execute' && get(g:, 'ollama_bwrap_execute_allow_project_write', v:false)
+                \ ? 'Run the selected executable with project files writable and network access disabled?'
+                \ : a:tool ==# 'execute'
                 \ ? 'Run the selected executable with project files read-only and network access disabled?'
                 \ : 'Run the configured checker with project files read-only and network access disabled?'
     if a:tool ==# 'execute' && a:0 > 0
@@ -720,7 +722,8 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         let l:command = [l:path] + a:arguments.arguments
         let l:execute_command = copy(l:command)
         if l:sandboxed
-            let l:command = s:SandboxWrap(l:command, [])
+            let l:write_paths = get(g:, 'ollama_bwrap_execute_allow_project_write', v:false) ? ['.'] : []
+            let l:command = s:SandboxWrap(l:command, l:write_paths)
             if !s:ConfirmSandbox('execute', l:command, l:execute_command)
                 call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
                 return

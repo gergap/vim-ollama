@@ -42,6 +42,7 @@ let s:help_text = {
 \ 'ollama_bwrap_command': 'Bubblewrap executable used for sandboxed tools.',
 \ 'ollama_bwrap_network': 'Allow network access inside bubblewrap.',
 \ 'ollama_bwrap_confirm': 'Confirm sandboxed tool launches.',
+\ 'ollama_bwrap_execute_allow_project_write': 'Allow sandboxed execute to write project files.',
 \ 'ollama_stop_on_error': 'Stop OllamaEdit immediately after a tool error (default=v:false).',
 \ 'ollama_nothinking': 'Disable thinking output of reasoning models (default=v:false)',
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',
