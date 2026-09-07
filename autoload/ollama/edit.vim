@@ -1,5 +1,6 @@
 " SPDX-License-Identifier: GPL-3.0-or-later
 " SPDX-CopyrightText: 2024 Gerhard Gappmeier <gappy1502@gmx.net>
+scriptencoding utf-8
 
 let s:popup = 0
 let s:timer = 0
@@ -80,6 +81,9 @@ function! s:OpenConversation(request) abort
     setlocal nospell
     " avoid showing _ as errors in Markdown
     silent! syntax clear markdownError
+    syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
+    syntax match OllamaEditCheckmark /^✓/
+    syntax match OllamaEditCross /^✗/
     setlocal wrap
     setlocal modifiable
     setlocal foldmethod=expr

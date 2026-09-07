@@ -202,6 +202,9 @@ function! s:ColorScheme() abort
     endif
     hi def link OllamaAnnotation MoreMsg
     hi def OllamaThinking term=italic cterm=italic gui=italic ctermfg=Gray guifg=#808080
+    hi def OllamaEditSpinner ctermfg=4 guifg=#5fafff
+    hi def OllamaEditCheckmark ctermfg=2 guifg=#5fd787
+    hi def OllamaEditCross ctermfg=1 guifg=#ff5f5f
 endfunction
 
 function! s:HandleTabCompletion() abort
