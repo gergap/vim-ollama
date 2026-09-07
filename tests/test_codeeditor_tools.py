@@ -143,6 +143,9 @@ def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
 
     assert "Working directory:" in system
     assert "Use the project style." in system
+    assert "Use the todowrite tool for non-trivial tasks" in system
+    assert "Only one item should be in_progress at a time." in system
+    assert "Complete all applicable todo items before finishing the response." in system
     assert "src/main.c" in prompt
     assert "lines 4-6" in prompt
     assert "4|old" in prompt

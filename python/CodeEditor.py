@@ -1452,7 +1452,19 @@ def _system_prompt(settings):
         "Only build compiled languages like C/C++, don't use vim-make for scripting languages like Python.",
         "Use the supplied Git tools for repository tracking; never use execute to invoke Git.",
         "If not Git tools where supplied, don't track anything in Git.",
-        "Use buf_replace_lines instead of calling sed for the current buffer range.",
+        "Use buf_replace_lines instead of calling sed for the current buffer range.\n",
+        "Task tracking"
+        "Use the todowrite tool for non-trivial tasks that involve multiple distinct steps."
+        "Use it when:"
+        "- the task requires 3 or more distinct actions"
+        "- the user asks for several changes"
+        "- you discover additional work while implementing"
+        "- maintaining state will help avoid forgetting work"
+        "Do not use it for simple questions or single-step edits."
+        "Before starting a tracked item, mark it in_progress."
+        "When finished, immediately mark it completed."
+        "Only one item should be in_progress at a time."
+        "Complete all applicable todo items before finishing the response.",
     ]
     # detect Windows
     if os.name == "nt":
