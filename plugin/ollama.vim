@@ -317,6 +317,7 @@ command! -range=% OllamaExplain <line1>,<line2>call ollama#edit#ExplainCode(<lin
 command! OllamaQuickFix call ollama#edit#QuickFix()
 command! OllamaInitAgents call ollama#edit#InitAgents()
 command! OllamaChat call ollama#review#Chat()
+command! OllamaTodo call ollama#todo#Show()
 command! -nargs=1 -complete=customlist,ollama#CommandComplete Ollama call ollama#Command(<f-args>)
 command! -nargs=1 OllamaPull call ollama#setup#PullModel(g:ollama_host, <f-args>)
 

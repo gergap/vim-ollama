@@ -356,7 +356,7 @@ function! ollama#edit#StripTrailingWhitespace(bufnr, ranges) abort
     endfor
 endfunction
 
-function! s:SubmitMakeResult(request_id, result) abort
+function! ollama#edit#SubmitMakeResult(request_id, result) abort
     let l:result_json = json_encode(a:result)
     python3 << EOF
 import json
@@ -478,7 +478,7 @@ function! s:FinishMake(request_id, state, job, status) abort
     catch
         let l:result = {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception, 'output': join(a:state.output, "\n"), 'diagnostics': []}
     endtry
-    call s:SubmitMakeResult(a:request_id, l:result)
+    call ollama#edit#SubmitMakeResult(a:request_id, l:result)
 endfunction
 
 function! ollama#edit#RunMake(request_id, arguments) abort
@@ -517,7 +517,7 @@ function! ollama#edit#RunMake(request_id, arguments) abort
             throw 'failed to start configured makeprg'
         endif
     catch
-        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception .. ' (' .. v:throwpoint .. ')', 'output': '', 'diagnostics': []})
+        call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception .. ' (' .. v:throwpoint .. ')', 'output': '', 'diagnostics': []})
     endtry
 endfunction
 
@@ -540,7 +540,7 @@ function! s:FinishCheck(request_id, state, job, status) abort
                 \ 'output': l:output,
                 \ 'diagnostics': l:diagnostics,
                 \ }
-    call s:SubmitMakeResult(a:request_id, l:result)
+    call ollama#edit#SubmitMakeResult(a:request_id, l:result)
 endfunction
 
 function! ollama#edit#RunCheck(request_id, ...) abort
@@ -582,7 +582,7 @@ function! ollama#edit#RunCheck(request_id, ...) abort
                     \ }
         let l:wrapped = s:SandboxWrap(l:command, [])
         if !s:ConfirmSandbox('vim-check', l:wrapped)
-            call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed vim-check cancelled by user', 'output': '', 'diagnostics': []})
+            call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed vim-check cancelled by user', 'output': '', 'diagnostics': []})
             return
         endif
         let l:job = job_start(l:wrapped, l:options)
@@ -590,7 +590,7 @@ function! ollama#edit#RunCheck(request_id, ...) abort
             throw 'failed to start configured checker'
         endif
     catch
-        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'checker failed: ' .. v:exception, 'output': '', 'diagnostics': []})
+        call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'checker failed: ' .. v:exception, 'output': '', 'diagnostics': []})
     endtry
 endfunction
 
@@ -637,7 +637,7 @@ function! s:FinishExecute(request_id, state, job, status) abort
                 \ 'exit_code': a:status,
                 \ 'decision': get(a:state, 'decision', 'allowed'),
                 \ }
-    call s:SubmitMakeResult(a:request_id, l:result)
+    call ollama#edit#SubmitMakeResult(a:request_id, l:result)
 endfunction
 
 function! ollama#edit#RunExecute(request_id, arguments) abort
@@ -687,7 +687,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             if get(l:decisions, l:key, '') !=# 'always'
                 let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
                 if l:choice == 3 || l:choice == 0
-                    call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
+                    call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
                     return
                 endif
                 if l:choice == 1
@@ -725,7 +725,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             let l:write_paths = get(g:, 'ollama_bwrap_execute_allow_project_write', v:false) ? ['.'] : []
             let l:command = s:SandboxWrap(l:command, l:write_paths)
             if !s:ConfirmSandbox('execute', l:command, l:execute_command)
-                call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
+                call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
                 return
             endif
         endif
@@ -736,7 +736,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         let l:state.timeout_timer = timer_start(float2nr(l:timeout * 1000),
                     \ {-> s:TimeoutExecute(a:request_id, l:state, l:job)})
     catch
-        call s:SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execute failed: ' .. v:exception, 'output': []})
+        call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execute failed: ' .. v:exception, 'output': []})
     endtry
 endfunction
 
@@ -831,6 +831,8 @@ try:
             vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('type') == 'execute_request':
             vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+        if event.get('type') == 'todo_request':
+            vim.command('call ollama#todo#Write(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + json.dumps(event.get('text', '')) + ')')
         if event.get('fold_append'):

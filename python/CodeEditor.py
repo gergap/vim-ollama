@@ -95,6 +95,37 @@ BUFFER_TOOLS = [
     },
 ]
 
+TODO_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "todowrite",
+            "description": "Replace the current session TODO list. Use this to track and update tasks while working.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "todos": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "content": {"type": "string"},
+                                "status": {"type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"]},
+                                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+                                "id": {"type": "string"},
+                            },
+                            "required": ["content", "status", "priority", "id"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["todos"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 FILE_LINE_TOOLS = [
     {
         "type": "function",
@@ -515,7 +546,8 @@ GIT_TOOLS = [
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
 AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
-TOOLS = BUFFER_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+TOOLS = BUFFER_TOOLS + TODO_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+TODO_TOOL_NAMES = {tool["function"]["name"] for tool in TODO_TOOLS}
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
@@ -527,9 +559,9 @@ CHECK_TOOL_NAMES = {tool["function"]["name"] for tool in CHECK_TOOLS}
 EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
-RANGE_TOOLS = BUFFER_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+RANGE_TOOLS = BUFFER_TOOLS + TODO_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
-WORKSPACE_TOOLS = FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + TODO_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 
 log = None
 g_thread_lock = threading.Lock()
@@ -589,6 +621,22 @@ def submit_make_result(request_id, result):
         if request_id in g_make_results:
             g_make_results[request_id] = result
             g_make_condition.notify_all()
+
+
+def _request_todo(arguments):
+    if not isinstance(arguments, dict) or not isinstance(arguments.get("todos"), list):
+        raise ValueError("todowrite requires a todos list")
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Updating TODO list", type="todo_request", request_id=request_id, arguments=arguments)
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
+        return g_make_results.pop(request_id)
 
 
 def _request_make(arguments):
@@ -1307,6 +1355,8 @@ def apply_tool(document, name, arguments, cwd=None, extract_max_size=None):
         return _webfetch(arguments)
     if name == "websearch":
         return _websearch(arguments)
+    if name == "todowrite":
+        raise ValueError("todowrite must be executed by Vim's main thread")
     if name in EXTRACT_TOOL_NAMES:
         if cwd is None:
             raise ValueError("extract requires a current directory")
@@ -1725,12 +1775,14 @@ def _run_edit(request, code, filetype, settings):
                     result = _request_check(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
                     result = _request_execute(arguments, settings.get("cwd"), settings.get("sandbox_system_tools", False))
+                elif name in TODO_TOOL_NAMES:
+                    result = _request_todo(arguments)
                 elif name in GIT_TOOL_NAMES:
                     result = _run_git_tool(settings.get("cwd"), name, arguments)
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"), settings.get("extract_max_size"))
                 _check_cancelled()
-                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES and name not in TODO_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 details = {

@@ -212,6 +212,31 @@ def test_range_tools_are_prefixed_and_relative(monkeypatch):
     assert "insert_lines" not in names
 
 
+def test_todowrite_is_available_and_returns_structured_result(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "todo-1", "function": {"name": "todowrite", "arguments": {
+            "todos": [{"content": "Inspect code", "status": "in_progress", "priority": "high", "id": "inspect"}]
+        }}}]},
+        {"tool_calls": []},
+    ])
+    captured_tools = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: captured_tools.extend(tools) or next(responses))
+    monkeypatch.setattr(CodeEditor, "_request_todo", lambda arguments: {
+        "ok": True,
+        "title": "1 todos",
+        "output": '[{"content":"Inspect code"}]',
+        "metadata": {"todos": arguments["todos"]},
+        "message": "1 todos updated",
+    })
+
+    operations, messages = CodeEditor._run_edit("track it", ["old"], "text", {"provider": "ollama"})
+
+    assert "todowrite" in {tool["function"]["name"] for tool in captured_tools}
+    assert operations == []
+    tool_message = next(message for message in messages if message.get("role") == "tool")
+    assert '"metadata"' in tool_message["content"]
+
+
 def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     responses = iter([{"tool_calls": []}])
     captured_tools = []
