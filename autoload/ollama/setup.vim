@@ -360,11 +360,11 @@ function! ollama#setup#PipInstall() abort
         return
     endif
 
-    if !g:ollama_install_mistral
+    if g:ollama_install_mistral
         " append mistral package to list
         let l:reqs += ['mistralai']
     endif
-    if !g:ollama_install_openai
+    if g:ollama_install_openai
         " append openai package to list
         let l:reqs += ['openai']
     endif
@@ -377,6 +377,10 @@ function! ollama#setup#PipInstall() abort
 
     echon "Installing dependencies...(".join(l:reqs, ', ').")\n"
     call system(l:pip_path .. ' install ' .. join(l:reqs, ' '))
+    if v:shell_error != 0
+        echon "Error: dependency installation failed.\n"
+        return
+    endif
     echon "Dependencies installed successfully.\n"
 endfunction
 
