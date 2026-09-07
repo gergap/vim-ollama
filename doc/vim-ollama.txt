@@ -225,9 +225,9 @@ SECURE BUILD HELPER
     writable so that build and install targets can complete.
 
     It is recommended to use this helper for AI-driven builds, especially with
-    `:OllamaQuickFix`:
+    `:OllamaQuickFix`. Add this line to your Vim-Ollama config:
 >
-        set makeprg=<C-R>=shellescape(g:ollama_plugin_dir .. '/scripts/mk')<CR>
+        let &makeprg = shellescape(g:ollama_plugin_dir .. '/scripts/mk')
 <
     Bubblewrap must be installed and available as `bwrap`. The helper disables
     network access and clears the inherited environment inside the sandbox.
