@@ -438,6 +438,7 @@ endfunction
 function! s:FinishMake(request_id, state, job, status) abort
     try
         let l:output = join(a:state.output, "\n")
+        let l:target = get(a:state, 'target', '[default]')
         call setqflist([], 'r', {'lines': a:state.output, 'efm': a:state.errorformat})
         let l:diagnostics = []
         let l:error_count = 0
@@ -471,12 +472,12 @@ function! s:FinishMake(request_id, state, job, status) abort
         let l:ok = a:status == 0
         let l:result = {
                     \ 'ok': l:ok,
-                    \ 'message': l:ok ? (l:warning_count > 0 ? printf('Vim makeprg completed with warnings (%d)', l:warning_count) : 'Vim makeprg completed successfully') : printf('Vim makeprg failed (errors: %d, warnings: %d)', l:error_count, l:warning_count),
+                    \ 'message': l:ok ? (l:warning_count > 0 ? printf('Vim makeprg (target: %s) completed with warnings (%d)', l:target, l:warning_count) : printf('Vim makeprg (target: %s) completed successfully', l:target)) : printf('Vim makeprg (target: %s) failed (errors: %d, warnings: %d)', l:target, l:error_count, l:warning_count),
                     \ 'output': l:output,
                     \ 'diagnostics': l:diagnostics,
                     \ }
     catch
-        let l:result = {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception, 'output': join(a:state.output, "\n"), 'diagnostics': []}
+        let l:result = {'ok': v:false, 'message': 'Vim makeprg (target: ' .. get(a:state, 'target', '[default]') .. ') failed: ' .. v:exception, 'output': join(a:state.output, "\n"), 'diagnostics': []}
     endtry
     call ollama#edit#SubmitMakeResult(a:request_id, l:result)
 endfunction
@@ -489,6 +490,7 @@ function! ollama#edit#RunMake(request_id, arguments) abort
         let l:state = {
                     \ 'output': [],
                     \ 'errorformat': getbufvar(s:bufnr, '&errorformat'),
+                    \ 'target': '[default]',
                     \ }
         let l:options = {
                     \ 'cwd': g:ollama_edit_cwd,
@@ -500,6 +502,7 @@ function! ollama#edit#RunMake(request_id, arguments) abort
             throw 'make arguments must be a string or list of target names'
         endif
         let l:targets = type(a:arguments) == v:t_list ? a:arguments : split(a:arguments)
+        let l:state.target = empty(l:targets) ? '[default]' : join(l:targets, ' ')
         let l:command = getbufvar(s:bufnr, '&makeprg')
         if type(l:command) != v:t_string
             throw 'makeprg must be a string, got ' .. typename(l:command)
@@ -517,7 +520,7 @@ function! ollama#edit#RunMake(request_id, arguments) abort
             throw 'failed to start configured makeprg'
         endif
     catch
-        call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg failed: ' .. v:exception .. ' (' .. v:throwpoint .. ')', 'output': '', 'diagnostics': []})
+        call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'Vim makeprg (target: ' .. get(l:state, 'target', '[default]') .. ') failed: ' .. v:exception .. ' (' .. v:throwpoint .. ')', 'output': '', 'diagnostics': []})
     endtry
 endfunction
 
