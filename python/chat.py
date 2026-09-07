@@ -202,7 +202,10 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
     if systemprompt:
         if provider == "ollama":
             # Let Ollama know the current date
-            systemprompt = f"Today's date is {datetime.date.today().isoformat()}"
+            systemprompt = (
+                f"Today's date is {datetime.date.today().isoformat()}\n"
+                f"{systemprompt}"
+            )
         conversation_history.append({"role": "system", "content": systemprompt})
 
     while True:
