@@ -1,3 +1,4 @@
 __pycache__
 doc/tags
 node_modules/
+.vimspector.json
