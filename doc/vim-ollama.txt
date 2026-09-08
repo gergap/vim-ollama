@@ -143,6 +143,8 @@ The vim-ollama plugin provides the following commands:
     or modify files. The conversation header and prompt show the active mode.
     Press <Tab> at the conversation prompt to switch between Plan and Build
     modes before submitting the next request.
+    Press <Up> and <Down> at the prompt to browse previously submitted
+    requests. Moving past the newest request clears the prompt.
     - Usage:
 >
         :[range]OllamaEdit [prompt]

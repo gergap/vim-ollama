@@ -93,6 +93,8 @@ function! s:OpenConversation(request) abort
     setlocal foldlevel=0
     let b:ollama_edit_conversation = v:true
     let b:ollama_stick_to_bottom = v:true
+    let b:ollama_edit_prompt_history = []
+    let b:ollama_edit_prompt_history_index = 0
     augroup OllamaEditConversation
         autocmd! * <buffer>
         autocmd BufWinEnter,BufWritePost,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
@@ -110,6 +112,8 @@ function! s:OpenConversation(request) abort
     nnoremap <silent><buffer> <C-C> :call ollama#edit#Interrupt(0)<CR>
     call prompt_setprompt(s:conversation_bufnr, '[' .. s:ModeLabel() .. '] >>> ')
     inoremap <silent><buffer> <Tab> <C-R>=ollama#edit#ToggleMode()<CR>
+    inoremap <silent><buffer> <Up> <C-R>=ollama#edit#PromptHistory(-1)<CR>
+    inoremap <silent><buffer> <Down> <C-R>=ollama#edit#PromptHistory(1)<CR>
 endfunction
 
 function! s:ModeLabel() abort
@@ -129,6 +133,26 @@ function! ollama#edit#ToggleMode() abort
     endif
     call ollama#edit#AppendProgress('Mode: ' .. s:ModeLabel())
     return ''
+endfunction
+
+function! ollama#edit#PromptHistory(direction) abort
+    let l:history = get(b:, 'ollama_edit_prompt_history', [])
+    if empty(l:history)
+        return ''
+    endif
+    let l:index = get(b:, 'ollama_edit_prompt_history_index', len(l:history))
+    if a:direction < 0
+        let l:index = max([0, l:index - 1])
+    else
+        let l:index = min([len(l:history), l:index + 1])
+    endif
+    let b:ollama_edit_prompt_history_index = l:index
+    let l:text = l:index == len(l:history)
+                \ ? ''
+                \ : l:history[l:index]
+    " Replace the active prompt through insert mode; prompt buffers keep the
+    " editable prompt separate from the ordinary buffer lines.
+    return "\<C-E>\<C-U>" .. l:text
 endfunction
 
 function! ollama#edit#UpdateStickScroll() abort
@@ -865,6 +889,12 @@ function! ollama#edit#PromptEntered(text) abort
     if get(b:, 'ollama_internal_update', v:false)
         return
     endif
+    let l:history = get(b:, 'ollama_edit_prompt_history', [])
+    if empty(l:history) || l:history[-1] !=# a:text
+        call add(l:history, a:text)
+    endif
+    let b:ollama_edit_prompt_history = l:history
+    let b:ollama_edit_prompt_history_index = len(l:history)
     if g:edit_in_progress
         call ollama#edit#AppendProgress('An OllamaEdit request is already running.')
         return
