@@ -137,6 +137,12 @@ The vim-ollama plugin provides the following commands:
     archives into the project. The tool rejects archive links and traversal
     paths and limits extraction to 10,000 members and 100 MiB uncompressed by
     default. Configure |g:ollama_extract_max_size| to change the byte limit.
+    OllamaEdit has two modes. Build mode is the normal editing mode and provides
+    the write tools allowed by the selected range or workspace. Plan mode is
+    read-only: the AI may inspect the project, but must deny requests to create
+    or modify files. The conversation header and prompt show the active mode.
+    Press <Tab> at the conversation prompt to switch between Plan and Build
+    modes before submitting the next request.
     - Usage:
 >
         :[range]OllamaEdit [prompt]
@@ -147,11 +153,83 @@ The vim-ollama plugin provides the following commands:
         :%OllamaEdit "add doxygen comments to all functions"
         # Workspace Mode (used AGENTS.md)
         :OllamaEdit "start implementing the code"
+        # Interactive prompt; press <Tab> to switch modes
+        :OllamaEdit
 <
      Note: It is recommended to track all source files in Git so that you can
      undo changes made by the AI and avoid losing data if the AI goes wrong.
 
-                                                     *vim-ollama-websearch*
+                                                       *vim-ollama-tools*
+TOOLS
+    OllamaEdit supplies tools according to the active mode and edit scope.
+    Plan mode supplies only read-only tools. Build mode supplies write tools
+    appropriate to the scope, together with the applicable inspection and
+    validation tools. Tool calls are validated before they are applied.
+
+    The following tools are available in Plan mode. They are available for
+    both range and workspace sessions:
+
+    read_file       Read a UTF-8 project file, optionally by line range.
+    glob            Find project files using a wildcard pattern.
+    grep            Search project file contents with a regular expression.
+    list_files      List files below a project directory.
+    webfetch        Fetch content from an HTTP or HTTPS URL.
+    websearch       Search the web through the configured search provider.
+    git_status      Show the Git branch and working-tree status.
+    git_log         Show recent Git commits.
+    git_diff        Show current or staged Git changes.
+    todowrite       Replace the TODO list kept in the current Vim session. This
+                    does not create or modify project files and is available in
+                    Plan and Build modes.
+
+    The following buffer tools are available in Build mode for range sessions.
+    Their line numbers are relative to the selected range:
+
+    buf_insert_lines    Insert lines before a relative line number.
+    buf_delete_lines    Delete an exact range after checking expected text.
+    buf_replace_lines   Replace an exact range after checking expected text.
+
+    The following file tools are available in Build mode for workspace
+    sessions. Their paths are relative to the current working directory:
+
+    insert_lines        Insert lines into an existing project file.
+    delete_lines        Delete an exact file range after checking its text.
+    replace_lines       Replace an exact file range after checking its text.
+    chmod               Make an existing regular file executable.
+    create_file         Create a new UTF-8 text file.
+    create_folder       Create a new project folder.
+    delete_file         Delete an existing project file.
+    delete_folder       Delete an existing folder, optionally recursively.
+    extract             Extract a tar or zip archive into the project.
+
+    The following session and validation tools are available in Build mode.
+    todowrite is also available in Plan mode; the validation and execution
+    tools are not:
+
+    todowrite       Replace the current session TODO list.
+    vim-make        Run Vim's configured makeprg with validated target names.
+    vim-check       Run the configured language checker for a project file.
+    execute         Run an existing executable project or system tool. User
+                    confirmation or the configured bubblewrap sandbox applies.
+
+    The following Git tools are available in workspace Build mode when Git is
+    installed. They are not available in range Build mode or Plan mode:
+
+    git_init        Initialize a Git repository.
+    git_add         Stage project-relative paths.
+    git_rm          Remove paths from Git and the working tree.
+    git_restore     Restore paths from Git or the index.
+    git_commit      Create a Git commit.
+
+    OllamaExplain supplies read_file, glob, grep, list_files, webfetch, and
+    websearch only. OllamaQuickFix supplies the normal workspace Build tools,
+    but uses vim-check instead of vim-make for configured script-language
+    checkers. Range Build sessions do not receive filesystem or Git write
+    tools, and Plan sessions never receive any project write or execution tool.
+    Plan mode may use todowrite because it changes only the in-memory session
+    TODO list.
+
+                                                       *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
     `websearch` and `webfetch` tools. `websearch` uses an OpenCode-compatible
