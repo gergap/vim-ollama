@@ -274,7 +274,7 @@ def test_plan_mode_exposes_only_read_tools(monkeypatch):
     )
 
     names = {tool["function"]["name"] for tool in captured_tools}
-    assert names == {"read_file", "glob", "grep", "list_files", "webfetch", "websearch", "git_status", "git_log", "git_diff"}
+    assert names == {"read_file", "glob", "grep", "list_files", "webfetch", "websearch", "git_status", "git_log", "git_diff", "todowrite"}
     assert operations == []
     assert "Plan mode" in messages[0]["content"]
     assert "If asked to create or modify files, deny the request" in messages[0]["content"]
@@ -316,7 +316,7 @@ def test_switching_to_plan_mode_updates_system_prompt(monkeypatch):
     )
 
     assert "You are planning only. Don't change any files." in captured["messages"][0]["content"]
-    assert {tool["function"]["name"] for tool in captured["tools"]} <= CodeEditor.READ_ONLY_TOOL_NAMES
+    assert {tool["function"]["name"] for tool in captured["tools"]} <= CodeEditor.PLAN_TOOL_NAMES
 
 
 def test_quickfix_checker_excludes_vim_make(monkeypatch):

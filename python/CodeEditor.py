@@ -561,6 +561,7 @@ EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 READ_ONLY_TOOL_NAMES = INSPECTION_TOOL_NAMES | WEB_TOOL_NAMES | GIT_READ_TOOL_NAMES
+PLAN_TOOL_NAMES = READ_ONLY_TOOL_NAMES | TODO_TOOL_NAMES
 RANGE_TOOLS = BUFFER_TOOLS + TODO_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
 WORKSPACE_TOOLS = FILE_TOOLS + TODO_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
@@ -1487,9 +1488,9 @@ def _system_prompt(settings):
         lines.extend([
             "This is Plan mode.",
             "You are planning only. Don't change any files.",
-            "You have read-only access. Use only the supplied read tools to inspect the project and gather context.",
+            "You have read-only project access. Use the supplied read tools to inspect the project and todowrite to track the plan in the Vim session.",
             "If asked to create or modify files, deny the request and explain that Plan mode is read-only.",
-            "Do not modify buffers or files, execute commands, build, run checkers, update TODOs, or change Git state.",
+            "Do not modify buffers or files, execute commands, build, run checkers, or change Git state.",
             "Finish by presenting a concrete implementation plan; do not implement it.",
         ])
     elif settings.get("explain_mode", False):
@@ -1732,8 +1733,8 @@ def _run_edit(request, code, filetype, settings):
     if mode not in ("plan", "build"):
         raise ValueError("mode must be 'plan' or 'build'")
     if mode == "plan":
-        tools = [tool for tool in INSPECTION_TOOLS + WEB_TOOLS + AVAILABLE_GIT_TOOLS
-                 if tool["function"]["name"] in READ_ONLY_TOOL_NAMES]
+        tools = [tool for tool in TODO_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + AVAILABLE_GIT_TOOLS
+                 if tool["function"]["name"] in PLAN_TOOL_NAMES]
     elif settings.get("explain_mode", False):
         tools = INSPECTION_TOOLS + WEB_TOOLS
     else:
@@ -1824,7 +1825,7 @@ def _run_edit(request, code, filetype, settings):
             call_json = json.dumps(display_arguments, indent=2)
             _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
             try:
-                if mode == "plan" and name not in READ_ONLY_TOOL_NAMES:
+                if mode == "plan" and name not in PLAN_TOOL_NAMES:
                     raise ValueError("tool is not available in Plan mode; Plan mode is read-only")
                 if settings.get("range_mode", True) and name in FILE_TOOL_NAMES | EXTRACT_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
