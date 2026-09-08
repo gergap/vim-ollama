@@ -18,6 +18,7 @@ let s:spinner_active = v:false
 let s:spinner_frame = 0
 let s:spinner_text = ''
 let s:spinner_line = 0
+let s:spinner_start = []
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -37,6 +38,7 @@ function! ollama#edit#StartSpinner(text) abort
     let s:spinner_frame = 0
     let s:spinner_text = 'Waiting for model response...'
     let s:spinner_line = 0
+    let s:spinner_start = reltime()
 endfunction
 
 function! ollama#edit#StopSpinner(...) abort
@@ -46,9 +48,13 @@ function! ollama#edit#StopSpinner(...) abort
     let s:spinner_active = v:false
     if s:spinner_line > 0 && bufexists(s:conversation_bufnr)
         let l:symbol = a:0 > 0 && a:1 ? '✓' : '✗'
-        call setbufline(s:conversation_bufnr, s:spinner_line, l:symbol .. ' ' .. s:spinner_text)
+        let l:elapsed = empty(s:spinner_start) ? 0.0 : reltimefloat(reltime(s:spinner_start))
+        let l:text = substitute(s:spinner_text, '\.\.\.$',
+                    \ ' [' .. printf('%.1f', l:elapsed) .. 's]', '')
+        call setbufline(s:conversation_bufnr, s:spinner_line, l:symbol .. ' ' .. l:text)
         call setbufvar(s:conversation_bufnr, 'ollama_fold_cache_tick', getbufvar(s:conversation_bufnr, 'changedtick'))
     endif
+    let s:spinner_start = []
 endfunction
 
 function! ollama#edit#ShowSpinner() abort
