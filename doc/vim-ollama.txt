@@ -1,6 +1,6 @@
 " vim-ollama.txt   For Vim version 8.0 or later  Last change: 2026-09-05
 
-*vim-ollama*
+                                                                  *vim-ollama*
 
                      VIM-OLLAMA
                  by Gerhard Gappmeier
@@ -18,7 +18,7 @@ CONTENTS:
     8. License                            |vim-ollama-license|
 
 ==============================================================================
-1. Introduction                                       *vim-ollama-intro*
+1. Introduction                                             *vim-ollama-intro*
 
 vim-ollama is a Vim plugin that integrates with the Ollama engine. It allows
 you to interact with various LLM models directly from the Vim editor,
@@ -29,7 +29,7 @@ Ollama is Open Source (MIT license) so you get the source code and it is free
 to use.
 
 ==============================================================================
-2. Installation                                       *vim-ollama-install*
+2. Installation                                           *vim-ollama-install*
 
 To install vim-ollama, you can use any Vim plugin manager like vim-plug or
 Vundle.
@@ -45,7 +45,7 @@ After adding the line above to your .vimrc:
     :PlugInstall
 <
 ==============================================================================
-3. Usage                                              *vim-ollama-usage*
+3. Usage                                                    *vim-ollama-usage*
 
 Once installed, you can start using vim-ollama commands within Vim. The plugin
 will display completions automatically as ghost text. Hit the <Tab> key to
@@ -56,11 +56,11 @@ You can also visually select parts of your code and use :OllamaEdit or the key
 for adding comments, translating text, refactoring code and much more.
 
 ==============================================================================
-4. Commands                                           *vim-ollama-commands*
+4. Commands                                              *vim-ollama-commands*
 
 The vim-ollama plugin provides the following commands:
 
-                                                      *:Ollama*
+                                                                     *:Ollama*
 :Ollama
     - Description: Sends commands to the plugin to change its state.
     Available commands are:
@@ -82,13 +82,13 @@ The vim-ollama plugin provides the following commands:
 >
         :Ollama disable
 <
-                                                      *:OllamaChat*
+                                                                 *:OllamaChat*
 :OllamaChat
     - Description: Creates a split window for interactive conversations with
     the configured chat model. Use `:bd` to delete the chat buffer when you
     don't need anymore.
 
-                                                      *:OllamaReview*
+                                                               *:OllamaReview*
 :OllamaReview
     - Description: Reviews the selected text. It opens a chat window like
     OllamaChat, but with a predefined prompt that asks for a code review of
@@ -99,7 +99,7 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaReview
 <
-                                                      *:OllamaSpellCheck*
+                                                           *:OllamaSpellCheck*
 :OllamaSpellCheck
     - Description: Checks the selected text for spelling errors.
     Like OllamaReview, this command uses the OllamaChat window but with a
@@ -110,7 +110,7 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaSpellCheck
 <
-                                                      *:OllamaTask*
+                                                                 *:OllamaTask*
 :OllamaTask
     - Description: Creates a chat window with a custom prompt. This command
     also works on a range like `:OllamaReview` but takes an additional
@@ -126,7 +126,7 @@ The vim-ollama plugin provides the following commands:
 >
         :OllamaTask "Add doxygen comments to all functions"
 <
-                                                      *:OllamaEdit*
+                                                                 *:OllamaEdit*
 :[range]OllamaEdit
     - Description: Allows editing a selected text using the AI. This command
     can work on a range or in workspace mode. In range mode the AI only
@@ -159,8 +159,7 @@ The vim-ollama plugin provides the following commands:
      Note: It is recommended to track all source files in Git so that you can
      undo changes made by the AI and avoid losing data if the AI goes wrong.
 
-                                                       *vim-ollama-tools*
-TOOLS
+TOOLS                                                       *vim-ollama-tools*
     OllamaEdit supplies tools according to the active mode and edit scope.
     Plan mode supplies only read-only tools. Build mode supplies write tools
     appropriate to the scope, together with the applicable inspection and
@@ -229,7 +228,7 @@ TOOLS
     Plan mode may use todowrite because it changes only the in-memory session
     TODO list.
 
-                                                       *vim-ollama-websearch*
+                                                        *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
     `websearch` and `webfetch` tools. `websearch` uses an OpenCode-compatible
@@ -268,7 +267,7 @@ WEB SEARCH PROVIDERS
     A single model response may contain multiple tool calls. Webfetch is
     limited to 5 MiB per response and 120 seconds per request.
 
-                                                      *:OllamaExplain*
+                                                              *:OllamaExplain*
 :[range]OllamaExplain
     - Description: Explains the selected code using the configured edit model.
       The command is read-only: the AI receives only file inspection tools and
@@ -280,7 +279,7 @@ WEB SEARCH PROVIDERS
         :[range]OllamaExplain
 <
 
-                                                      *:OllamaQuickFix*
+                                                             *:OllamaQuickFix*
 :OllamaQuickFix
     - Description: Builds the project with Vim's configured `makeprg`, inspects
       compiler errors and warnings, and asks the AI to fix them. The command
@@ -293,7 +292,7 @@ WEB SEARCH PROVIDERS
         :OllamaQuickFix
 <
 
-                                                     *vim-ollama-mk*
+                                                               *vim-ollama-mk*
 SECURE BUILD HELPER
     The plugin includes `scripts/mk`, a build script for Makefile projects and
     out-of-source CMake projects. It uses a `bld` directory for out-of-source
@@ -313,7 +312,7 @@ SECURE BUILD HELPER
     select the installation directory, or use `mk cmake` to configure without
     building.
 
-                                                      *:OllamaInitAgents*
+                                                           *:OllamaInitAgents*
 :OllamaInitAgents
     - Description: Starts a workspace edit to create a AGENTS.md file.
       Therefore it inspects all files in the current directory.
@@ -327,7 +326,7 @@ SECURE BUILD HELPER
         :OllamaInitAgents
 <
 
-                                                      *:OllamaPull*
+                                                                 *:OllamaPull*
 :OllamaPull
     - Description: Pulls a new model. This works like `ollama pull` command
     but via the REST API and the configured `g:ollama_host` URL, so you can use
@@ -344,9 +343,9 @@ SECURE BUILD HELPER
 <
 
 ==============================================================================
-5. Maps                                               *vim-ollama-maps*
+5. Maps                                                      *vim-ollama-maps*
 
-                                                      *vim-ollama-i_<Tab>*
+                                                          *vim-ollama-i_<Tab>*
 Vim-ollama uses <Tab> to accept the current suggestion.  If you have an
 existing <Tab> map, that will be used as the fallback when no suggestion is
 displayed.
@@ -359,7 +358,7 @@ displayed.
 
 Other Maps ~
 
-                                                       *vim-ollama-leader_r*
+                                                         *vim-ollama-leader_r*
 <leader>r               Calls ollama#Review() to review the current selection.
 <Plug>(ollama-review)
 
@@ -371,11 +370,11 @@ Other Maps ~
 <Plug>(ollama-edit)
 
 ==============================================================================
-6. Configuration                                      *vim-ollama-config*
+6. Configuration                                           *vim-ollama-config*
 
 You can configure vim-ollama using the following variables in your .vimrc:
 
-                                                      *g:ollama_enabled*
+                                                            *g:ollama_enabled*
 g:ollama_enabled
     - Description: When set to `1` (or 'v:true') enables vim-ollama
       autocompletion for all buffers, by default.  But also see
@@ -389,7 +388,7 @@ g:ollama_enabled
 >
         let g:ollama_enabled = 0
 <
-                                                      *b:ollama_enabled*
+                                                            *b:ollama_enabled*
 b:ollama_enabled
     - Description: Similar to `g:ollama_enabled`, but affects a single buffer.
       When unset, `g:ollama_enabled` is used.
@@ -418,7 +417,7 @@ b:ollama_enabled
           autocmd FileType perl let b:ollama_enabled = v:true
         augroup END
 <
-                                                      *g:ollama_host*
+                                                               *g:ollama_host*
 g:ollama_host
     - Description: Sets the Ollama host address and port.
     - Default: 'http://localhost:11434'
@@ -426,7 +425,7 @@ g:ollama_host
 >
         let g:ollama_host = 'http://your-server:port'
 <
-                                                      *g:ollama_mistral_baseurl*
+                                                    *g:ollama_mistral_baseurl*
 g:ollama_mistral_baseurl
     - Description: Sets the Mistral base URL used for Mistral backend.
     - Default: '' (Currently, this will be ignored and always use Mistral API)
@@ -434,7 +433,7 @@ g:ollama_mistral_baseurl
 >
         let g:ollama_mistral_baseurl = 'http://localhost:1234'
 <
-                                                      *g:ollama_mistral_credentialname*
+                                             *g:ollama_mistral_credentialname*
 g:ollama_mistral_credentialname
     - Description: Sets the credentialname for loading the API-key from the
       UNIX password manager. This avoids setting the MISTRAL_API_KEY as
@@ -444,7 +443,7 @@ g:ollama_mistral_credentialname
 >
         let g:ollama_mistral_credentialname = 'api-tokens/mistral-ai'
 <
-                                                      *g:ollama_openai_baseurl*
+                                                     *g:ollama_openai_baseurl*
 g:ollama_openai_baseurl
     - Description: Sets the OpenAI base URL used for OpenAI backend.
       You can use this to configure other OpenAI compatible endpoints
@@ -454,7 +453,7 @@ g:ollama_openai_baseurl
 >
         let g:ollama_openai_baseurl = 'http://localhost:1234/v1'
 <
-                                                      *g:ollama_openai_credentialname*
+                                              *g:ollama_openai_credentialname*
 g:ollama_openai_credentialname
     - Description: Sets the credentialname for loading the API-key from the
       UNIX password manager. This avoids setting the OPENAI_API_KEY as
@@ -464,7 +463,7 @@ g:ollama_openai_credentialname
 >
         let g:ollama_openai_credentialname = 'api-tokens/openai'
 <
-                                                      *g:ollama_ollama_credentialname*
+                                              *g:ollama_ollama_credentialname*
 g:ollama_ollama_credentialname
     - Description: Sets the credentialname for loading the API-key from the
       UNIX password manager. This avoids setting the OLLAMA_API_KEY as
@@ -474,7 +473,7 @@ g:ollama_ollama_credentialname
 >
         let g:ollama_ollama_credentialname = 'api-tokens/ollama'
 <
-                                                      *g:ollama_model_provider*
+                                                     *g:ollama_model_provider*
 g:ollama_model_provider
     - Description: Configures the REST API backend for code completion.
       Currently, 'ollama', 'mistral', 'openai' and 'openai_legacy' are supported.
@@ -492,7 +491,7 @@ g:ollama_model_provider
 >
         let g:ollama_model_provider = 'openai_legacy'
 <
-                                                      *g:ollama_model*
+                                                              *g:ollama_model*
 g:ollama_model
     - Description: Sets the default Ollama model for code completions.
     - Default: 'codellama:code'
@@ -514,7 +513,7 @@ g:ollama_model_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                   *g:ollama_completion_candidates*
+                                              *g:ollama_completion_candidates*
 g:ollama_completion_candidates
     - Description: Number of alternative completions requested for Ollama FIM
       completion. Alternatives can be cycled with `<M-Down>` and `<M-Up>`.
@@ -525,7 +524,7 @@ g:ollama_completion_candidates
 >
         let g:ollama_completion_candidates = 3
 <
-                                                       *g:ollama_context_lines*
+                                                      *g:ollama_context_lines*
 g:ollama_context_lines
     - Description: Sets the number of context lines before and after the
       cursor to be transmitted to the LLM for tab completion.
@@ -570,7 +569,7 @@ g:ollama_completion_allowlist_filetype
 >
         let g:ollama_completion_allowlist_filetype = ['cpp', 'haskell']
 <
-                                        *g:ollama_completion_denylist_filetype*
+                                       *g:ollama_completion_denylist_filetype*
 g:ollama_completion_denylist_filetype
     - Description: If non-empty, then completion will not be triggered for
       buffers with these file types (See 'filetype').
@@ -600,7 +599,7 @@ g:ollama_chat_provider
 >
         let g:ollama_chat_provider = 'openai'
 <
-                                                      *g:ollama_chat_model*
+                                                         *g:ollama_chat_model*
 g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
     - Default: 'llama3'
@@ -618,7 +617,7 @@ g:ollama_chat_systemprompt
         let g:ollama_chat_systemprompt = 'You are a coding assistant. Output
         only code, no explanations.'
 <
-                                                      *g:ollama_chat_options*
+                                                       *g:ollama_chat_options*
 g:ollama_chat_options
     - Description: Sets the default Ollama model options for chat models.
     - Default: '{"temperature": 0, "top_p": 0.95}'
@@ -629,7 +628,7 @@ g:ollama_chat_options
                 \ 'top_p': 0.95
                 \ }
 <
-                                                      *g:ollama_chat_timeout*
+                                                       *g:ollama_chat_timeout*
 g:ollama_chat_timeout
     - Description: Sets the timeout value in chat requests.
       Unlike code completion, the plugin uses streaming responses for chats,
@@ -649,7 +648,7 @@ g:ollama_edit_provider
 >
         let g:ollama_edit_provider = 'openai'
 <
-                                                      *g:ollama_edit_model*
+                                                         *g:ollama_edit_model*
 g:ollama_edit_model
     - Description: Sets the default Ollama model to use for code editing.
     - Default: 'qwen2.5-coder:7b'
@@ -657,7 +656,7 @@ g:ollama_edit_model
 >
         let g:ollama_edit_model = 'qwen2.5-coder:7b'
 <
-                                                      *g:ollama_edit_options*
+                                                       *g:ollama_edit_options*
 g:ollama_edit_options
     - Description: Sets the default Ollama model options for code edit models.
     - Default: '{"temperature": 0, "top_p": 0.95}'
@@ -669,7 +668,7 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                      *g:ollama_quickfix_checkers*
+                                                  *g:ollama_quickfix_checkers*
 g:ollama_quickfix_checkers
     - Description: Configures checker commands used by `:OllamaQuickFix` for
       non-compiled filetypes. Each entry contains a command list and optional
@@ -696,7 +695,7 @@ g:ollama_stop_on_error
         let g:ollama_stop_on_error = v:true
 <
 
-                                                       *g:ollama_show_llm_request*
+                                                   *g:ollama_show_llm_request*
 g:ollama_show_llm_request
     - Description: Shows the complete request sent to the LLM in a folded
       diagnostic. Messages, tools, and request options have separate nested
@@ -708,7 +707,7 @@ g:ollama_show_llm_request
         let g:ollama_show_llm_request = v:true
 <
 
-                                                      *g:ollama_edit_max_operations*
+                                                *g:ollama_edit_max_operations*
 g:ollama_edit_max_operations
     - Description: Sets the maximum number of model tool calls allowed in one
       `:OllamaEdit`, `:OllamaExplain`, or `:OllamaQuickFix` request.
@@ -718,7 +717,7 @@ g:ollama_edit_max_operations
         let g:ollama_edit_max_operations = 128
 <
 
-                                                       *g:ollama_extract_max_size*
+                                                   *g:ollama_extract_max_size*
 g:ollama_extract_max_size
     - Description: Maximum total uncompressed size allowed when the workspace
       `extract` tool unpacks an archive. This limit is independent of the
@@ -729,7 +728,7 @@ g:ollama_extract_max_size
         let g:ollama_extract_max_size = 512 * 1024 * 1024
 <
 
-                                                       *g:ollama_bwrap_enabled*
+                                                      *g:ollama_bwrap_enabled*
 g:ollama_bwrap_enabled
     - Description: Runs `execute` and `vim-check` inside a bubblewrap sandbox.
       The default enables it when bubblewrap is available on Unix systems.
@@ -737,31 +736,31 @@ g:ollama_bwrap_enabled
       |vim-ollama-mk| Secure Build Helper.
     - Default: 'has('unix') && executable('bwrap')'
 
-                                                       *g:ollama_bwrap_command*
+                                                      *g:ollama_bwrap_command*
 g:ollama_bwrap_command
     - Description: Path or executable name of the bubblewrap command.
     - Default: 'bwrap'
 
-                                                       *g:ollama_bwrap_network*
+                                                      *g:ollama_bwrap_network*
 g:ollama_bwrap_network
     - Description: Allows network access for sandboxed tools. Network access
       is disabled by default.
     - Default: 'v:false'
 
-                                                       *g:ollama_bwrap_confirm*
+                                                      *g:ollama_bwrap_confirm*
 g:ollama_bwrap_confirm
     - Description: Prompts before launching sandboxed `execute` and
       `vim-check` commands. `vim-make` is not prompted.
     - Default: 'v:true'
 
-                                   *g:ollama_bwrap_execute_allow_project_write*
+                                  *g:ollama_bwrap_execute_allow_project_write*
 g:ollama_bwrap_execute_allow_project_write
     - Description: Allows sandboxed `execute` commands to write anywhere below
       the current project directory. It is disabled by default; `vim-check`
       remains read-only.
     - Default: 'v:false'
 
-                                                         *g:ollama_no_maps*
+                                                            *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has
       a built-in fallback mechanism. This can be useful to avoid conflicts
@@ -771,7 +770,7 @@ g:ollama_no_maps
 >
         let g:ollama_no_maps = 1
 <
-                                                      *g:ollama_no_tab_map*
+                                                         *g:ollama_no_tab_map*
 g:ollama_no_tab_map
     - Description: If this variable is defined, the default <tab> mapping
       will not be created.
@@ -783,7 +782,7 @@ g:ollama_no_tab_map
         inoremap ,w <Plug>(ollama-insert-word)
         inoremap ,l <Plug>(ollama-insert-line)
 <
-                                                      *g:ollama_use_venv*
+                                                           *g:ollama_use_venv*
 g:ollama_use_venv
     - Description: Enables the usage of python virtual environments for
       executing the required python scripts. If enabled it will install
@@ -795,7 +794,7 @@ g:ollama_use_venv
 >
         let g:ollama_use_venv = 1
 <
-                                                      *g:ollama_split_vertically*
+                                                   *g:ollama_split_vertically*
 g:ollama_split_vertically
     - Description: When this variable is defined and set to 1 the OllamaChat
       command will create a vertical split, otherwise a horizontal split is
@@ -805,7 +804,7 @@ g:ollama_split_vertically
         " prefer horizontal split
         let g:ollama_split_vertically = 0
 <
-                                                      *g:ollama_nothinking*
+                                                         *g:ollama_nothinking*
 g:ollama_nothinking
     - Description: When set to v:true, disables the thinking step of
       reasoning models (e.g. DeepSeek-R1). The chat script sends the
@@ -835,11 +834,11 @@ g:ollama_nothinking
 <
 
 ==============================================================================
-7. Troubleshooting                                    *vim-ollama-troubleshooting*
+7. Troubleshooting                                *vim-ollama-troubleshooting*
 
 You can enable logging by specifying the following variables.
 
-                                                      *g:ollama_debug*
+                                                              *g:ollama_debug*
 g:ollama_debug
     - Description: Sets the debug level of the logging infrastructure.
     - Levels: 0 (Off), 1 (Errors), 2 (Warnings), 3 (Info), 4 (Debug)
@@ -849,7 +848,7 @@ g:ollama_debug
 >
         let g:ollama_debug = 4
 <
-                                                      *g:ollama_logfile*
+                                                            *g:ollama_logfile*
 g:ollama_logfile
     - Description: Configure the path of the log file.
       Note that the log file path of the python code is currently hardcoded to
@@ -860,7 +859,7 @@ g:ollama_logfile
 >
         let g:ollama_logfile = '/path/to/vim-ollama.log'
 <
-                                                      *g:ollama_review_logfile*
+                                                     *g:ollama_review_logfile*
 g:ollama_review_logfile
     - Description: Configure the path for logging chat conversations.
       This only will be logged on _Debug_ level (4).
@@ -877,7 +876,7 @@ is `/tmp/logs`, and the log filenames are `complete.log` for tab completions
 and `chat.log` for chat conversations.
 
 ==============================================================================
-8. License                                            *vim-ollama-license*
+8. License                                                *vim-ollama-license*
 
 vim-ollama is open-source software licensed under the GPLv3 License. For more
 information, see the LICENSE file in the repository.
