@@ -892,7 +892,7 @@ function! ollama#edit#PromptEntered(text) abort
     endif
 endfunction
 
-function! ollama#edit#Interrupt(channel) abort
+function! ollama#edit#Interrupt(...) abort
     python3 << EOF
 import CodeEditor
 CodeEditor.cancel_edit()
