@@ -91,8 +91,8 @@ function! s:OpenConversation(request) abort
     syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
     syntax match OllamaEditCheckmark /^✓/
     syntax match OllamaEditCross /^✗/
-    syntax match OllamaPlanPrompt /^\[Plan\]/
-    syntax match OllamaBuildPrompt /^\[Build\]/
+    syntax match OllamaPlanPrompt /^\[Plan\]/ containedin=ALL
+    syntax match OllamaBuildPrompt /^\[Build\]/ containedin=ALL
     setlocal wrap
     setlocal modifiable
     setlocal foldmethod=expr
