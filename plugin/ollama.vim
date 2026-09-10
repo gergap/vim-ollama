@@ -208,6 +208,9 @@ function! s:ColorScheme() abort
     hi def OllamaEditSpinner ctermfg=4 guifg=#5fafff
     hi def OllamaEditCheckmark ctermfg=2 guifg=#5fd787
     hi def OllamaEditCross ctermfg=1 guifg=#ff5f5f
+    hi def OllamaPlanPrompt ctermfg=33 guifg=#5fafff
+    hi def OllamaBuildPrompt ctermfg=166 guifg=#ff8c00
+
 endfunction
 
 function! s:HandleTabCompletion() abort

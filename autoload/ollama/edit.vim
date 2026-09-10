@@ -91,6 +91,8 @@ function! s:OpenConversation(request) abort
     syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
     syntax match OllamaEditCheckmark /^✓/
     syntax match OllamaEditCross /^✗/
+    syntax match OllamaPlanPrompt /^\[Plan\]/
+    syntax match OllamaBuildPrompt /^\[Build\]/
     setlocal wrap
     setlocal modifiable
     setlocal foldmethod=expr
@@ -110,7 +112,7 @@ function! s:OpenConversation(request) abort
     augroup END
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
-    let l:title = 'OllamaEdit [' .. s:ModeLabel() .. ']'
+    let l:title = 'OllamaEdit'
     let l:intro = empty(a:request) ? ['Type a request and press <Enter>.'] : split('Request: ' .. a:request, "\n", v:true)
     call setline(1, [l:title, repeat('=', strdisplaywidth(l:title)), ''] + l:intro + [''])
     call prompt_setcallback(s:conversation_bufnr, function('ollama#edit#PromptEntered'))
@@ -123,7 +125,22 @@ function! s:OpenConversation(request) abort
 endfunction
 
 function! s:ModeLabel() abort
-    return s:session_mode ==# 'plan' ? 'Plan, read-only' : 'Build, write access'
+    return s:session_mode ==# 'plan' ? 'Plan' : 'Build'
+endfunction
+
+function! s:UpdateActivePrompt() abort
+    let l:old_prompt = prompt_getprompt(s:conversation_bufnr)
+    let l:new_prompt = '[' .. s:ModeLabel() .. '] >>> '
+    let l:line = getline('.')
+    let l:cursor_col = col('.')
+    if strpart(l:line, 0, strlen(l:old_prompt)) ==# l:old_prompt
+        let l:prompt_text = strpart(l:line, strlen(l:old_prompt))
+        let l:text_col = max([0, l:cursor_col - strlen(l:old_prompt) - 1])
+        let l:line_number = line('.')
+        call setline(l:line_number, l:new_prompt .. l:prompt_text)
+        call cursor(l:line_number, strlen(l:new_prompt) + l:text_col + 1)
+    endif
+    call prompt_setprompt(s:conversation_bufnr, l:new_prompt)
 endfunction
 
 function! ollama#edit#ToggleMode() abort
@@ -132,12 +149,11 @@ function! ollama#edit#ToggleMode() abort
     endif
     let s:session_mode = s:session_mode ==# 'plan' ? 'build' : 'plan'
     if bufexists(s:conversation_bufnr)
-        let l:title = 'OllamaEdit [' .. s:ModeLabel() .. ']'
+        let l:title = 'OllamaEdit'
         call setbufline(s:conversation_bufnr, 1, l:title)
         call setbufline(s:conversation_bufnr, 2, repeat('=', strdisplaywidth(l:title)))
-        call prompt_setprompt(s:conversation_bufnr, '[' .. s:ModeLabel() .. '] >>> ')
+        call s:UpdateActivePrompt()
     endif
-    call ollama#edit#AppendProgress('Mode: ' .. s:ModeLabel())
     return ''
 endfunction
 
