@@ -26,10 +26,18 @@ esac
 
 SOURCE_DIR=$PWD
 BUILD_DIR=''
+NATIVE_MAKEFILE=0
 
-# A Makefile in the current directory takes precedence over CMake discovery.
-if [ -f "$SOURCE_DIR/Makefile" ]; then
+has_makefile() {
+    [ -f "$1/GNUmakefile" ] || [ -f "$1/makefile" ] || [ -f "$1/Makefile" ]
+}
+
+# A native makefile in the current directory takes precedence over CMake
+# discovery.  Do not try to configure it with CMake just to create
+# compile_commands.json.
+if has_makefile "$SOURCE_DIR"; then
     BUILD_DIR=$SOURCE_DIR
+    NATIVE_MAKEFILE=1
 else
     if [ -d "$MK_BLDDIR" ]; then
         BUILD_DIR=$(realpath "$MK_BLDDIR")
@@ -53,13 +61,16 @@ else
     fi
 fi
 
-if [ -z "$BUILD_DIR" ]; then
-    printf 'mk: could not find a Makefile or CMake project\n' >&2
-    exit 1
-fi
+# if not using native Make, but cmake, create the build dir
+if [ "$NATIVE_MAKEFILE" -eq 0 ]; then
+    if [ -z "$BUILD_DIR" ]; then
+        printf 'mk: could not find a Makefile or CMake project\n' >&2
+        exit 1
+    fi
 
-if [ ! -d "$BUILD_DIR" ]; then
-    mkdir -p "$BUILD_DIR" || exit 1
+    if [ ! -d "$BUILD_DIR" ]; then
+        mkdir -p "$BUILD_DIR" || exit 1
+    fi
 fi
 
 PROJECT_DIR=$(realpath "$SOURCE_DIR")
@@ -100,7 +111,7 @@ bwrap_run() {
     "${sandbox[@]}"
 }
 
-if [ "$BUILD_DIR" != "$PROJECT_DIR" ] && [ ! -f "$BUILD_DIR/Makefile" ] && [ ! -f "$BUILD_DIR/build.ninja" ]; then
+if [ "$NATIVE_MAKEFILE" -eq 0 ] && [ "$BUILD_DIR" != "$PROJECT_DIR" ] && ! has_makefile "$BUILD_DIR" && [ ! -f "$BUILD_DIR/build.ninja" ]; then
     CMAKE=$(command -v cmake)
     if [ -z "$CMAKE" ]; then
         printf 'mk: cmake is required to configure this project\n' >&2
@@ -111,14 +122,14 @@ if [ "$BUILD_DIR" != "$PROJECT_DIR" ] && [ ! -f "$BUILD_DIR/Makefile" ] && [ ! -
         "-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX" "$PROJECT_DIR" || exit 1
 fi
 
-if [ -f "$BUILD_DIR/Makefile" ] && [ ! -f "$BUILD_DIR/compile_commands.json" ]; then
+if [ "$NATIVE_MAKEFILE" -eq 0 ] && has_makefile "$BUILD_DIR" && [ ! -f "$BUILD_DIR/compile_commands.json" ]; then
     CMAKE=$(command -v cmake)
     [ -n "$CMAKE" ] && bwrap_run "$CMAKE" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON . || exit 1
 fi
 
 [ "$ONLY_CMAKE" -eq 1 ] && exit 0
 
-if [ -f "$BUILD_DIR/Makefile" ]; then
+if has_makefile "$BUILD_DIR"; then
     MAKE=$(command -v make)
     [ -n "$MAKE" ] || { printf 'mk: make is required\n' >&2; exit 127; }
     if [ -r /proc/cpuinfo ]; then
