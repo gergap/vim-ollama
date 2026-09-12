@@ -248,8 +248,6 @@ function! s:PrepareConversation(request) abort
         return
     endif
     let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
-    call appendbufline(s:conversation_bufnr, l:line_count - 1,
-                \ [''] + split('Follow-up: ' .. a:request, "\n", v:true) + [''])
     if getbufvar(s:conversation_bufnr, 'ollama_stick_to_bottom', v:true)
         call win_execute(s:conversation_winid, 'silent! normal! G')
     endif
