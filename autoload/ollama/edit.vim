@@ -23,6 +23,11 @@ let s:spinner_start = []
 let s:thinking_line = 0
 let s:resume_conversation_insert = v:false
 let s:fold_highlight_timer = 0
+let s:question_request_id = ''
+let s:question_payload = {}
+let s:question_index = 0
+let s:question_answers = []
+let s:question_selected = []
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -288,6 +293,165 @@ function! ollama#edit#PromptHistoryCompletion(direction) abort
     let l:last.text = l:matches[l:index]
     let b:ollama_edit_prompt_completion = l:last
     return "\<C-E>\<C-U>" .. l:last.text
+endfunction
+
+function! ollama#edit#ShowQuestion(request_id, payload) abort
+    if type(a:payload) != v:t_dict || type(get(a:payload, 'questions', v:null)) != v:t_list || empty(a:payload.questions)
+        return
+    endif
+    let s:question_request_id = a:request_id
+    let s:question_payload = a:payload
+    let s:question_index = 0
+    let s:question_answers = []
+    let s:question_selected = []
+    call s:ShowQuestionMenu()
+endfunction
+
+function! s:ShowQuestionMenu() abort
+    let l:question = s:question_payload.questions[s:question_index]
+    let l:options = l:question.options
+    let l:items = []
+    for l:i in range(len(l:options))
+        let l:option = l:options[l:i]
+        let l:label = l:option.label .. (empty(l:option.description) ? '' : ' - ' .. l:option.description)
+        let l:prefix = get(l:option, 'user_prompt', v:false) ? '» ' : ''
+        if get(l:question, 'multiple', v:false)
+            let l:prefix = (index(s:question_selected, l:i) >= 0 ? 'x ' : '  ')
+        endif
+        call add(l:items, l:prefix .. (l:i + 1) .. '. ' .. l:label)
+    endfor
+    call add(l:items, '• Other')
+    if get(l:question, 'multiple', v:false)
+        call add(l:items, '• Done')
+    else
+        call add(l:items, '• Cancel')
+    endif
+    call popup_menu(l:items, #{
+                \ title: ' ' .. l:question.header .. (get(l:question, 'multiple', v:false) ? ' (select all that apply)' : '') .. ' ',
+                \ callback: function('s:QuestionSelected'),
+                \ padding: [0, 1, 0, 1],
+                \ border: [],
+                \ })
+endfunction
+
+function! s:QuestionSelected(id, result) abort
+    let l:question = s:question_payload.questions[s:question_index]
+    let l:options = l:question.options
+    let l:other_index = len(l:options) + 1
+    let l:final_index = len(l:options) + 2
+    if get(l:question, 'multiple', v:false)
+        if a:result >= 1 && a:result <= len(l:options)
+            let l:i = a:result - 1
+            if index(s:question_selected, l:i) >= 0
+                call remove(s:question_selected, index(s:question_selected, l:i))
+            else
+                call add(s:question_selected, l:i)
+            endif
+            call s:ShowQuestionMenu()
+            return
+        elseif a:result == l:other_index
+            let l:other = input('Other: ')
+            if empty(l:other)
+                let s:question_answers = [{'cancelled': v:true}]
+                call s:SubmitQuestionAnswers()
+                return
+            endif
+            call s:CommitMultiSelection(l:question, l:options, l:other)
+            call s:AdvanceOrSubmitQuestion()
+            return
+        endif
+        if empty(s:question_selected)
+            let s:question_answers = [{'cancelled': v:true}]
+            call s:SubmitQuestionAnswers()
+            return
+        endif
+        call s:CommitMultiSelection(l:question, l:options)
+        call s:AdvanceOrSubmitQuestion()
+        return
+    endif
+    if a:result <= 0 || a:result == l:final_index
+        let s:question_answers = [{'cancelled': v:true}]
+        call s:SubmitQuestionAnswers()
+        return
+    endif
+    if a:result == l:other_index
+        let l:other = input('Other: ')
+        if empty(l:other)
+            let s:question_answers = [{'cancelled': v:true}]
+            call s:SubmitQuestionAnswers()
+            return
+        endif
+        call add(s:question_answers, {'header': l:question.header,
+                    \ 'question': l:question.question,
+                    \ 'label': l:other, 'other': v:true})
+        call s:AdvanceOrSubmitQuestion()
+        return
+    endif
+    let l:option = l:options[a:result - 1]
+    if get(l:option, 'user_prompt', v:false)
+        let l:answer = input(l:option.label .. ': ')
+        if empty(l:answer)
+            let s:question_answers = [{'cancelled': v:true}]
+            call s:SubmitQuestionAnswers()
+            return
+        endif
+        call add(s:question_answers, {'header': l:question.header,
+                    \ 'question': l:question.question,
+                    \ 'label': l:answer, 'other': v:true})
+    else
+        call add(s:question_answers, {'header': l:question.header,
+                    \ 'question': l:question.question,
+                    \ 'label': l:option.label})
+    endif
+    call s:AdvanceOrSubmitQuestion()
+endfunction
+
+function! s:CommitMultiSelection(question, options, ...) abort
+    let l:labels = map(copy(s:question_selected), {_, i -> a:options[i].label})
+    let l:other = a:0 > 0 ? a:1 : ''
+    let l:answer = {'header': a:question.header, 'question': a:question.question, 'labels': l:labels}
+    if !empty(l:other)
+        call add(l:answer.labels, l:other)
+        let l:answer.other = v:true
+    endif
+    call add(s:question_answers, l:answer)
+endfunction
+
+function! s:AdvanceOrSubmitQuestion() abort
+    if empty(s:question_answers)
+        call s:SubmitQuestionAnswers()
+        return
+    endif
+    if get(s:question_answers[-1], 'cancelled', v:false)
+        call s:SubmitQuestionAnswers()
+        return
+    endif
+    let s:question_index += 1
+    let s:question_selected = []
+    if s:question_index < len(s:question_payload.questions)
+        call s:ShowQuestionMenu()
+        return
+    endif
+    call s:SubmitQuestionAnswers()
+endfunction
+
+function! s:SubmitQuestionAnswers() abort
+    let g:ollama_edit_question_request_id = s:question_request_id
+    let g:ollama_edit_question_result = json_encode({'answers': s:question_answers})
+    python3 << EOF
+import CodeEditor
+import json
+import vim
+CodeEditor.submit_question(
+    vim.eval('g:ollama_edit_question_request_id'),
+    json.loads(vim.eval('g:ollama_edit_question_result')),
+)
+EOF
+    let s:question_request_id = ''
+    let s:question_payload = {}
+    let s:question_index = 0
+    let s:question_answers = []
+    let s:question_selected = []
 endfunction
 
 function! ollama#edit#UpdateStickScroll() abort
@@ -1611,6 +1775,9 @@ try:
             vim.command('call ollama#edit#ConfirmMemory(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('target', 'memory')) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('type') == 'skill_manage_request':
             vim.command('call ollama#edit#ConfirmSkillManage(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('scope', 'project')) + ', ' + vim_json(event.get('arguments', {})) + ')')
+        if event.get('type') == 'question_request':
+            payload = vim_json(event.get('arguments', {}))
+            vim.command('call ollama#edit#ShowQuestion(' + vim_json(event['request_id']) + ', json_decode(' + vim_json(payload) + '))')
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + vim_json(event.get('text', '')) + ')')
         if event.get('fold_append'):

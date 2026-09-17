@@ -13,6 +13,7 @@ import asyncio
 import datetime
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
+from questions import QUESTION_MARKER, question_payload
 
 # Try to import OpenAI SDK
 try:
@@ -32,6 +33,12 @@ DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 # default parameters if options is given, but missing these entries
 DEFAULT_TEMPERATURE = 0
 DEFAULT_MAX_TOKENS = 5000
+QUESTION_INSTRUCTION = (
+    "If you need clarification before answering, ask questions using only this JSON format: "
+    '{"questions":[{"header":"short title","question":"question text",'
+    '"multiple":false,"options":[{"label":"choice","description":"why it matters"}]}]}. '
+    "Do not wrap this JSON in Markdown fences."
+)
 
 log = None
 OUTPUT_NEWLINE = "<OLLAMA_NL>"
@@ -40,6 +47,7 @@ OUTPUT_NEWLINE = "<OLLAMA_NL>"
 def emit_output(text):
     """Emit one channel message while preserving model line breaks."""
     print(text.replace("\n", OUTPUT_NEWLINE), flush=True)
+
 
 async def stream_chat_message_ollama(messages, endpoint, model, options, timeout, credentialname, flag_nothinking):
     """Stream chat responses from Ollama API.
@@ -72,6 +80,8 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
     log.debug("request: " + json.dumps(data, indent=4))
 
     assistant_message = ""
+    response_buffer = ""
+    buffer_response = False
     prefix_reasoning = "> "
     flag_first_print_message_reasoning = True
     flag_thinking_started = False
@@ -110,7 +120,12 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                         flag_thinking_done = True
                                         emit_output("\n#EndThinking\n\n")
                                     assistant_message += content
-                                    emit_output(content)
+                                    if not response_buffer and content.lstrip().startswith("{"):
+                                        buffer_response = True
+                                    if buffer_response:
+                                        response_buffer += content
+                                    else:
+                                        emit_output(content)
 
                                 # If <EOT> is detected, stop processing
                                 if "<EOT>" in content:
@@ -121,6 +136,11 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
                                 break
                     if flag_thinking_started and not flag_thinking_done:
                         emit_output("\n#EndThinking")
+                    payload = question_payload(response_buffer) if buffer_response else None
+                    if payload is not None:
+                        emit_output(QUESTION_MARKER + json.dumps(payload, separators=(",", ":")))
+                    elif response_buffer:
+                        emit_output(response_buffer)
                     emit_output("<EOT>")
                 else:
                     await response.aread()
@@ -159,6 +179,8 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
         log.info('Using official OpenAI endpoint')
         client = AsyncOpenAI(api_key=api_key)
     assistant_message = ""
+    response_buffer = ""
+    buffer_response = False
 
     temperature = options.get('temperature', DEFAULT_TEMPERATURE)
     max_tokens = options.get('max_tokens', DEFAULT_MAX_TOKENS)
@@ -178,8 +200,18 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                 token = chunk.choices[0].delta.content
                 assistant_message += token
-                emit_output(token)
+                if not response_buffer and token.lstrip().startswith("{"):
+                    buffer_response = True
+                if buffer_response:
+                    response_buffer += token
+                else:
+                    emit_output(token)
 
+        payload = question_payload(response_buffer) if buffer_response else None
+        if payload is not None:
+            emit_output(QUESTION_MARKER + json.dumps(payload, separators=(",", ":")))
+        elif response_buffer:
+            emit_output(response_buffer)
         emit_output("<EOT>")
 
     except Exception as e:
@@ -206,7 +238,10 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                 f"Today's date is {datetime.date.today().isoformat()}\n"
                 f"{systemprompt}"
             )
-        conversation_history.append({"role": "system", "content": systemprompt})
+        systemprompt += "\n" + QUESTION_INSTRUCTION
+    else:
+        systemprompt = QUESTION_INSTRUCTION
+    conversation_history.append({"role": "system", "content": systemprompt})
 
     while True:
         try:

@@ -324,6 +324,48 @@ SUBAGENT_TOOLS = [
     },
 ]
 
+
+QUESTION_TOOLS = [{
+    "type": "function",
+    "function": {
+        "name": "question",
+        "description": "Ask the user for clarification before continuing instead of guessing. Set user_prompt to true on an option when the user must enter a custom free-form answer.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "header": {"type": "string"},
+                            "question": {"type": "string"},
+                            "multiple": {"type": "boolean"},
+                            "options": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {"type": "string"},
+                                        "description": {"type": "string"},
+                                        "user_prompt": {"type": "boolean"},
+                                    },
+                                    "required": ["label", "description"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                        "required": ["header", "question", "multiple", "options"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["questions"],
+            "additionalProperties": False,
+        },
+    },
+}]
+
 FILE_LINE_TOOLS = [
     {
         "type": "function",
@@ -745,8 +787,9 @@ GIT_TOOLS = [
 
 FILE_TOOLS = FILE_LINE_TOOLS + FILE_TOOLS
 AVAILABLE_GIT_TOOLS = GIT_TOOLS if shutil.which("git") else []
-TOOLS = BUFFER_TOOLS + TODO_TOOLS + TASK_TOPIC_TOOLS + MEMORY_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+TOOLS = BUFFER_TOOLS + TODO_TOOLS + QUESTION_TOOLS + TASK_TOPIC_TOOLS + MEMORY_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 TODO_TOOL_NAMES = {tool["function"]["name"] for tool in TODO_TOOLS}
+QUESTION_TOOL_NAMES = {tool["function"]["name"] for tool in QUESTION_TOOLS}
 TASK_TOPIC_TOOL_NAMES = {tool["function"]["name"] for tool in TASK_TOPIC_TOOLS}
 MEMORY_TOOL_NAMES = {tool["function"]["name"] for tool in MEMORY_TOOLS}
 SKILL_TOOL_NAMES = {tool["function"]["name"] for tool in SKILL_TOOLS}
@@ -765,11 +808,11 @@ EXECUTE_TOOL_NAMES = {tool["function"]["name"] for tool in EXECUTE_TOOLS}
 GIT_TOOL_NAMES = {tool["function"]["name"] for tool in AVAILABLE_GIT_TOOLS}
 GIT_READ_TOOL_NAMES = {"git_status", "git_log", "git_diff"}
 READ_ONLY_TOOL_NAMES = INSPECTION_TOOL_NAMES | WEB_TOOL_NAMES | GIT_READ_TOOL_NAMES
-PLAN_TOOL_NAMES = READ_ONLY_TOOL_NAMES | TODO_TOOL_NAMES | SUBAGENT_TOOL_NAMES
-RANGE_TOOLS = BUFFER_TOOLS + TODO_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
+PLAN_TOOL_NAMES = READ_ONLY_TOOL_NAMES | TODO_TOOL_NAMES | QUESTION_TOOL_NAMES | SUBAGENT_TOOL_NAMES
+RANGE_TOOLS = BUFFER_TOOLS + TODO_TOOLS + QUESTION_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + EXECUTE_TOOLS
 RANGE_TOOLS += [tool for tool in AVAILABLE_GIT_TOOLS if tool["function"]["name"] in GIT_READ_TOOL_NAMES]
 RANGE_TOOLS += SUBAGENT_TOOLS
-WORKSPACE_TOOLS = FILE_TOOLS + TODO_TOOLS + TASK_TOPIC_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
+WORKSPACE_TOOLS = FILE_TOOLS + TODO_TOOLS + QUESTION_TOOLS + TASK_TOPIC_TOOLS + EXTRACT_TOOLS + INSPECTION_TOOLS + WEB_TOOLS + MAKE_TOOLS + CHECK_TOOLS + EXECUTE_TOOLS + AVAILABLE_GIT_TOOLS
 WORKSPACE_TOOLS += SUBAGENT_TOOLS
 
 log = None
@@ -829,6 +872,14 @@ def _info(text, **details):
 
 def submit_make_result(request_id, result):
     """Deliver a main-thread Vim :make result to the waiting worker."""
+    with g_make_condition:
+        if request_id in g_make_results:
+            g_make_results[request_id] = result
+            g_make_condition.notify_all()
+
+
+def submit_question(request_id, result):
+    """Deliver a Vim popup question result to the waiting worker."""
     with g_make_condition:
         if request_id in g_make_results:
             g_make_results[request_id] = result
@@ -1001,6 +1052,38 @@ def _request_memory(arguments, settings):
     if not isinstance(decision, dict) or not decision.get("allowed"):
         return {"ok": False, "message": "memory update cancelled by user", "cancelled": True}
     return _apply_memory(target, arguments, settings)
+
+
+def _validate_question_arguments(arguments):
+    if not isinstance(arguments, dict) or not isinstance(arguments.get("questions"), list) or not arguments["questions"]:
+        raise ValueError("question requires a non-empty questions list")
+    for question in arguments["questions"]:
+        if not isinstance(question, dict) or not isinstance(question.get("header"), str) or not isinstance(question.get("question"), str):
+            raise ValueError("each question requires a header and question")
+        if not isinstance(question.get("multiple"), bool) or not isinstance(question.get("options"), list) or not question["options"]:
+            raise ValueError("each question requires multiple and a non-empty options list")
+        for option in question["options"]:
+            if not isinstance(option, dict) or not isinstance(option.get("label"), str) or not isinstance(option.get("description"), str):
+                raise ValueError("each question option requires a label and description")
+            if "user_prompt" in option and not isinstance(option["user_prompt"], bool):
+                raise ValueError("question option user_prompt must be a boolean")
+
+
+def _request_question(arguments):
+    _validate_question_arguments(arguments)
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Waiting for user answer", type="question_request", request_id=request_id, arguments=arguments)
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
+        answer = g_make_results.pop(request_id)
+    return {"ok": not any(item.get("cancelled", False) for item in answer.get("answers", [])),
+            "message": "User answered the question", "answers": answer}
 
 
 def _safe_skill_name(name):
@@ -2472,6 +2555,8 @@ def _system_prompt(settings):
         "Use only supplied tools through their tool-calling interface for inspection, changes, execution, and Git. Never emit tool-call markup or return rewritten files instead of invoking tools.",
         "Use vim-make/vim-check as tools, never as execute paths; use vim-check for configured checkers and do not use vim-make for scripting languages. Use buf_replace_lines for the current buffer and never use execute for Git.",
         "For non-trivial work, use todowrite: keep one item in_progress, mark it completed immediately, and finish all applicable items.",
+        "When the user's intent or an implementation choice is ambiguous, use the supplied question tool instead of guessing.",
+        "When a question option needs a custom free-form answer, set that option's user_prompt field to true; do not expect the user to type a custom answer for an ordinary option.",
     ]
     if settings.get("enable_memory", False):
         lines.extend([
@@ -3335,7 +3420,7 @@ def _run_edit(request, code, filetype, settings):
         if subagents_enabled:
             tools += SUBAGENT_TOOLS
     elif settings.get("explain_mode", False):
-        tools = INSPECTION_TOOLS + WEB_TOOLS
+        tools = QUESTION_TOOLS + INSPECTION_TOOLS + WEB_TOOLS
         if subagents_enabled:
             tools += SUBAGENT_TOOLS
     else:
@@ -3566,6 +3651,8 @@ def _run_edit(request, code, filetype, settings):
                         settings.get("execute_allowlist", []),
                         settings.get("execute_allow_project_executables", False),
                     )
+                elif name in QUESTION_TOOL_NAMES:
+                    result = _request_question(arguments)
                 elif name in TODO_TOOL_NAMES:
                     result = _request_todo(arguments)
                     todo_items = arguments.get("todos")
@@ -3574,7 +3661,7 @@ def _run_edit(request, code, filetype, settings):
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"), settings.get("extract_max_size"))
                 _check_cancelled()
-                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES and name not in TODO_TOOL_NAMES and name not in SUBAGENT_TOOL_NAMES and name not in MEMORY_TOOL_NAMES and name not in SKILL_TOOL_NAMES and name not in SKILL_MANAGE_TOOL_NAMES and name not in TASK_TOPIC_TOOL_NAMES and name not in SELF_OPTIMIZATION_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES and name not in TODO_TOOL_NAMES and name not in QUESTION_TOOL_NAMES and name not in SUBAGENT_TOOL_NAMES and name not in MEMORY_TOOL_NAMES and name not in SKILL_TOOL_NAMES and name not in SKILL_MANAGE_TOOL_NAMES and name not in TASK_TOPIC_TOOL_NAMES and name not in SELF_OPTIMIZATION_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 details = {

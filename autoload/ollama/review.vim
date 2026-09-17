@@ -5,6 +5,10 @@ let s:buf = -1
 let s:ollama_bufname = 'Ollama Chat'
 let s:response_line = -1
 let s:response_started = v:false
+let s:pending_questions = []
+let s:question_index = 0
+let s:question_answers = []
+let s:question_selected = []
 
 if !exists('g:ollama_review_logfile')
     let g:ollama_review_logfile = tempname() .. '-ollama-review.log'
@@ -101,6 +105,20 @@ function! s:StartChat(lines) abort
         let l:lines = l:normalized_lines
         let l:first_line = v:true
         for l:line in l:lines
+            if l:line =~# '^#Question'
+                let l:payload = {}
+                try
+                    let l:payload = json_decode(strpart(l:line, strlen('#Question')))
+                catch
+                    let l:payload = {}
+                endtry
+                if type(l:payload) == v:t_dict && type(get(l:payload, 'questions', v:null)) == v:t_list
+                    call s:BeginQuestions(l:payload.questions)
+                endif
+                let s:response_started = v:false
+                let s:response_line = -1
+                continue
+            endif
             let l:idx = stridx(l:line, "<EOT>")
             if l:idx != -1
                 call ollama#logger#Debug("idx=" .. l:idx)
@@ -324,6 +342,139 @@ function! s:StartChat(lines) abort
 
     " start accepting shell commands
     startinsert
+endfunction
+
+function! s:BeginQuestions(questions) abort
+    if empty(a:questions)
+        return
+    endif
+    let s:pending_questions = a:questions
+    let s:question_index = 0
+    let s:question_answers = []
+    let s:question_selected = []
+    call s:ShowQuestionMenu()
+endfunction
+
+function! s:ShowQuestionMenu() abort
+    let l:question = s:pending_questions[s:question_index]
+    let l:options = l:question.options
+    let l:items = []
+    for l:i in range(len(l:options))
+        let l:option = l:options[l:i]
+        let l:label = l:option.label .. (empty(l:option.description) ? '' : ' - ' .. l:option.description)
+        let l:prefix = get(l:option, 'user_prompt', v:false) ? '» ' : ''
+        if get(l:question, 'multiple', v:false)
+            let l:prefix = (index(s:question_selected, l:i) >= 0 ? 'x ' : '  ')
+        endif
+        call add(l:items, l:prefix .. (l:i + 1) .. '. ' .. l:label)
+    endfor
+    call add(l:items, '• Other')
+    if get(l:question, 'multiple', v:false)
+        call add(l:items, '• Done')
+    else
+        call add(l:items, '• Cancel')
+    endif
+    call popup_menu(l:items, #{
+          \ title: ' ' .. l:question.header .. (get(l:question, 'multiple', v:false) ? ' (select all that apply)' : '') .. ' ',
+          \ callback: function('s:OnQuestionSelected'),
+          \ padding: [0, 1, 0, 1],
+          \ border: [],
+          \ })
+endfunction
+
+function! s:OnQuestionSelected(id, result) abort
+    let l:question = s:pending_questions[s:question_index]
+    let l:options = l:question.options
+    let l:other_index = len(l:options) + 1
+    let l:final_index = len(l:options) + 2
+    if get(l:question, 'multiple', v:false)
+        if a:result >= 1 && a:result <= len(l:options)
+            let l:i = a:result - 1
+            if index(s:question_selected, l:i) >= 0
+                call remove(s:question_selected, index(s:question_selected, l:i))
+            else
+                call add(s:question_selected, l:i)
+            endif
+            call s:ShowQuestionMenu()
+            return
+        elseif a:result == l:other_index
+            let l:other = input('Other: ')
+            if empty(l:other)
+                call s:FinishQuestions()
+                return
+            endif
+            call s:CommitMultiSelection(l:question, l:options, l:other)
+            call s:AdvanceQuestions()
+            return
+        endif
+        if empty(s:question_selected)
+            call s:FinishQuestions()
+            return
+        endif
+        call s:CommitMultiSelection(l:question, l:options)
+        call s:AdvanceQuestions()
+        return
+    endif
+    if a:result <= 0 || a:result == l:final_index
+        call s:FinishQuestions()
+        return
+    endif
+    if a:result == l:other_index
+        let l:answer = input('Other: ')
+        if empty(l:answer)
+            call s:FinishQuestions()
+            return
+        endif
+        call add(s:question_answers, l:question.header .. ': ' .. l:answer)
+        call s:AdvanceQuestions()
+        return
+    endif
+    let l:option = l:options[a:result - 1]
+    if get(l:option, 'user_prompt', v:false)
+        let l:answer = input(l:option.label .. ': ')
+        if empty(l:answer)
+            call s:FinishQuestions()
+            return
+        endif
+        call add(s:question_answers, l:question.header .. ': ' .. l:answer)
+    else
+        call add(s:question_answers, l:question.header .. ': ' .. l:option.label)
+    endif
+    call s:AdvanceQuestions()
+endfunction
+
+function! s:CommitMultiSelection(question, options, ...) abort
+    let l:labels = map(copy(s:question_selected), {_, i -> a:options[i].label})
+    let l:other = a:0 > 0 ? a:1 : ''
+    let l:line = a:question.header .. ': ' .. join(l:labels, ', ')
+    if !empty(l:other)
+        let l:line .= ', ' .. l:other
+    endif
+    call add(s:question_answers, l:line)
+endfunction
+
+function! s:AdvanceQuestions() abort
+    let s:question_index += 1
+    let s:question_selected = []
+    if s:question_index < len(s:pending_questions)
+        call s:ShowQuestionMenu()
+        return
+    endif
+    call s:FinishQuestions()
+endfunction
+
+function! s:FinishQuestions() abort
+    let l:answer = join(s:question_answers, "\n")
+    let s:pending_questions = []
+    let s:question_answers = []
+    let s:question_selected = []
+    if empty(l:answer)
+        return
+    endif
+    call ollama#logger#Debug('Sending question answer: ' .. l:answer)
+    call ch_sendraw(s:job, l:answer .. "\n")
+    let s:response_line = -1
+    let s:response_started = v:false
 endfunction
 
 function! s:SetupThinkingFolding() abort

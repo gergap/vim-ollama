@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
 import CodeEditor
+from questions import question_payload
 from CodeEditor import apply_tool
 
 
@@ -232,6 +233,50 @@ def test_subagent_rejects_traversal_and_symlink_paths(tmp_path):
     assert "symlinks" in symlink["message"]
 
 
+def test_question_payload_accepts_opencode_schema():
+    payload = question_payload("""{
+        "questions": [{
+            "header": "Implementation",
+            "question": "How should I implement this?",
+            "multiple": false,
+            "options": [
+                {"label": "Option A", "description": "Simple implementation"}
+            ]
+        }]
+    }""")
+
+    assert payload["questions"][0]["options"][0]["label"] == "Option A"
+
+
+def test_question_payload_accepts_user_prompt_option():
+    payload = question_payload("""{
+        "questions": [{
+            "header": "Details",
+            "question": "What should it be called?",
+            "multiple": false,
+            "options": [{
+                "label": "Enter a custom name",
+                "description": "Type the name to use",
+                "user_prompt": true
+            }]
+        }]
+    }""")
+
+    assert payload["questions"][0]["options"][0]["user_prompt"] is True
+
+
+@pytest.mark.parametrize("content", [
+    "not json",
+    '{"questions": []}',
+    '{"questions": [{"question": "Pick one", "options": []}]}',
+    '{"questions": [{"question": "Pick one", "options": [{"description": "missing label"}]}]}',
+    '{"questions": [{"question": "Pick one", "options": [{"label": "A", "user_prompt": "yes"}]}]}',
+])
+def test_question_payload_rejects_invalid_schema(content):
+    assert question_payload(content) is None
+
+
+
 def test_replace_lines_requires_exact_expected_text():
     document = ["one", "two", "three"]
 
@@ -357,11 +402,32 @@ def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
     assert "For non-trivial work, use todowrite" in system
     assert "one item in_progress" in system
     assert "finish all applicable items" in system
+    assert "set that option's user_prompt field to true" in system
     assert "src/main.c" in prompt
     assert "lines 4-6" in prompt
     assert "4|old" in prompt
     assert "tool line 1 is Vim line 4" in prompt
     assert "Do not create, delete, or modify any files." in prompt
+
+
+def test_edit_prompt_can_disable_agents_md(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Do not include this.")
+    (tmp_path / "CLAUDE.md").write_text("Keep this instruction.")
+
+    system = CodeEditor._system_prompt({"cwd": str(tmp_path), "use_agents_md_file": False})
+
+    assert "Do not include this." not in system
+    assert "Keep this instruction." in system
+
+
+def test_edit_prompt_can_disable_claude_md(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Keep this instruction.")
+    (tmp_path / "CLAUDE.md").write_text("Do not include this.")
+
+    system = CodeEditor._system_prompt({"cwd": str(tmp_path), "use_claude_md_file": False})
+
+    assert "Keep this instruction." in system
+    assert "Do not include this." not in system
 
 
 def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
@@ -699,6 +765,65 @@ def test_active_task_topic_gets_one_completion_reinforcement(monkeypatch):
     )
 
 
+def test_ollamaedit_exposes_question_tool(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    CodeEditor._run_edit("clarify it", ["one"], "text", {"provider": "ollama"})
+
+    question = next(tool for tool in captured_tools if tool["function"]["name"] == "question")
+    assert question["function"]["parameters"]["properties"]["questions"]["type"] == "array"
+    option_properties = question["function"]["parameters"]["properties"]["questions"]["items"]["properties"]["options"]["items"]["properties"]
+    assert option_properties["user_prompt"] == {"type": "boolean"}
+
+
+def test_question_rejects_non_boolean_user_prompt():
+    with pytest.raises(ValueError, match="user_prompt must be a boolean"):
+        CodeEditor._request_question({
+            "questions": [{
+                "header": "Details",
+                "question": "What should it be called?",
+                "multiple": False,
+                "options": [{
+                    "label": "Custom",
+                    "description": "Type a value",
+                    "user_prompt": "yes",
+                }],
+            }],
+        })
+
+
+def test_question_accepts_multiple_selection():
+    CodeEditor._validate_question_arguments({
+        "questions": [{
+            "header": "Features",
+            "question": "Which features do you want?",
+            "multiple": True,
+            "options": [
+                {"label": "Dark mode", "description": "Toggleable"},
+                {"label": "Export", "description": "Save as file"},
+            ],
+        }],
+    })
+
+
+def test_question_rejects_missing_multiple_flag():
+    with pytest.raises(ValueError, match="requires multiple and a non-empty options list"):
+        CodeEditor._validate_question_arguments({
+            "questions": [{
+                "header": "Pick",
+                "question": "Which one?",
+                "options": [{"label": "A", "description": "Option"}],
+            }],
+        })
+
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")
@@ -781,7 +906,7 @@ def test_explain_mode_exposes_only_inspection_tools(monkeypatch):
     )
 
     names = {tool["function"]["name"] for tool in captured_tools}
-    assert names == {"read_file", "glob", "grep", "list_files", "webfetch", "websearch"}
+    assert names == {"question", "read_file", "glob", "grep", "list_files", "webfetch", "websearch"}
     assert operations == []
     assert "read-only" in messages[1]["content"]
 
