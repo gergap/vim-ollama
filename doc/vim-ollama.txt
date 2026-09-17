@@ -670,6 +670,26 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
+                                                 *g:ollama_use_agents_md_file*
+g:ollama_use_agents_md_file
+    - Description: Controls whether OllamaEdit loads `AGENTS.md` files from
+      the working directory and its parent directories into the model context.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_use_agents_md_file = v:false
+<
+
+                                                 *g:ollama_use_claude_md_file*
+g:ollama_use_claude_md_file
+    - Description: Controls whether OllamaEdit loads `CLAUDE.md` files from
+      the working directory and its parent directories into the model context.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_use_claude_md_file = v:false
+<
+
                                                   *g:ollama_quickfix_checkers*
 g:ollama_quickfix_checkers
     - Description: Configures checker commands used by `:OllamaQuickFix` for

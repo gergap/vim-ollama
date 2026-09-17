@@ -1423,11 +1423,16 @@ def apply_tool(document, name, arguments, cwd=None, extract_max_size=None):
     raise ValueError(f"unknown edit tool: {name}")
 
 
-def _load_project_instructions(cwd):
+def _load_project_instructions(cwd, use_agents_md_file=True, use_claude_md_file=True):
     instructions = []
     current = os.path.realpath(cwd)
     while True:
-        for filename in ("AGENTS.md", "CLAUDE.md"):
+        filenames = []
+        if use_agents_md_file:
+            filenames.append("AGENTS.md")
+        if use_claude_md_file:
+            filenames.append("CLAUDE.md")
+        for filename in filenames:
             path = os.path.join(current, filename)
             if not os.path.isfile(path) or os.path.islink(path):
                 continue
@@ -1515,7 +1520,10 @@ def _system_prompt(settings):
     configured = settings.get("instructions")
     if configured:
         lines.append("Configured instructions:\n" + configured)
-    for filename, content in _load_project_instructions(cwd):
+    for filename, content in _load_project_instructions(
+            cwd,
+            settings.get("use_agents_md_file", True),
+            settings.get("use_claude_md_file", True)):
         lines.append(f"Instructions from {filename}:\n{content}")
     return "\n\n".join(lines)
 

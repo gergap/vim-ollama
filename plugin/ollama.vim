@@ -156,6 +156,12 @@ endif
 if !exists('g:ollama_edit_instructions')
     let g:ollama_edit_instructions = ''
 endif
+if !exists('g:ollama_use_agents_md_file')
+    let g:ollama_use_agents_md_file = v:true
+endif
+if !exists('g:ollama_use_claude_md_file')
+    let g:ollama_use_claude_md_file = v:true
+endif
 if !exists('g:ollama_show_llm_request')
     let g:ollama_show_llm_request = v:false
 endif
