@@ -50,6 +50,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
   - Inspect files, apply changes, and validate the result with build tools
   - Search the web with `websearch` and retrieve pages with `webfetch`
   - Fix compiler diagnostics automatically with `:OllamaQuickFix`
+  - Keep bounded, user-confirmed global Memory and user context in
+    `~/.vim/config/MEMORY.md` and `~/.vim/config/USER.md`
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.
@@ -97,6 +99,9 @@ OllamaEdit supports Plan and Build modes in its conversation buffer. The header
 shows the active mode; press `<Tab>` at the prompt to switch modes before
 submitting a request. Plan mode is read-only and exposes only inspection, web,
 and read-only Git tools. Build mode provides the normal editing workflow.
+Workspace Build mode can also update the optional global Memory and user
+context files after Vim confirmation. See `:help vim-ollama-memory` for limits,
+exact-match updates, and the `g:ollama_enable_memory` feature gate.
 
 Optionally, it supports using the OpenAI REST API for code completion, chat
 conversations, and code edit tasks. Therefore, you need to create an OpenAI

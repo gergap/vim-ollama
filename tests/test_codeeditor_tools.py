@@ -21,6 +21,46 @@ def test_insert_lines():
     assert document == ["one", "two", "three"]
 
 
+def test_memory_add_replace_remove_is_bounded_and_exact(tmp_path):
+    settings = {"memory_dir": str(tmp_path)}
+
+    CodeEditor._apply_memory("memory", {"target": "memory", "action": "add", "content": "Keep the API stable."}, settings)
+    CodeEditor._apply_memory("memory", {
+        "target": "memory", "action": "replace", "old_text": "Keep the API stable.",
+        "new_text": "Keep the public API stable.",
+    }, settings)
+    CodeEditor._apply_memory("memory", {
+        "target": "memory", "action": "remove", "old_text": "Keep the public API stable.\n",
+    }, settings)
+
+    assert (tmp_path / "MEMORY.md").read_text() == ""
+
+
+def test_memory_rejects_ambiguous_replace_and_oversized_content(tmp_path):
+    settings = {"memory_dir": str(tmp_path)}
+    CodeEditor._apply_memory("memory", {"target": "memory", "action": "add", "content": "repeat\nrepeat"}, settings)
+
+    with pytest.raises(ValueError, match="exactly one"):
+        CodeEditor._apply_memory("memory", {
+            "target": "memory", "action": "replace", "old_text": "repeat", "new_text": "changed",
+        }, settings)
+    with pytest.raises(ValueError, match="limit"):
+        CodeEditor._apply_memory("user", {"target": "user", "action": "add", "content": "x" * (CodeEditor.MAX_MEMORY_BYTES + 1)}, settings)
+
+
+def test_memory_context_is_labeled_and_disabled_without_filesystem_access(tmp_path, monkeypatch):
+    settings = {"memory_dir": str(tmp_path), "enable_memory": True}
+    CodeEditor._apply_memory("user", {"target": "user", "action": "add", "content": "Prefers concise answers."}, settings)
+
+    prompt = CodeEditor._system_prompt(settings)
+    assert "Untrusted User context" in prompt
+    assert "Prefers concise answers." in prompt
+
+    disabled = {"memory_dir": str(tmp_path / "does-not-exist"), "enable_memory": False}
+    assert "Prefers concise answers." not in CodeEditor._system_prompt(disabled)
+    assert not (tmp_path / "does-not-exist").exists()
+
+
 def test_replace_lines_requires_exact_expected_text():
     document = ["one", "two", "three"]
 
@@ -171,6 +211,22 @@ def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
     assert "create_file" in names
     assert "insert_lines" in names
     assert "buf_insert_lines" not in names
+
+
+def test_memory_tool_is_workspace_build_only_and_feature_gated(monkeypatch):
+    captured_tools = []
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: captured_tools.extend(tools) or {"tool_calls": []})
+    CodeEditor._run_edit("remember it", [], "", {
+        "provider": "ollama", "range_mode": False, "enable_memory": True,
+    })
+    assert "memory" in {tool["function"]["name"] for tool in captured_tools}
+
+    captured_tools.clear()
+    CodeEditor._run_edit("do not remember it", [], "", {
+        "provider": "ollama", "range_mode": False, "enable_memory": False,
+    })
+    assert "memory" not in {tool["function"]["name"] for tool in captured_tools}
 
 
 def test_file_line_tools_use_absolute_file_lines(tmp_path):

@@ -238,6 +238,33 @@ TOOLS                                                       *vim-ollama-tools*
     Plan mode may use todowrite because it changes only the in-memory session
     TODO list.
 
+MEMORY                                                       *vim-ollama-memory*
+    When |g:ollama_enable_memory| is enabled, OllamaEdit can use two optional
+    global Markdown files:
+
+        ~/.vim/config/MEMORY.md    recurring observations and project lessons
+        ~/.vim/config/USER.md      durable information about the user
+
+    Their contents are bounded to 128 KiB per file and are included in prompts
+    only as labeled, untrusted context. They cannot override safety rules,
+    operating mode, or tool restrictions. No memory files are read when the
+    feature is disabled.
+
+    The workspace Build-only |memory| tool reads either target and supports
+    add, replace, and remove operations. Replace and remove require
+    |memory-exact-match| text matching; ambiguous matches fail. Updates are
+    validated before an atomic UTF-8 replacement. Every global update asks for
+    explicit Vim confirmation. Memory is intended for recurring useful
+    information, not every isolated failure.
+
+    Memory writes are unavailable in Plan mode and range Build sessions. Set
+    `let g:ollama_enable_memory = v:false` to disable Memory completely.
+
+                                                            *memory-exact-match*
+    Exact matching requires one occurrence of old_text in the current file.
+    Zero or multiple occurrences are rejected, preventing accidental broad
+    replacements.
+
                                                         *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
@@ -698,6 +725,16 @@ g:ollama_use_claude_md_file
     - Example:
 >
         let g:ollama_use_claude_md_file = v:false
+<
+
+                                                    *g:ollama_enable_memory*
+g:ollama_enable_memory
+    - Description: Enables global Memory/USER.md context and the memory tool
+      for OllamaEdit. When false, those files are not accessed.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enable_memory = v:false
 <
 
                                                   *g:ollama_quickfix_checkers*

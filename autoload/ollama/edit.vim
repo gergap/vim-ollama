@@ -437,6 +437,12 @@ CodeEditor.submit_make_result(vim.eval('a:request_id'), json.loads(vim.eval('l:r
 EOF
 endfunction
 
+function! ollama#edit#ConfirmMemory(request_id, target, arguments) abort
+    let l:filename = a:target ==# 'user' ? 'USER.md' : 'MEMORY.md'
+    let l:choice = confirm('Allow OllamaEdit to update global ' .. l:filename .. '?', "&Allow\n&Cancel", 2)
+    call ollama#edit#SubmitMakeResult(a:request_id, {'allowed': l:choice == 1})
+endfunction
+
 function! s:CollectMakeOutput(state, channel, message) abort
     if !empty(a:message)
         call add(a:state.output, a:message)
@@ -992,6 +998,8 @@ try:
             vim.command('call ollama#edit#RunExecute(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('type') == 'todo_request':
             vim.command('call ollama#todo#Write(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
+        if event.get('type') == 'memory_request':
+            vim.command('call ollama#edit#ConfirmMemory(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('target', 'memory')) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + vim_json(event.get('text', '')) + ')')
         if event.get('fold_append'):
@@ -1055,7 +1063,10 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'credentialname': l:is_openai ? g:ollama_openai_credentialname : g:ollama_ollama_credentialname,
                 \ 'cwd': getcwd(),
                 \ 'continue_history': get(a:settings, 'continue_history', v:false),
-                \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
+                 \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
+                 \ 'enable_memory': get(g:, 'ollama_enable_memory', v:true),
+                 \ 'use_agents_md_file': get(g:, 'ollama_use_agents_md_file', v:true),
+                 \ 'use_claude_md_file': get(g:, 'ollama_use_claude_md_file', v:true),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
                 \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
