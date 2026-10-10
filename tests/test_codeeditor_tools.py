@@ -634,6 +634,32 @@ def test_openai_chat_client_uses_configured_timeout(monkeypatch):
     assert captured["timeout"].read == 10.0
 
 
+def test_mistral_completion_client_uses_bounded_timeout(monkeypatch):
+    captured = {}
+
+    class Fim:
+        def complete(self, **kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="completion"))]
+            )
+
+    class MistralClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.fim = Fim()
+
+    monkeypatch.setattr(complete, "Mistral", MistralClient)
+    monkeypatch.setattr(complete.OllamaCredentials, "GetApiKey", lambda *args: "test-key")
+    monkeypatch.setattr(complete, "log", SimpleNamespace(debug=lambda *args: None, info=lambda *args: None))
+
+    result = complete.generate_code_completion_mistral(
+        "before<FILL_IN_HERE>after", None, "codestral-2501", {}, None
+    )
+
+    assert result == "completion"
+    assert captured["timeout_ms"] == complete.MISTRAL_REQUEST_TIMEOUT_MS
+
+
 def test_range_edit_rejects_filesystem_tools(monkeypatch):
     responses = iter([
         {"tool_calls": [{"id": "file-1", "function": {"name": "create_file", "arguments": {

@@ -165,8 +165,8 @@ Before the fix, the completion request called `requests.post` without a
 timeout. A stalled Ollama or proxy connection could block the completion
 worker indefinitely and make Vim appear hung.
 
-**Residual recommendation:** Configure an explicit timeout for the optional
-Mistral SDK client as a separate provider-specific change.
+The optional Mistral SDK client now uses an explicit 120-second operation
+timeout as well.
 
 ## Logic Bugs
 

@@ -41,6 +41,7 @@ DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
 DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
 COMPLETION_REQUEST_TIMEOUT = (5, 120)
 OPENAI_REQUEST_TIMEOUT = httpx.Timeout(120.0, connect=5.0) if httpx else 120.0
+MISTRAL_REQUEST_TIMEOUT_MS = 120_000
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -234,7 +235,7 @@ def generate_code_completion_mistral(prompt, baseurl, model, options, credential
     cred = OllamaCredentials()
     api_key = cred.GetApiKey('mistral', credentialname)
     log.debug('Using Mistral API')
-    client = Mistral(api_key=api_key)
+    client = Mistral(api_key=api_key, timeout_ms=MISTRAL_REQUEST_TIMEOUT_MS)
 
     parts = prompt.split('<FILL_IN_HERE>')
     if len(parts) != 2:
