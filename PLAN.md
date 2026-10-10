@@ -39,6 +39,26 @@ verified independently before skill discovery and management are added:
           project self-optimization within workspace Build permissions.
     - [x] Add tests and documentation for enabled, disabled, rejected, and
           confirmed self-optimization paths.
+6. **Automatic context compaction**
+   - [ ] Add `g:ollama_enable_autocompact` as an independent feature gate,
+         enabled by default.
+   - [ ] Track the effective context budget and compact before requests exceed
+         the configured model limit.
+   - [ ] Preserve the system prompt, active mode, tool permissions, pending
+         confirmations, and the current task objective across compaction.
+   - [ ] Summarize older conversation turns into bounded, clearly labeled,
+         untrusted context without silently dropping recent tool results.
+   - [ ] Add configurable thresholds, summary limits, failure handling, tests,
+         and documentation.
+7. **Subagent delegation**
+   - [ ] Add a guarded subagent tool for bounded delegated analysis, including
+         single-file analysis as the first supported use case.
+   - [ ] Define inherited mode, filesystem, tool, timeout, and output-size
+         restrictions for subagents; prevent unrestricted recursive delegation.
+   - [ ] Return structured, labeled results and failures while keeping the main
+         conversation context bounded.
+   - [ ] Add approval, cancellation, concurrency, isolation, tests, and
+         documentation for subagent calls.
 
 Each roadmap item should be usable and testable before starting the next item.
 
@@ -51,6 +71,8 @@ Each roadmap item should be usable and testable before starting the next item.
 - [x] Skill management mutations and permissions.
 - [x] Final integration, manual verification, and full polish.
 - [ ] Self-optimization and skill evolution.
+- [ ] Automatic context compaction.
+- [ ] Subagent delegation.
 
 ## Feature 1: Memory and User Context
 
@@ -464,8 +486,174 @@ or restore it automatically.
   workspace Build permission.
 - Unsafe, unsupported, stale, or failed proposals leave the prior Skill intact.
 
+## Feature 6: Automatic Context Compaction
+
+### Goal
+
+Keep long-running OllamaEdit sessions usable when the conversation approaches
+the model context limit. Compaction must reduce historical context without
+changing the active task, safety rules, mode, permissions, or user-approved
+state.
+
+### Configuration
+
+Add this default in `plugin/ollama.vim`:
+
+```vim
+if !exists('g:ollama_enable_autocompact')
+    let g:ollama_enable_autocompact = v:true
+endif
+```
+
+Pass the setting through `autoload/ollama/edit.vim`. Add configuration values
+for the compaction trigger threshold and maximum summary size, with safe
+defaults and validation. When disabled, no automatic summarization or
+compaction state should be created and existing request behavior must remain
+unchanged.
+
+### Behavior
+
+- Estimate request tokens using the provider/model context limit and reserve
+  space for the next response, tool calls, and protocol overhead.
+- Trigger compaction before the request would exceed the effective limit, with
+  a configurable safety margin rather than waiting for a provider error.
+- Keep the system prompt, current mode, tool restrictions, active objective,
+  recent user messages, recent tool calls/results, and unresolved confirmations
+  verbatim or in an equivalent structured form.
+- Summarize only older turns, label the result as an untrusted generated
+  summary, and bound its size. Do not treat summary content as system or user
+  instructions.
+- Prefer deterministic trimming when summarization fails. Report compaction
+  failures clearly and never send an over-limit request merely because the
+  summary provider failed.
+- Allow the user to inspect, clear, and regenerate the compacted history.
+  Compaction must not write Memory, USER.md, Skills, or project files.
+- Avoid repeated compaction loops and preserve enough metadata to diagnose how
+  the request was reduced.
+
+### Implementation Package
+
+1. Context-budget calculation for supported providers and model limits.
+2. Conversation partitioning into protected recent state and compactable history.
+3. Bounded summary generation, validation, fallback trimming, and state
+   serialization.
+4. Vim/Python configuration and optional user-visible compaction events.
+5. Unit tests, integration tests with mocked providers, and documentation.
+
+## Feature 7: Subagent Delegation
+
+### Goal
+
+Allow OllamaEdit to delegate focused, independent work to a bounded subagent
+so the main context remains smaller. The initial use case is analyzing one
+file and returning findings or a concise summary to the parent session.
+
+### Tool Interface
+
+Add a `subagent` tool with a deliberately small interface:
+
+```text
+task: string
+files?: [string]
+mode?: "analyze"
+max_output_chars?: integer
+timeout_seconds?: integer
+```
+
+The first implementation should support read-only analysis of explicitly
+selected files. File paths must use the existing workspace safety checks,
+reject traversal and symlink escapes, and be resolved relative to the active
+workspace. Future write-capable modes require a separate design and must not
+be implied by this interface.
+
+### Safety and Execution Model
+
+- Subagents inherit the parent mode and cannot obtain broader filesystem,
+  network, tool, confirmation, or provider permissions.
+- Analyze-mode subagents are read-only and cannot mutate buffers, Memory,
+  Skills, project files, or configuration.
+- Bound task length, input file size, context size, output size, runtime, and
+  concurrent subagent count. Reject invalid limits before starting work.
+- Do not allow unrestricted recursive subagent creation. Either disallow
+  delegation by child agents or enforce a fixed depth of one.
+- Preserve the parent conversation by returning a structured result containing
+  status, findings, diagnostics, and bounded output. Do not inject raw child
+  prompts or untrusted file content as system instructions.
+- Support cancellation and timeout handling. A failed child must produce a
+  bounded error result and must not fail or mutate the parent session.
+- Make approval behavior explicit: read-only analysis may be available in
+  Plan, range, and workspace modes, while any future mutation-capable mode
+  requires the existing Build permissions and confirmation flow.
+- Keep provider credentials and full child transcripts out of normal results
+  unless explicitly requested for debugging.
+
+### Implementation Package
+
+1. Subagent schema, dispatch, lifecycle, timeout, cancellation, and structured
+   result handling.
+2. Safe file selection and inherited mode/permission enforcement.
+3. Context and output budgets, concurrency limits, and recursion prevention.
+4. Parent prompt guidance for when delegation is useful, especially for
+   independent single-file analysis.
+5. Unit tests, mocked-provider integration tests, and documentation.
+
+## Feature 6 and 7 Tests
+
+Add focused tests for:
+
+- autocompaction disabled behavior and configuration validation;
+- context-budget calculation, trigger thresholds, and reserved response space;
+- preservation of system/mode/tool/confirmation state across compaction;
+- bounded summaries, untrusted labeling, repeated-compaction prevention, and
+  deterministic fallback trimming;
+- provider summary failures, over-limit prevention, inspection, clearing, and
+  regeneration of compacted history;
+- subagent schema validation, explicit file selection, path and symlink safety;
+- inherited mode and permission restrictions, read-only enforcement, and
+  blocked mutations;
+- bounded child input/output, timeout, cancellation, concurrency, and depth;
+- structured child failures and parent-context preservation;
+- disabled subagent behavior and mode-specific tool exposure;
+- provider calls being mocked so tests do not require Ollama or API credentials.
+
+Run the repository checks after implementation:
+
+```text
+pytest -q tests/test_codeeditor_tools.py
+python3 -m compileall -q python
+```
+
+Add focused documentation in `doc/vim-ollama.txt`, update `doc/tags`, and add
+a concise README feature summary. Manually verify a long session that crosses
+the compaction threshold and a workspace session delegating analysis of a
+temporary single file.
+
+## Feature 6 Acceptance Criteria
+
+- Context is compacted before provider limits are exceeded when the feature is
+  enabled.
+- Protected task, mode, safety, permission, tool, and confirmation state is
+  preserved across compaction.
+- Summaries and fallback trimming are bounded, labeled, inspectable, and never
+  silently treated as higher-trust instructions.
+- Disabled, failed, or repeated compaction paths do not corrupt the session or
+  send an over-limit request.
+
+## Feature 7 Acceptance Criteria
+
+- The model can delegate bounded read-only analysis of explicitly selected
+  files and receive concise structured results.
+- Subagents cannot bypass parent mode, permissions, path safety, limits, or
+  confirmation requirements.
+- Timeouts, cancellation, provider failures, and invalid requests leave the
+  parent session usable and unchanged.
+- Subagent behavior is independently testable without external services.
+
 ## Overall Acceptance Criteria
 
 - The model can maintain project skills and global memory/user context without
   bypassing existing mode and filesystem restrictions.
 - Documentation and automated tests cover both features.
+- Long sessions remain usable through bounded automatic context compaction.
+- Focused analysis can be delegated without expanding permissions or causing
+  unbounded context, recursion, or resource usage.
