@@ -140,7 +140,7 @@ async def stream_chat_message_ollama(messages, endpoint, model, options, timeout
         messages.append({"role": "assistant", "content": assistant_message.strip()})
 
 
-async def stream_chat_message_openai(messages, endpoint, model, options, credentialname, flag_nothinking):
+async def stream_chat_message_openai(messages, endpoint, model, options, timeout, credentialname, flag_nothinking):
     """Stream chat responses from OpenAI API."""
     # TODO: flag_nothinking Implement nothinking functionality for OpenAI
     if AsyncOpenAI is None:
@@ -232,7 +232,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_nothinking)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, timeout, credentialname, flag_nothinking)
                         )
                     await task
                 else:
@@ -252,7 +252,7 @@ async def main(provider, endpoint, model, options, systemprompt, timeout, creden
                         )
                     else:
                         task = asyncio.create_task(
-                            stream_chat_message_openai(conversation_history, endpoint, model, options, credentialname, flag_nothinking)
+                            stream_chat_message_openai(conversation_history, endpoint, model, options, timeout, credentialname, flag_nothinking)
                         )
                     await task
         except KeyboardInterrupt:
