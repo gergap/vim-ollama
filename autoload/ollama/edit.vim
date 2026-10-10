@@ -454,7 +454,9 @@ function! s:SandboxWrap(command, write_paths, ...) abort
     let l:root = simplify(fnamemodify(g:ollama_edit_cwd, ':p'))
     let l:working_directory = a:0 > 0 ? a:1 : l:root
     let l:command = [l:bwrap, '--die-with-parent', '--new-session', '--unshare-all',
-                \ '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp']
+                \ '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--clearenv',
+                \ '--setenv', 'PATH', '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+                \ '--setenv', 'HOME', '/tmp', '--setenv', 'TMPDIR', '/tmp']
     if get(g:, 'ollama_bwrap_network', v:false)
         call filter(l:command, 'v:val !=# "--unshare-all"')
     endif
