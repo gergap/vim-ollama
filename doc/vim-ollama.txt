@@ -727,7 +727,7 @@ g:ollama_use_claude_md_file
         let g:ollama_use_claude_md_file = v:false
 <
 
-                                                    *g:ollama_enable_memory*
+                                                   *g:ollama_enable_memory*
 g:ollama_enable_memory
     - Description: Enables global Memory/USER.md context and the memory tool
       for OllamaEdit. When false, those files are not accessed.
@@ -735,6 +735,16 @@ g:ollama_enable_memory
     - Example:
 >
         let g:ollama_enable_memory = v:false
+<
+
+                                                  *g:ollama_enable_skills*
+g:ollama_enable_skills
+    - Description: Enables read-only Skills discovery and catalog context for
+      OllamaEdit.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enable_skills = v:false
 <
 
                                                   *g:ollama_quickfix_checkers*

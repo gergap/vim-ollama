@@ -52,6 +52,7 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
   - Fix compiler diagnostics automatically with `:OllamaQuickFix`
   - Keep bounded, user-confirmed global Memory and user context in
     `~/.vim/config/MEMORY.md` and `~/.vim/config/USER.md`
+  - Discover reusable global and project Skills with `find_skill`
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.
@@ -102,6 +103,8 @@ and read-only Git tools. Build mode provides the normal editing workflow.
 Workspace Build mode can also update the optional global Memory and user
 context files after Vim confirmation. See `:help vim-ollama-memory` for limits,
 exact-match updates, and the `g:ollama_enable_memory` feature gate.
+Skills discovery is controlled separately by `g:ollama_enable_skills`; see
+`:help vim-ollama-skills` for skill locations and precedence.
 
 Optionally, it supports using the OpenAI REST API for code completion, chat
 conversations, and code edit tasks. Therefore, you need to create an OpenAI

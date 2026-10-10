@@ -174,6 +174,9 @@ endif
 if !exists('g:ollama_enable_memory')
     let g:ollama_enable_memory = v:true
 endif
+if !exists('g:ollama_enable_skills')
+    let g:ollama_enable_skills = v:true
+endif
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024

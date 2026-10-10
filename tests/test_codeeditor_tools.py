@@ -229,6 +229,45 @@ def test_memory_tool_is_workspace_build_only_and_feature_gated(monkeypatch):
     assert "memory" not in {tool["function"]["name"] for tool in captured_tools}
 
 
+def test_skill_catalog_uses_project_precedence_and_loads_supporting_files(tmp_path):
+    (tmp_path / ".git").mkdir()
+    global_root = tmp_path / "global-skills"
+    project_root = tmp_path / ".skills"
+    global_skill = global_root / "review"
+    project_skill = project_root / "review"
+    global_skill.mkdir(parents=True)
+    project_skill.mkdir(parents=True)
+    (global_skill / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Global review workflow\n---\nGlobal instructions.\n"
+    )
+    (project_skill / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Project review workflow\ntags: [code, review]\n---\nProject instructions.\n"
+    )
+    (project_skill / "checklist.md").write_text("Check tests.\n")
+
+    settings = {"cwd": str(tmp_path), "skills_global_dir": str(global_root)}
+    result = CodeEditor._find_skill(settings, {"name": "review"})
+
+    assert result["ok"]
+    assert result["skill"]["scope"] == "project"
+    assert result["skill"]["description"] == "Project review workflow"
+    assert result["skill"]["supporting_files"] == ["checklist.md"]
+
+
+def test_skill_discovery_rejects_unsafe_names_and_omits_disabled_tool(monkeypatch, tmp_path):
+    with pytest.raises(ValueError, match="safe directory"):
+        CodeEditor._find_skill({"cwd": str(tmp_path)}, {"name": "../escape"})
+
+    captured_tools = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: captured_tools.extend(tools) or {"tool_calls": []})
+    CodeEditor._run_edit("inspect", [], "", {"provider": "ollama", "range_mode": True, "enable_skills": False})
+    assert "find_skill" not in {tool["function"]["name"] for tool in captured_tools}
+
+    captured_tools.clear()
+    CodeEditor._run_edit("inspect", [], "", {"provider": "ollama", "range_mode": True, "enable_skills": True})
+    assert "find_skill" in {tool["function"]["name"] for tool in captured_tools}
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")
