@@ -345,7 +345,8 @@ function! s:ExecuteNextSetupTask()
         call call(l:Task, [])
     else
         " All tasks are completed
-        let s:setup_taks = v:null
+        let s:setup_tasks = v:null
+        let s:current_task = 0
     endif
 endfunction
 
