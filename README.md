@@ -52,7 +52,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
   - Fix compiler diagnostics automatically with `:OllamaQuickFix`
   - Keep bounded, user-confirmed global Memory and user context in
     `~/.vim/config/MEMORY.md` and `~/.vim/config/USER.md`
-  - Discover reusable global and project Skills with `find_skill`
+  - Discover and manage reusable global and project Skills with `find_skill`
+    and `skill_manage` in workspace Build mode
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.

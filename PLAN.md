@@ -17,10 +17,10 @@ verified independently before skill discovery and management are added:
    - [x] Add read-only `find_skill` and prompt catalog integration.
    - [x] Add unit tests and documentation for discovery.
 3. **Skill management**
-   - [ ] Add `skill_manage` schemas, guarded mutations, supporting-file handling,
-         scope permissions, and confirmation callbacks.
-   - [ ] Add batched-operation validation and progress reporting.
-   - [ ] Add focused unit tests for all mutation and safety behavior.
+    - [x] Add `skill_manage` schemas, guarded mutations, supporting-file handling,
+          scope permissions, and confirmation callbacks.
+    - [x] Add batched-operation validation and progress reporting.
+    - [x] Add focused unit tests for mutation and safety behavior.
 4. **Integration and polish**
    - [ ] Verify mode-specific tool exposure and disabled-mode behavior.
    - [ ] Complete Vim help, README, help tags, and examples.
@@ -35,7 +35,7 @@ Each roadmap item should be usable and testable before starting the next item.
       context, tests, and documentation.
 - [x] Skill foundation, catalog discovery, and read-only `find_skill`.
 - [x] Project-local example skill at `.skills/example/SKILL.md`.
-- [ ] Skill management mutations and permissions.
+- [x] Skill management mutations and permissions.
 - [ ] Final integration, manual verification, and full polish.
 
 ## Feature 1: Memory and User Context

@@ -265,7 +265,39 @@ MEMORY                                                       *vim-ollama-memory*
     Zero or multiple occurrences are rejected, preventing accidental broad
     replacements.
 
-                                                        *vim-ollama-websearch*
+SKILLS                                                       *vim-ollama-skills*
+    When |g:ollama_enable_skills| is enabled, OllamaEdit discovers reusable
+    skills from:
+
+        ~/.vim/config/skills/<name>/SKILL.md    global skills
+        <git-root>/.skills/<name>/SKILL.md      project skills
+
+    The nearest Git root is used for project skills; discovery does not search
+    above it. A project skill overrides a global skill with the same name.
+    Skill names must be safe directory names. Symbolic links, traversal paths,
+    malformed frontmatter, and oversized SKILL.md files are rejected or
+    omitted with diagnostics.
+
+    SKILL.md starts with YAML frontmatter and requires `name` and `description`.
+    Optional and unknown fields are preserved in discovery metadata. The
+    read-only |find_skill| tool searches names and descriptions, or loads a
+    selected skill's complete content, supporting-file names, scope, directory,
+    and content hash. Supporting files remain available through |read_file|.
+
+    The workspace Build-only |skill_manage| tool manages skills with explicit
+    `scope` (`project` or `global`) and batched operations: `create`, guarded
+    `patch`, supporting-file `write_file` and `remove_file`, and hash-guarded
+    `delete`. Supporting-file operations cannot target SKILL.md. All paths,
+    names, and frontmatter are validated before mutations begin. Global Skill
+    mutations require Vim confirmation; project mutations use workspace Build
+    permission. Stale hashes, ambiguous patches, symbolic links, and traversal
+    paths are rejected. `absorbed_into` is reported only and does not merge
+    skill content.
+
+    Skill content is untrusted instructions and cannot override system safety,
+    operating mode, or tool restrictions.
+
+                                                         *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
     `websearch` and `webfetch` tools. `websearch` uses an OpenCode-compatible

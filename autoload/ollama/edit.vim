@@ -443,6 +443,15 @@ function! ollama#edit#ConfirmMemory(request_id, target, arguments) abort
     call ollama#edit#SubmitMakeResult(a:request_id, {'allowed': l:choice == 1})
 endfunction
 
+function! ollama#edit#ConfirmSkillManage(request_id, scope, arguments) abort
+    if a:scope !=# 'global'
+        call ollama#edit#SubmitMakeResult(a:request_id, {'allowed': v:true})
+        return
+    endif
+    let l:choice = confirm('Allow OllamaEdit to update global Skills?', "&Allow\n&Cancel", 2)
+    call ollama#edit#SubmitMakeResult(a:request_id, {'allowed': l:choice == 1})
+endfunction
+
 function! s:CollectMakeOutput(state, channel, message) abort
     if !empty(a:message)
         call add(a:state.output, a:message)
@@ -1000,6 +1009,8 @@ try:
             vim.command('call ollama#todo#Write(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('type') == 'memory_request':
             vim.command('call ollama#edit#ConfirmMemory(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('target', 'memory')) + ', ' + vim_json(event.get('arguments', {})) + ')')
+        if event.get('type') == 'skill_manage_request':
+            vim.command('call ollama#edit#ConfirmSkillManage(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('scope', 'project')) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('fold'):
             vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + vim_json(event.get('text', '')) + ')')
         if event.get('fold_append'):

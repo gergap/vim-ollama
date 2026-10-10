@@ -268,6 +268,46 @@ def test_skill_discovery_rejects_unsafe_names_and_omits_disabled_tool(monkeypatc
     assert "find_skill" in {tool["function"]["name"] for tool in captured_tools}
 
 
+def test_skill_manage_guards_patches_supporting_files_and_delete(tmp_path):
+    (tmp_path / ".git").mkdir()
+    settings = {"cwd": str(tmp_path), "skills_global_dir": str(tmp_path / "global")}
+    create = {"scope": "project", "operations": [{
+        "action": "create", "name": "demo", "content":
+        "---\nname: demo\ndescription: Demo skill\n---\nUse it.\n",
+    }]}
+    result = CodeEditor._apply_skill_manage(create, settings)
+    assert result["ok"]
+    skill_path = tmp_path / ".skills" / "demo" / "SKILL.md"
+    old_hash = __import__("hashlib").sha256(skill_path.read_bytes()).hexdigest()
+
+    CodeEditor._apply_skill_manage({"scope": "project", "operations": [{
+        "action": "patch", "name": "demo", "old_string": "Use it.", "new_string": "Use it carefully.",
+    }]}, settings)
+    CodeEditor._apply_skill_manage({"scope": "project", "operations": [{
+        "action": "write_file", "name": "demo", "file_path": "notes.txt", "file_content": "Check tests.\n",
+    }]}, settings)
+    with pytest.raises(ValueError, match="stale"):
+        CodeEditor._apply_skill_manage({"scope": "project", "operations": [{
+            "action": "patch", "name": "demo", "content": "bad", "expected_hash": old_hash,
+        }]}, settings)
+    CodeEditor._apply_skill_manage({"scope": "project", "operations": [{
+        "action": "delete", "name": "demo",
+        "expected_hash": __import__("hashlib").sha256(skill_path.read_bytes()).hexdigest(),
+        "absorbed_into": "other",
+    }]}, settings)
+    assert not skill_path.parent.exists()
+
+
+def test_skill_manage_is_only_exposed_in_workspace_build(monkeypatch):
+    captured_tools = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: captured_tools.extend(tools) or {"tool_calls": []})
+    CodeEditor._run_edit("plan", [], "", {"provider": "ollama", "range_mode": False, "mode": "plan", "enable_skills": True})
+    assert "skill_manage" not in {tool["function"]["name"] for tool in captured_tools}
+    captured_tools.clear()
+    CodeEditor._run_edit("build", [], "", {"provider": "ollama", "range_mode": False, "enable_skills": True})
+    assert "skill_manage" in {tool["function"]["name"] for tool in captured_tools}
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")

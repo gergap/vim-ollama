@@ -187,6 +187,42 @@ SKILL_TOOLS = [
     },
 ]
 
+SKILL_MANAGE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_manage",
+            "description": "Create, patch, update supporting files, or delete skills. Mutations require workspace Build mode, explicit scope, and guards; global changes require Vim confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {"type": "string", "enum": ["project", "global"]},
+                    "operations": {"type": "array", "minItems": 1, "maxItems": 32, "items": {
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["create", "patch", "write_file", "remove_file", "delete"]},
+                            "name": {"type": "string"},
+                            "content": {"type": "string"},
+                            "old_string": {"type": "string"},
+                            "new_string": {"type": "string"},
+                            "file_path": {"type": "string"},
+                            "file_content": {"type": "string"},
+                            "replace_all": {"type": "boolean"},
+                            "expected_hash": {"type": "string"},
+                            "category": {"type": "string"},
+                            "absorbed_into": {"type": "string"},
+                        },
+                        "required": ["action", "name"],
+                        "additionalProperties": False,
+                    }},
+                },
+                "required": ["scope", "operations"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 FILE_LINE_TOOLS = [
     {
         "type": "function",
@@ -612,6 +648,7 @@ TOOLS = BUFFER_TOOLS + TODO_TOOLS + MEMORY_TOOLS + FILE_TOOLS + EXTRACT_TOOLS + 
 TODO_TOOL_NAMES = {tool["function"]["name"] for tool in TODO_TOOLS}
 MEMORY_TOOL_NAMES = {tool["function"]["name"] for tool in MEMORY_TOOLS}
 SKILL_TOOL_NAMES = {tool["function"]["name"] for tool in SKILL_TOOLS}
+SKILL_MANAGE_TOOL_NAMES = {tool["function"]["name"] for tool in SKILL_MANAGE_TOOLS}
 BUFFER_TOOL_NAMES = {tool["function"]["name"] for tool in BUFFER_TOOLS}
 FILE_LINE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_LINE_TOOLS}
 FILE_TOOL_NAMES = {tool["function"]["name"] for tool in FILE_TOOLS}
@@ -1001,6 +1038,238 @@ def _skill_catalog_prompt(settings):
     entries = [f"- {skill['name']} ({skill['scope']}): {skill['description']}"
                for skill in sorted(catalog.values(), key=lambda item: item["name"])]
     return "Available Skills (load on demand with find_skill; project skills override global skills):\n" + "\n".join(entries)
+
+
+def _skill_scope_root(scope, settings):
+    if scope not in ("project", "global"):
+        raise ValueError("skill scope must be 'project' or 'global'")
+    for current_scope, root in _skill_roots(settings):
+        if current_scope == scope:
+            return root
+    raise ValueError("project skills require a Git repository")
+
+
+def _skill_file_path(skill_dir, value, allow_skill=False):
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError("skill file_path must be a non-empty relative path")
+    normalized = value.replace("\\", "/")
+    if normalized.startswith("/") or ntpath.isabs(normalized) or any(part in ("", ".", "..") for part in normalized.split("/")):
+        raise ValueError("skill file_path must stay inside the skill directory")
+    if not allow_skill and normalized == "SKILL.md":
+        raise ValueError("supporting-file operations cannot target SKILL.md")
+    candidate = os.path.realpath(os.path.join(skill_dir, *normalized.split("/")))
+    if os.path.commonpath([os.path.realpath(skill_dir), candidate]) != os.path.realpath(skill_dir):
+        raise ValueError("skill file_path must stay inside the skill directory")
+    current = skill_dir
+    for part in normalized.split("/")[:-1]:
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            raise ValueError("symbolic-link directories are not allowed in skills")
+    if os.path.islink(candidate):
+        raise ValueError("skill files must not be symbolic links")
+    return candidate
+
+
+def _skill_text_bytes(value, field):
+    if not isinstance(value, str) or "\x00" in value:
+        raise ValueError(f"{field} must be valid UTF-8 text")
+    raw = value.encode("utf-8")
+    if len(raw) > MAX_SKILL_BYTES:
+        raise ValueError(f"{field} exceeds the {MAX_SKILL_BYTES // 1024} KiB limit")
+    return raw
+
+
+def _skill_with_category(content, category):
+    if category is None:
+        return content
+    if not isinstance(category, str) or not category.strip() or "\n" in category or "\r" in category:
+        raise ValueError("skill category must be a non-empty single-line string")
+    lines = content.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError("skill category requires valid SKILL.md frontmatter")
+    closing = next((index for index, line in enumerate(lines[1:], 1) if line.strip() == "---"), None)
+    if closing is None:
+        raise ValueError("skill frontmatter is not closed")
+    for index in range(1, closing):
+        if lines[index].startswith("category:"):
+            lines[index] = f"category: {category}"
+            return "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+    lines.insert(closing, f"category: {category}")
+    return "\n".join(lines) + ("\n" if content.endswith("\n") else "")
+
+
+def _skill_read_bytes(path):
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise ValueError("skill path must be a regular non-symbolic-link file")
+    if os.path.getsize(path) > MAX_SKILL_BYTES:
+        raise ValueError("skill file exceeds the size limit")
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def _skill_validate_document(raw):
+    content = raw.decode("utf-8")
+    _parse_skill_frontmatter(content)
+    return content
+
+
+def _skill_manage_plan(arguments, settings):
+    if not isinstance(arguments, dict):
+        raise ValueError("skill_manage requires an argument object")
+    scope = arguments.get("scope")
+    root = _skill_scope_root(scope, settings)
+    operations = arguments.get("operations")
+    if not isinstance(operations, list) or not operations or len(operations) > MAX_MEMORY_OPERATIONS:
+        raise ValueError(f"skill_manage operations must contain 1-{MAX_MEMORY_OPERATIONS} items")
+    if os.path.exists(root) and os.path.islink(root):
+        raise ValueError("skill root must not be a symbolic link")
+    plan = []
+    seen = set()
+    for operation in operations:
+        if not isinstance(operation, dict) or operation.get("action") not in ("create", "patch", "write_file", "remove_file", "delete"):
+            raise ValueError("invalid skill_manage operation")
+        action = operation["action"]
+        name = _safe_skill_name(operation.get("name"))
+        skill_dir = os.path.join(root, name)
+        if os.path.islink(skill_dir):
+            raise ValueError(f"skill directory is a symbolic link: {name}")
+        if action == "create":
+            if os.path.exists(skill_dir):
+                raise ValueError(f"skill already exists: {name}")
+            content = _skill_with_category(operation.get("content"), operation.get("category"))
+            raw = _skill_text_bytes(content, "skill content")
+            _skill_validate_document(raw)
+            plan.append({"action": action, "name": name, "skill_dir": skill_dir, "raw": raw})
+            continue
+        if not os.path.isdir(skill_dir):
+            raise ValueError(f"skill does not exist: {name}")
+        skill_path = os.path.join(skill_dir, "SKILL.md")
+        if action == "delete":
+            current = _skill_read_bytes(skill_path)
+            expected = operation.get("expected_hash")
+            if not isinstance(expected, str) or hashlib.sha256(current).hexdigest() != expected:
+                raise ValueError(f"stale or missing expected_hash for skill: {name}")
+            plan.append({"action": action, "name": name, "skill_dir": skill_dir,
+                         "expected_hash": expected, "absorbed_into": operation.get("absorbed_into")})
+            continue
+        if action == "patch":
+            file_path = operation.get("file_path", "SKILL.md")
+            target = _skill_file_path(skill_dir, file_path, allow_skill=True)
+            current = _skill_read_bytes(target)
+            if "old_string" in operation:
+                old = operation.get("old_string")
+                new = operation.get("new_string", "")
+                _skill_text_bytes(old, "old_string")
+                _skill_text_bytes(new, "new_string")
+                text = current.decode("utf-8")
+                count = text.count(old)
+                if count == 0 or (count > 1 and not operation.get("replace_all", False)):
+                    raise ValueError("patch old_string must match exactly once unless replace_all is true")
+                updated = text.replace(old, new) if operation.get("replace_all", False) else text.replace(old, new, 1)
+            else:
+                if file_path != "SKILL.md" or not isinstance(operation.get("expected_hash"), str):
+                    raise ValueError("full SKILL.md patch requires expected_hash")
+                if hashlib.sha256(current).hexdigest() != operation["expected_hash"]:
+                    raise ValueError(f"stale expected_hash for skill: {name}")
+                updated = operation.get("content")
+            raw = _skill_text_bytes(updated, "patched content")
+            if file_path == "SKILL.md":
+                _skill_validate_document(raw)
+            plan.append({"action": action, "name": name, "skill_dir": skill_dir,
+                         "target": target, "raw": raw})
+            continue
+        file_path = _skill_file_path(skill_dir, operation.get("file_path"), allow_skill=False)
+        if action == "write_file":
+            if os.path.exists(file_path):
+                raise ValueError(f"supporting file already exists: {operation['file_path']}")
+            raw = _skill_text_bytes(operation.get("file_content"), "file_content")
+            plan.append({"action": action, "name": name, "skill_dir": skill_dir, "target": file_path, "raw": raw})
+        else:
+            if not os.path.isfile(file_path):
+                raise ValueError(f"supporting file does not exist: {operation['file_path']}")
+            _skill_read_bytes(file_path)
+            plan.append({"action": action, "name": name, "skill_dir": skill_dir, "target": file_path})
+        seen.add(file_path)
+    return scope, plan
+
+
+def _atomic_skill_write(path, raw):
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".ollama-skill-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _apply_skill_manage(arguments, settings):
+    scope, plan = _skill_manage_plan(arguments, settings)
+    backup_root = tempfile.mkdtemp(prefix=".ollama-skill-backup-")
+    backups = {}
+    try:
+        for item in plan:
+            directory = item["skill_dir"]
+            if directory not in backups and os.path.exists(directory):
+                backup = os.path.join(backup_root, str(len(backups)))
+                shutil.copytree(directory, backup, symlinks=True)
+                backups[directory] = backup
+            elif directory not in backups:
+                backups[directory] = None
+        results = []
+        for item in plan:
+            action = item["action"]
+            if action == "create":
+                os.makedirs(item["skill_dir"], mode=0o700)
+                _atomic_skill_write(os.path.join(item["skill_dir"], "SKILL.md"), item["raw"])
+            elif action == "delete":
+                shutil.rmtree(item["skill_dir"])
+            elif action == "remove_file":
+                os.unlink(item["target"])
+            else:
+                _atomic_skill_write(item["target"], item["raw"])
+            result = {"action": action, "name": item["name"], "ok": True}
+            if action == "delete" and item.get("absorbed_into") is not None:
+                result["absorbed_into"] = item["absorbed_into"]
+            results.append(result)
+        return {"ok": True, "message": f"applied {len(results)} skill operation(s)", "results": results}
+    except Exception:
+        for directory in backups:
+            if os.path.exists(directory) or os.path.islink(directory):
+                if os.path.isdir(directory) and not os.path.islink(directory):
+                    shutil.rmtree(directory)
+                else:
+                    os.unlink(directory)
+            backup = backups[directory]
+            if backup:
+                shutil.copytree(backup, directory, symlinks=True)
+        raise
+    finally:
+        shutil.rmtree(backup_root, ignore_errors=True)
+
+
+def _request_skill_manage(arguments, settings):
+    scope, _plan = _skill_manage_plan(arguments, settings)
+    request_id = str(uuid.uuid4())
+    with g_make_condition:
+        g_make_results[request_id] = None
+    _progress("Waiting for skill update confirmation", type="skill_manage_request", request_id=request_id,
+              arguments=arguments, scope=scope)
+    with g_make_condition:
+        while g_make_results[request_id] is None:
+            if g_cancel_event.is_set():
+                g_make_results.pop(request_id, None)
+                raise EditCancelled("edit cancelled by user")
+            g_make_condition.wait(0.2)
+        decision = g_make_results.pop(request_id)
+    if scope == "global" and (not isinstance(decision, dict) or not decision.get("allowed")):
+        return {"ok": False, "message": "skill update cancelled by user", "cancelled": True}
+    return _apply_skill_manage(arguments, settings)
 
 
 def _request_make(arguments):
@@ -2170,6 +2439,8 @@ def _run_edit(request, code, filetype, settings):
             tools = [tool for tool in tools if tool["function"]["name"] != "vim-check"]
     if skills_enabled:
         tools = tools + SKILL_TOOLS
+        if mode == "build" and not range_mode:
+            tools = tools + SKILL_MANAGE_TOOLS
     if previous_messages:
         messages = list(previous_messages)
         system_prompt = _system_prompt(settings)
@@ -2264,13 +2535,17 @@ def _run_edit(request, code, filetype, settings):
                     if not skills_enabled:
                         raise ValueError("find_skill is disabled")
                     result = _find_skill(settings, arguments)
+                elif name in SKILL_MANAGE_TOOL_NAMES:
+                    if not skills_enabled or mode != "build" or range_mode:
+                        raise ValueError("skill_manage requires workspace Build mode with Skills enabled")
+                    result = _request_skill_manage(arguments, settings)
                 elif settings.get("range_mode", True) and name in FILE_TOOL_NAMES | EXTRACT_TOOL_NAMES:
                     raise ValueError("filesystem tools are not allowed during a range edit")
                 if not settings.get("range_mode", True) and name in BUFFER_TOOL_NAMES:
                     raise ValueError("buffer edit tools require an editable range")
                 if settings.get("range_mode", True) and name in GIT_TOOL_NAMES - GIT_READ_TOOL_NAMES:
                     raise ValueError("Git write tools are not allowed during a range edit")
-                if name in MEMORY_TOOL_NAMES or name in SKILL_TOOL_NAMES:
+                if name in MEMORY_TOOL_NAMES or name in SKILL_TOOL_NAMES or name in SKILL_MANAGE_TOOL_NAMES:
                     pass
                 elif name in MAKE_TOOL_NAMES:
                     result = _request_make(arguments)
@@ -2285,7 +2560,7 @@ def _run_edit(request, code, filetype, settings):
                 else:
                     result = apply_tool(document, name, arguments, settings.get("cwd"), settings.get("extract_max_size"))
                 _check_cancelled()
-                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES and name not in TODO_TOOL_NAMES and name not in MEMORY_TOOL_NAMES and name not in SKILL_TOOL_NAMES:
+                if name not in INSPECTION_TOOL_NAMES and name not in WEB_TOOL_NAMES and name not in EXTRACT_TOOL_NAMES and name not in MAKE_TOOL_NAMES and name not in CHECK_TOOL_NAMES and name not in EXECUTE_TOOL_NAMES and name not in GIT_TOOL_NAMES and name not in TODO_TOOL_NAMES and name not in MEMORY_TOOL_NAMES and name not in SKILL_TOOL_NAMES and name not in SKILL_MANAGE_TOOL_NAMES:
                     operation = {"tool": name, "arguments": arguments}
                     operations.append(operation)
                 details = {
