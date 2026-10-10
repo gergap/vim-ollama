@@ -19,6 +19,7 @@ let s:spinner_frame = 0
 let s:spinner_text = ''
 let s:spinner_line = 0
 let s:spinner_start = []
+let s:resume_conversation_insert = v:false
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -889,6 +890,13 @@ function! ollama#edit#EditCodeDone(status, ...) abort
     call s:CloseProgress()
     let g:edit_in_progress = 0
 
+    if s:resume_conversation_insert && bufexists(s:conversation_bufnr)
+        let s:resume_conversation_insert = v:false
+        if win_gotoid(s:conversation_winid)
+            startinsert
+        endif
+    endif
+
     if a:status ==# 'Done'
         echo 'OllamaEdit completed.'
     elseif a:status ==# 'Cancelled'
@@ -909,6 +917,8 @@ function! ollama#edit#PromptEntered(text) abort
     if get(b:, 'ollama_internal_update', v:false)
         return
     endif
+    let s:resume_conversation_insert = v:true
+    stopinsert
     let l:history = get(b:, 'ollama_edit_prompt_history', [])
     if empty(l:history) || l:history[-1] !=# a:text
         call add(l:history, a:text)
