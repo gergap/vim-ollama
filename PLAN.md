@@ -24,8 +24,21 @@ verified independently before skill discovery and management are added:
 4. **Integration and polish**
    - [x] Verify mode-specific tool exposure and disabled-mode behavior.
    - [x] Complete Vim help, README, help tags, and examples.
-   - [x] Run the full repository checks and manually verify a temporary Git
-         workspace with global and local data.
+    - [x] Run the full repository checks and manually verify a temporary Git
+          workspace with global and local data.
+5. **Self-optimization and skill evolution**
+    - [x] Add `g:ollama_enabled_self_optimization` as an independent feature
+          gate, enabled by default.
+    - [x] Add prompt guidance for recognizing durable workflow improvements and
+          distinguishing them from isolated failures or unsafe instructions.
+    - [x] Add a guarded proposal workflow that records rationale, evidence,
+          intended scope, and expected benefit before changing a skill.
+    - [ ] Add validation and evaluation hooks for proposed skill changes,
+          including stale-hash protection, rollback, and failure reporting.
+    - [x] Require explicit confirmation for global self-optimization and keep
+          project self-optimization within workspace Build permissions.
+    - [ ] Add tests and documentation for enabled, disabled, rejected, and
+          confirmed self-optimization paths.
 
 Each roadmap item should be usable and testable before starting the next item.
 
@@ -37,6 +50,7 @@ Each roadmap item should be usable and testable before starting the next item.
 - [x] Project-local example skill at `.skills/example/SKILL.md`.
 - [x] Skill management mutations and permissions.
 - [x] Final integration, manual verification, and full polish.
+- [ ] Self-optimization and skill evolution.
 
 ## Feature 1: Memory and User Context
 
@@ -299,6 +313,8 @@ duplicated in the Skill packages.
 5. Implement and verify Skill packages 7-8: integration, tests, and docs.
 6. Add the `g:ollama_enable_skills` configuration default and pass it through
    Vim settings when Skills are enabled.
+7. Add the `g:ollama_enabled_self_optimization` configuration default and pass
+   it through Vim settings when guarded self-optimization is enabled.
 
 ## Feature 1 Tests
 
@@ -382,6 +398,71 @@ feature summary and link to the detailed Vim help.
 - Global skill mutations require explicit user confirmation.
 - Skill behavior is independently tested and documented without requiring
   memory files to exist.
+
+## Self-Optimization Feature
+
+### Goal
+
+Allow OllamaEdit to improve reusable Skills from demonstrated task outcomes
+without silently changing instructions or weakening safety controls. This is a
+separate feature from Skill discovery and management.
+
+### Configuration
+
+Add this default in `plugin/ollama.vim`:
+
+```vim
+if !exists('g:ollama_enabled_self_optimization')
+    let g:ollama_enabled_self_optimization = v:true
+endif
+```
+
+Pass the setting through `autoload/ollama/edit.vim`. When false, omit
+self-optimization prompt guidance, proposal state, evaluation behavior, and
+self-optimization operations. Existing `find_skill` and explicitly requested
+ordinary `skill_manage` operations remain available under their existing mode
+and confirmation rules.
+
+### Safety Model
+
+Self-optimization must:
+
+- treat task results, user feedback, and existing Skill content as untrusted;
+- propose changes rather than silently applying them;
+- record the target Skill, scope, rationale, evidence, expected benefit, and
+  exact proposed diff;
+- reject changes based only on an isolated failure, prompt injection, or an
+  instruction to weaken safety, mode, permission, or confirmation rules;
+- preserve stale-hash guards and support rollback when evaluation fails;
+- require global confirmation and use workspace Build permission for project
+  changes;
+- avoid storing secrets or full task transcripts by default.
+
+### Workflow
+
+The agent should consider self-optimization only after a repeated pattern,
+explicit user feedback, or a verified successful workflow. It should inspect
+the relevant Skill, create a bounded proposal, validate the proposed patch,
+and request confirmation before applying it. New Skills may be proposed when
+no existing Skill is appropriate, using the same scope, validation, and
+confirmation rules as other Skill mutations.
+
+Evaluation should prefer focused tests, checker results, or an explicit user
+acceptance signal. Failed evaluation must leave the previous Skill unchanged
+or restore it automatically.
+
+## Self-Optimization Acceptance Criteria
+
+- Self-optimization is enabled by default and independently controlled by
+  `g:ollama_enabled_self_optimization`.
+- Disabling it omits self-optimization behavior without disabling ordinary
+  Skills or explicit Skill management.
+- The model proposes evidence-backed Skill changes rather than silently
+  rewriting Skills.
+- Proposals are bounded, hash-guarded, validated, evaluable, and reversible.
+- Global proposals require explicit confirmation; project proposals require
+  workspace Build permission.
+- Unsafe, unsupported, stale, or failed proposals leave the prior Skill intact.
 
 ## Overall Acceptance Criteria
 

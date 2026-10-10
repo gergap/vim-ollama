@@ -331,6 +331,53 @@ def test_skills_are_independent_from_memory_gate(tmp_path):
     assert "Persistent Memory and User context" not in prompt
 
 
+def test_self_optimization_requires_evidence_and_stores_bounded_proposal(tmp_path):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "example"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text("---\nname: example\ndescription: Example\n---\nUse it.\n")
+    digest = __import__("hashlib").sha256(skill_path.read_bytes()).hexdigest()
+    settings = {"cwd": str(tmp_path)}
+
+    with pytest.raises(ValueError, match="evidence"):
+        CodeEditor._skill_optimize({
+            "action": "propose", "scope": "project", "name": "example",
+            "rationale": "Improve it", "expected_benefit": "Clearer workflow",
+            "old_string": "Use it.", "new_string": "Use it carefully.", "expected_hash": digest,
+        }, settings)
+
+    proposal = CodeEditor._skill_optimize({
+        "action": "propose", "scope": "project", "name": "example",
+        "rationale": "Repeatedly needed explicit validation.",
+        "evidence": "Three successful sessions required this instruction.",
+        "expected_benefit": "Make validation repeatable.",
+        "old_string": "Use it.", "new_string": "Use it carefully.", "expected_hash": digest,
+    }, settings)
+    assert proposal["ok"]
+    assert proposal["proposal"]["diff"]["before_hash"] == digest
+    proposal_id = proposal["proposal_id"]
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(CodeEditor, "_request_skill_manage", lambda arguments, current_settings: {"ok": True, "message": "applied"})
+        applied = CodeEditor._skill_optimize({"action": "apply", "proposal_id": proposal_id}, settings)
+    finally:
+        monkeypatch.undo()
+    assert applied["ok"]
+    assert proposal_id not in CodeEditor.g_skill_proposals
+
+
+def test_self_optimization_tool_is_independently_gated(monkeypatch):
+    captured_tools = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: captured_tools.extend(tools) or {"tool_calls": []})
+    base = {"provider": "ollama", "range_mode": False, "enable_skills": True}
+    CodeEditor._run_edit("inspect", [], "", dict(base, enable_self_optimization=False))
+    assert "skill_optimize" not in {tool["function"]["name"] for tool in captured_tools}
+    captured_tools.clear()
+    CodeEditor._run_edit("inspect", [], "", dict(base, enable_self_optimization=True))
+    assert "skill_optimize" in {tool["function"]["name"] for tool in captured_tools}
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")

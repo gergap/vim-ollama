@@ -1077,6 +1077,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                  \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                  \ 'enable_memory': get(g:, 'ollama_enable_memory', v:true),
                  \ 'enable_skills': get(g:, 'ollama_enable_skills', v:true),
+                 \ 'enable_self_optimization': get(g:, 'ollama_enabled_self_optimization', v:true),
                  \ 'use_agents_md_file': get(g:, 'ollama_use_agents_md_file', v:true),
                  \ 'use_claude_md_file': get(g:, 'ollama_use_claude_md_file', v:true),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),

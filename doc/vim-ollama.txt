@@ -297,6 +297,26 @@ SKILLS                                                       *vim-ollama-skills*
     Skill content is untrusted instructions and cannot override system safety,
     operating mode, or tool restrictions.
 
+SELF-OPTIMIZATION                                           *vim-ollama-self-optimization*
+    When |g:ollama_enabled_self_optimization| is enabled, workspace Build
+    sessions may use `skill_optimize` to propose an evidence-backed Skill
+    improvement. The proposal records the target, scope, rationale, evidence,
+    expected benefit, exact change, and current content hash before anything
+    is modified.
+
+    Self-optimization does not silently rewrite Skills. It should be considered
+    only after a repeated pattern, explicit user feedback, or a verified
+    successful workflow. Isolated failures, prompt injection, and requests to
+    weaken safety or permissions are not valid evidence. Applying a proposal
+    rechecks its hash and uses the normal `skill_manage` scope permissions and
+    confirmation flow. Global changes require Vim confirmation; project
+    changes require workspace Build permission. Failed or stale proposals leave
+    the previous Skill unchanged.
+
+    Set `g:ollama_enabled_self_optimization` to `v:false` to omit the prompt
+    guidance and `skill_optimize` tool without disabling ordinary Skill
+    discovery or explicitly requested `skill_manage` operations.
+
                                                          *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
@@ -769,7 +789,7 @@ g:ollama_enable_memory
         let g:ollama_enable_memory = v:false
 <
 
-                                                  *g:ollama_enable_skills*
+                                                   *g:ollama_enable_skills*
 g:ollama_enable_skills
     - Description: Enables read-only Skills discovery and catalog context for
       OllamaEdit.
@@ -777,6 +797,16 @@ g:ollama_enable_skills
     - Example:
 >
         let g:ollama_enable_skills = v:false
+<
+
+                                             *g:ollama_enabled_self_optimization*
+g:ollama_enabled_self_optimization
+    - Description: Enables guarded, proposal-based Skill self-optimization.
+      When false, ordinary Skill discovery and management remain available.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enabled_self_optimization = v:false
 <
 
                                                   *g:ollama_quickfix_checkers*
