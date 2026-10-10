@@ -34,6 +34,7 @@ let s:help_text = {
 \ 'ollama_edit_provider': 'Provider for edit tasks: "ollama" or "openai".',
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
+\ 'ollama_plan_websearch': 'Allow websearch in Plan mode (default=v:true).',
 \ 'ollama_use_agents_md_file': 'Use AGENTS.md project instructions for OllamaEdit (default=v:true).',
 \ 'ollama_use_claude_md_file': 'Use CLAUDE.md project instructions for OllamaEdit (default=v:true).',
 \ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',

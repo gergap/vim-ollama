@@ -690,7 +690,17 @@ g:ollama_use_claude_md_file
         let g:ollama_use_claude_md_file = v:false
 <
 
-                                                  *g:ollama_quickfix_checkers*
+                                                  *g:ollama_plan_websearch*
+g:ollama_plan_websearch
+    - Description: Controls whether OllamaEdit Plan mode may use the
+      `websearch` tool. Project inspection and `webfetch` remain available.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_plan_websearch = v:false
+<
+
+                                                   *g:ollama_quickfix_checkers*
 g:ollama_quickfix_checkers
     - Description: Configures checker commands used by `:OllamaQuickFix` for
       non-compiled filetypes. Each entry contains a command list and optional

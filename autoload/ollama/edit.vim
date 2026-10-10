@@ -1110,6 +1110,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
                 \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
                 \ 'mode': get(g:, 'ollama_edit_mode', 'build'),
+                \ 'plan_websearch': get(g:, 'ollama_plan_websearch', v:true),
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),
                 \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
                 \ }

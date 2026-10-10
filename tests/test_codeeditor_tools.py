@@ -212,7 +212,9 @@ def test_replace_lines_accepts_multiline_string_arguments(monkeypatch):
 
 
 def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
-    (tmp_path / "AGENTS.md").write_text("Use the project style.")
+    (tmp_path / "AGENTS.md").write_text(
+        "Use the project style.\nOPENAI_API_KEY=not-a-token\n"
+    )
 
     settings = {
         "cwd": str(tmp_path),
@@ -228,6 +230,8 @@ def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
 
     assert "Working directory:" in system
     assert "Use the project style." in system
+    assert "not-a-token" not in system
+    assert "OPENAI_API_KEY=<REDACTED>" in system
     assert "Use the todowrite tool for non-trivial tasks" in system
     assert "Only one item should be in_progress at a time." in system
     assert "Complete all applicable todo items before finishing the response." in system
@@ -382,6 +386,28 @@ def test_plan_mode_exposes_only_read_tools(monkeypatch):
     assert "Plan mode" in messages[0]["content"]
     assert "If asked to create or modify files, deny the request" in messages[0]["content"]
     assert "If asked to create or modify files, deny the request" in messages[1]["content"]
+
+
+def test_plan_mode_can_disable_websearch(monkeypatch):
+    responses = iter([{"tool_calls": []}])
+    captured_tools = []
+
+    def request(messages, settings, tools):
+        captured_tools.extend(tools)
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    _operations, messages = CodeEditor._run_edit(
+        "plan the change", [], "", {
+            "provider": "ollama", "range_mode": False, "mode": "plan",
+            "plan_websearch": False,
+        }
+    )
+
+    names = {tool["function"]["name"] for tool in captured_tools}
+    assert "websearch" not in names
+    assert "webfetch" in names
+    assert "websearch tool is disabled" in messages[0]["content"]
 
 
 def test_plan_mode_rejects_write_tool_calls(monkeypatch):

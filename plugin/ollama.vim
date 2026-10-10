@@ -171,6 +171,9 @@ endif
 if !exists('g:ollama_edit_mode')
     let g:ollama_edit_mode = 'build'
 endif
+if !exists('g:ollama_plan_websearch')
+    let g:ollama_plan_websearch = v:true
+endif
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024
