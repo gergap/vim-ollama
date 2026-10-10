@@ -12,15 +12,18 @@ import json
 import glob as glob_module
 import html
 from html.parser import HTMLParser
+import ipaddress
 import ntpath
 import os
 import re
 import shutil
+import socket
 import stat
 import subprocess
 import tarfile
 import threading
 import uuid
+from urllib.parse import urljoin, urlsplit
 import zipfile
 
 import requests
@@ -1043,12 +1046,46 @@ class _HTMLContentParser(HTMLParser):
         return re.sub(r"\s+", " ", text).strip()
 
 
+MAX_WEB_REDIRECTS = 5
+
+
+def _validate_web_url(url):
+    """Reject URLs that can reach local, private, or otherwise special hosts."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("URL must use http:// or https:// and include a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("URL credentials are not allowed")
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as error:
+        raise ValueError("URL has an invalid port") from error
+
+    try:
+        addresses = {
+            info[4][0]
+            for info in socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
+        }
+    except OSError as error:
+        raise ValueError("URL host could not be resolved") from error
+    if not addresses:
+        raise ValueError("URL host could not be resolved")
+    for address in addresses:
+        try:
+            resolved = ipaddress.ip_address(address)
+        except ValueError as error:
+            raise ValueError("URL host resolved to an invalid address") from error
+        if not resolved.is_global:
+            raise ValueError("URL host resolves to a private or special address")
+    return parsed.geturl()
+
+
 def _webfetch(arguments):
     if not isinstance(arguments, dict):
         raise ValueError("webfetch requires an argument object")
     url = arguments.get("url")
-    if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
-        raise ValueError("URL must start with http:// or https://")
+    if not isinstance(url, str):
+        raise ValueError("URL must be an http:// or https:// URL")
     output_format = arguments.get("format", "markdown")
     if output_format not in {"text", "markdown", "html"}:
         raise ValueError("webfetch format must be text, markdown, or html")
@@ -1066,16 +1103,40 @@ def _webfetch(arguments):
         headers["Accept"] = "text/plain, text/markdown, text/html, */*;q=0.1"
     else:
         headers["Accept"] = "text/html, application/xhtml+xml, text/plain, text/markdown, */*;q=0.1"
-    response = requests.get(url, headers=headers, timeout=timeout, stream=True)
-    response.raise_for_status()
-    content_length = response.headers.get("Content-Length")
-    if content_length and int(content_length) > 5 * 1024 * 1024:
-        raise ValueError("Response too large (exceeds 5MB limit)")
-    body = response.content
-    if len(body) > 5 * 1024 * 1024:
-        raise ValueError("Response too large (exceeds 5MB limit)")
-    content_type = response.headers.get("Content-Type", "")
-    content = body.decode(response.encoding or "utf-8", errors="replace")
+    session = requests.Session()
+    session.trust_env = False
+    current_url = url
+    for redirect_count in range(MAX_WEB_REDIRECTS + 1):
+        current_url = _validate_web_url(current_url)
+        response = session.get(
+            current_url,
+            headers=headers,
+            timeout=timeout,
+            stream=True,
+            allow_redirects=False,
+        )
+        status = getattr(response, "status_code", 200)
+        location = response.headers.get("Location")
+        if status in {301, 302, 303, 307, 308} and location:
+            response.close()
+            if redirect_count == MAX_WEB_REDIRECTS:
+                raise ValueError("Too many webfetch redirects")
+            current_url = urljoin(current_url, location)
+            continue
+        response.raise_for_status()
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) > 5 * 1024 * 1024:
+            response.close()
+            raise ValueError("Response too large (exceeds 5MB limit)")
+        body = response.content
+        response.close()
+        if len(body) > 5 * 1024 * 1024:
+            raise ValueError("Response too large (exceeds 5MB limit)")
+        content_type = response.headers.get("Content-Type", "")
+        content = body.decode(response.encoding or "utf-8", errors="replace")
+        break
+    else:
+        raise ValueError("Too many webfetch redirects")
     if "text/html" in content_type:
         if output_format == "text":
             parser = _HTMLContentParser()

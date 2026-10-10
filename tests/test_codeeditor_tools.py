@@ -707,9 +707,24 @@ def test_webfetch_converts_html_to_markdown(monkeypatch):
         headers={"Content-Type": "text/html; charset=utf-8"},
         content=b"<html><script>bad()</script><h1>Title</h1><p>Hello <b>world</b>.</p></html>",
         encoding="utf-8",
+        status_code=200,
     )
     response.raise_for_status = lambda: None
-    monkeypatch.setattr(CodeEditor.requests, "get", lambda *args, **kwargs: response)
+    response.close = lambda: None
+
+    class Session:
+        trust_env = True
+
+        def get(self, *args, **kwargs):
+            assert kwargs["allow_redirects"] is False
+            return response
+
+    monkeypatch.setattr(CodeEditor.requests, "Session", Session)
+    monkeypatch.setattr(
+        CodeEditor.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
 
     result = CodeEditor.apply_tool([], "webfetch", {"url": "https://example.com"})
 
@@ -722,6 +737,56 @@ def test_webfetch_converts_html_to_markdown(monkeypatch):
 def test_webfetch_rejects_non_http_urls():
     with pytest.raises(ValueError, match="http"):
         CodeEditor.apply_tool([], "webfetch", {"url": "file:///tmp/secret"})
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:11434/api/ps",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://192.168.1.10/admin",
+])
+def test_webfetch_rejects_private_and_metadata_hosts(monkeypatch, url):
+    monkeypatch.setattr(
+        CodeEditor.socket,
+        "getaddrinfo",
+        lambda host, *args, **kwargs: [(None, None, None, None, (host, 0))],
+    )
+
+    with pytest.raises(ValueError, match="private or special"):
+        CodeEditor.apply_tool([], "webfetch", {"url": url})
+
+
+def test_webfetch_rejects_url_credentials():
+    with pytest.raises(ValueError, match="credentials"):
+        CodeEditor.apply_tool([], "webfetch", {"url": "https://user:password@example.com/"})
+
+
+def test_webfetch_revalidates_redirect_destination(monkeypatch):
+    first = SimpleNamespace(
+        status_code=302,
+        headers={"Location": "http://127.0.0.1/secret"},
+        close=lambda: None,
+    )
+    calls = []
+
+    class Session:
+        trust_env = True
+
+        def get(self, url, **kwargs):
+            calls.append(url)
+            return first
+
+    monkeypatch.setattr(CodeEditor.requests, "Session", Session)
+    monkeypatch.setattr(
+        CodeEditor.socket,
+        "getaddrinfo",
+        lambda host, *args, **kwargs: [
+            (None, None, None, None, ("93.184.216.34" if host == "example.com" else "127.0.0.1", 0))
+        ],
+    )
+
+    with pytest.raises(ValueError, match="private or special"):
+        CodeEditor.apply_tool([], "webfetch", {"url": "https://example.com"})
+    assert calls == ["https://example.com"]
 
 
 def test_websearch_uses_exa_mcp(monkeypatch):
