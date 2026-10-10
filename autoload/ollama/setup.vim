@@ -247,17 +247,17 @@ function! ollama#setup#Setup()
 
     if l:pull_models == 0
         " Do not pull, select existing models
-        let l:ans = ollama#setup#SelectModel("tab completion", l:models, "starcoder2:3b")
+        let l:ans = ollama#setup#SelectModel("tab completion", l:models, "qwen2.5-coder:7b")
         let g:ollama_model = l:models[l:ans - 1]
         echon "Configured '" .. g:ollama_model .. "' as tab completion model.\n"
         echon repeat("-", 80) .. "\n"
 
-        let l:ans = ollama#setup#SelectModel("code edit", l:models, "qwen2.5-coder:7b")
+        let l:ans = ollama#setup#SelectModel("code edit", l:models, "qwen3.8:27b")
         let g:ollama_edit_model = l:models[l:ans - 1]
         echon "Configured '" .. g:ollama_edit_model .. "' as code edit model.\n"
         echon repeat("-", 80) .. "\n"
 
-        let l:ans = ollama#setup#SelectModel("chat", l:models, "llama3.1:8b")
+        let l:ans = ollama#setup#SelectModel("chat", l:models, "gpt-oss:20b")
         let g:ollama_chat_model = l:models[l:ans - 1]
         echon "Configured '" .. g:ollama_chat_model .. "' as chat model.\n"
     endif
@@ -267,19 +267,19 @@ endfunction
 
 function! s:PullCompletionModelTask()
     " Set the default tab completion model
-    let g:ollama_model = "starcoder2:3b"
+    let g:ollama_model = "qwen2.5-coder:7b"
     call ollama#setup#PullModel(g:ollama_host, g:ollama_model)
 endfunction
 
 function! s:PullChatModelTask()
     " Set the default chat model
-    let g:ollama_chat_model = "llama3.1:8b"
+    let g:ollama_chat_model = "gpt-oss:20b"
     call ollama#setup#PullModel(g:ollama_host, g:ollama_chat_model)
 endfunction
 
 function! s:PullEditModelTask()
     " Set the default code edit model
-    let g:ollama_edit_model = "qwen2.5-coder:7b"
+    let g:ollama_edit_model = "qwen3.8:27b"
     call ollama#setup#PullModel(g:ollama_host, g:ollama_edit_model)
 endfunction
 

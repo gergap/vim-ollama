@@ -496,7 +496,7 @@ g:ollama_model_provider
                                                               *g:ollama_model*
 g:ollama_model
     - Description: Sets the default Ollama model for code completions.
-    - Default: 'codellama:code'
+    - Default: 'qwen2.5-coder:7b'
     - Example:
 >
         let g:ollama_model = 'deepseek-coder-v2:16b-lite-base-q4_0'
@@ -604,7 +604,7 @@ g:ollama_chat_provider
                                                          *g:ollama_chat_model*
 g:ollama_chat_model
     - Description: Sets the default Ollama model to use for interactive chats.
-    - Default: 'llama3'
+    - Default: 'gpt-oss:20b'
     - Example:
 >
         let g:ollama_chat_model = 'gpt4-turbo'
@@ -653,10 +653,10 @@ g:ollama_edit_provider
                                                          *g:ollama_edit_model*
 g:ollama_edit_model
     - Description: Sets the default Ollama model to use for code editing.
-    - Default: 'qwen2.5-coder:7b'
+    - Default: 'qwen3.8:27b'
     - Example:
 >
-        let g:ollama_edit_model = 'qwen2.5-coder:7b'
+        let g:ollama_edit_model = 'qwen3.8:27b'
 <
                                                        *g:ollama_edit_options*
 g:ollama_edit_options

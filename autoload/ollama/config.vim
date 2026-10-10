@@ -3,7 +3,7 @@
 " Set up omni-completion for Ollama config file
 
 " Default list
-let s:model_list = ['starcoder2:3b', 'qwen2.5-coder:7b', 'codellama:code', 'llama3.1:8b']
+let s:model_list = ['qwen2.5-coder:7b', 'qwen3.8:27b', 'gpt-oss:20b']
 let s:new_models = []
 let s:fetched = 0
 

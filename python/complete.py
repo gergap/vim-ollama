@@ -29,7 +29,7 @@ except ImportError:
 # Default values
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
-DEFAULT_MODEL = 'codellama:code'
+DEFAULT_MODEL = 'qwen2.5-coder:7b'
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'

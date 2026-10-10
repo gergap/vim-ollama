@@ -25,7 +25,7 @@ DEFAULT_PROVIDER = "ollama"
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_TIMEOUT = 10
 # Default models if missing
-DEFAULT_MODEL = "codellama:code"
+DEFAULT_MODEL = "gpt-oss:20b"
 DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 # default options if missing
 DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'

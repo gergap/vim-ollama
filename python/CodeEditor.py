@@ -36,7 +36,7 @@ except ImportError:
 
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_MODEL = "qwen3.8:27b"
 DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 DEFAULT_OPTIONS = {"temperature": 0, "top_p": 0.95, "num_predict": 4096}
 MAX_TOOL_CALLS = 64

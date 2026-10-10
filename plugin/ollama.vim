@@ -90,7 +90,7 @@ if !exists('g:ollama_model_provider')
 endif
 if !exists('g:ollama_model')
     " default code completion model
-    let g:ollama_model = 'codellama:code'
+    let g:ollama_model = 'qwen2.5-coder:7b'
 endif
 if !exists('g:ollama_model_options')
     " default model options for code completion
@@ -113,7 +113,7 @@ if !exists('g:ollama_chat_provider')
 endif
 if !exists('g:ollama_chat_model')
     " default chat model
-    let g:ollama_chat_model = 'llama3'
+    let g:ollama_chat_model = 'gpt-oss:20b'
 endif
 if !exists('g:ollama_chat_systemprompt')
     " empty means no system prompt, we use th built-in one
@@ -140,7 +140,7 @@ if !exists('g:ollama_edit_provider')
 endif
 if !exists('g:ollama_edit_model')
     " default edit model
-    let g:ollama_edit_model = 'qwen2.5-coder:7b'
+    let g:ollama_edit_model = 'qwen3.8:27b'
 endif
 if !exists('g:ollama_edit_options')
     " default model options for code editing tasks
