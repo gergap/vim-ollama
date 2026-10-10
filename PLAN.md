@@ -22,9 +22,9 @@ verified independently before skill discovery and management are added:
     - [x] Add batched-operation validation and progress reporting.
     - [x] Add focused unit tests for mutation and safety behavior.
 4. **Integration and polish**
-   - [ ] Verify mode-specific tool exposure and disabled-mode behavior.
-   - [ ] Complete Vim help, README, help tags, and examples.
-   - [ ] Run the full repository checks and manually verify a temporary Git
+   - [x] Verify mode-specific tool exposure and disabled-mode behavior.
+   - [x] Complete Vim help, README, help tags, and examples.
+   - [x] Run the full repository checks and manually verify a temporary Git
          workspace with global and local data.
 
 Each roadmap item should be usable and testable before starting the next item.
@@ -36,7 +36,7 @@ Each roadmap item should be usable and testable before starting the next item.
 - [x] Skill foundation, catalog discovery, and read-only `find_skill`.
 - [x] Project-local example skill at `.skills/example/SKILL.md`.
 - [x] Skill management mutations and permissions.
-- [ ] Final integration, manual verification, and full polish.
+- [x] Final integration, manual verification, and full polish.
 
 ## Feature 1: Memory and User Context
 

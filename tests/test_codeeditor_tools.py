@@ -308,6 +308,29 @@ def test_skill_manage_is_only_exposed_in_workspace_build(monkeypatch):
     assert "skill_manage" in {tool["function"]["name"] for tool in captured_tools}
 
 
+def test_disabled_skills_do_not_access_skill_filesystem(monkeypatch, tmp_path):
+    def fail_catalog(_settings):
+        raise AssertionError("disabled Skills must not inspect skill roots")
+
+    monkeypatch.setattr(CodeEditor, "_skill_catalog", fail_catalog)
+    prompt = CodeEditor._system_prompt({"cwd": str(tmp_path), "enable_skills": False})
+    assert "Available Skills" not in prompt
+
+
+def test_skills_are_independent_from_memory_gate(tmp_path):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "example"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: example\ndescription: Example skill\n---\nUse it.\n"
+    )
+    prompt = CodeEditor._system_prompt({
+        "cwd": str(tmp_path), "enable_skills": True, "enable_memory": False,
+    })
+    assert "Available Skills" in prompt
+    assert "Persistent Memory and User context" not in prompt
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")
