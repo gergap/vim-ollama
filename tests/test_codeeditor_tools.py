@@ -417,6 +417,47 @@ def test_request_diagnostic_contains_nested_request_sections():
     assert '"model": "test-model"' in diagnostic
 
 
+def test_ollama_tool_capability_check_accepts_tools(monkeypatch):
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"capabilities": ["completion", "tools"]}
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(CodeEditor.requests, "post", post)
+    settings = {"url": "http://localhost:11434", "model": "tool-model"}
+
+    CodeEditor._check_ollama_tool_support(settings)
+    CodeEditor._check_ollama_tool_support(settings)
+
+    assert settings["_ollama_tool_support_checked"]
+    assert len(calls) == 1
+    assert calls[0][0] == "http://localhost:11434/api/show"
+    assert calls[0][1]["json"] == {"name": "tool-model"}
+    assert calls[0][1]["timeout"] == 30
+
+
+def test_ollama_tool_capability_check_rejects_models_without_tools(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"capabilities": ["completion"]}
+
+    monkeypatch.setattr(CodeEditor.requests, "post", lambda *args, **kwargs: Response())
+
+    with pytest.raises(ValueError, match="does not support tool calls"):
+        CodeEditor._check_ollama_tool_support({"model": "completion-only"})
+
+
 def test_range_edit_rejects_filesystem_tools(monkeypatch):
     responses = iter([
         {"tool_calls": [{"id": "file-1", "function": {"name": "create_file", "arguments": {

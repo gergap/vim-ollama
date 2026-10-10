@@ -160,6 +160,14 @@ The vim-ollama plugin provides the following commands:
 <
      Note: It is recommended to track all source files in Git so that you can
      undo changes made by the AI and avoid losing data if the AI goes wrong.
+     When using the Ollama provider, OllamaEdit checks the configured model's
+      `/api/show` metadata before starting. The model must report the `tools`
+      capability; otherwise the request stops with an error explaining that a
+      tool-capable model must be selected. This check is performed once per
+      OllamaEdit session. OpenAI-compatible APIs do not provide a standard
+      capability field, so no additional capability request is made for them;
+      the configured model is assumed to support tool calls. Mistral edit tasks
+      should use the `openai` provider and its OpenAI-compatible endpoint.
 
 TOOLS                                                       *vim-ollama-tools*
     OllamaEdit supplies tools according to the active mode and edit scope.
@@ -652,7 +660,9 @@ g:ollama_edit_provider
 <
                                                          *g:ollama_edit_model*
 g:ollama_edit_model
-    - Description: Sets the default Ollama model to use for code editing.
+    - Description: Sets the model to use for code editing. Ollama models must
+      report the `tools` capability. OpenAI-compatible models, including Mistral
+      models used through the `openai` provider, must accept tool calls.
     - Default: 'qwen3.8:27b'
     - Example:
 >

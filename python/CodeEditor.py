@@ -1621,7 +1621,35 @@ def _request_diagnostic(request):
     return "\n".join(sections)
 
 
+def _check_ollama_tool_support(settings):
+    if settings.get("_ollama_tool_support_checked", False):
+        return
+    baseurl = settings.get("url") or DEFAULT_HOST
+    model = settings.get("model") or DEFAULT_MODEL
+    headers = {"Content-Type": "application/json"}
+    credentialname = settings.get("credentialname")
+    api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
+    if api_key:
+        headers["Authorization"] = "Bearer " + api_key
+    response = requests.post(
+        baseurl.rstrip("/") + "/api/show",
+        headers=headers,
+        json={"name": model},
+        timeout=30,
+    )
+    response.raise_for_status()
+    metadata = response.json()
+    capabilities = metadata.get("capabilities") if isinstance(metadata, dict) else None
+    if not isinstance(capabilities, list) or "tools" not in capabilities:
+        raise ValueError(
+            f"configured Ollama model '{model}' does not support tool calls; "
+            "choose a model with the 'tools' capability"
+        )
+    settings["_ollama_tool_support_checked"] = True
+
+
 def _ollama_request(messages, settings, tools):
+    _check_ollama_tool_support(settings)
     baseurl = settings.get("url") or DEFAULT_HOST
     endpoint = baseurl.rstrip("/") + "/api/chat"
     model = settings.get("model") or DEFAULT_MODEL
