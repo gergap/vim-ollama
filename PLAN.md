@@ -6,29 +6,37 @@ Implement the features in this order so the smaller Memory feature can be
 verified independently before skill discovery and management are added:
 
 1. **Memory and user context**
-   - Add `g:ollama_enable_skills` as the feature gate for both Memory and
-     Skills.
-   - Add safe, bounded storage helpers for `MEMORY.md` and `USER.md`.
-   - Add the `memory` tool and Vim confirmation flow for global mutations.
-   - Integrate bounded memory/user context into prompts.
-   - Add unit tests and documentation for Memory.
+   - [x] Add `g:ollama_enable_memory` as the Memory feature gate.
+   - [x] Add safe, bounded storage helpers for `MEMORY.md` and `USER.md`.
+   - [x] Add the `memory` tool and Vim confirmation flow for global mutations.
+   - [x] Integrate bounded memory/user context into prompts.
+   - [x] Add unit tests and documentation for Memory.
 2. **Skill foundation and discovery**
-   - Add Git-root detection, skill-root resolution, safe names, frontmatter
-     parsing, validation, and effective catalog precedence.
-   - Add read-only `find_skill` and prompt catalog integration.
-   - Add unit tests and documentation for discovery.
+   - [x] Add Git-root detection, skill-root resolution, safe names, frontmatter
+         parsing, validation, and effective catalog precedence.
+   - [x] Add read-only `find_skill` and prompt catalog integration.
+   - [x] Add unit tests and documentation for discovery.
 3. **Skill management**
-   - Add `skill_manage` schemas, guarded mutations, supporting-file handling,
-     scope permissions, and confirmation callbacks.
-   - Add batched-operation validation and progress reporting.
-   - Add focused unit tests for all mutation and safety behavior.
+   - [ ] Add `skill_manage` schemas, guarded mutations, supporting-file handling,
+         scope permissions, and confirmation callbacks.
+   - [ ] Add batched-operation validation and progress reporting.
+   - [ ] Add focused unit tests for all mutation and safety behavior.
 4. **Integration and polish**
-   - Verify mode-specific tool exposure and disabled-mode behavior.
-   - Complete Vim help, README, help tags, and examples.
-   - Run the full repository checks and manually verify a temporary Git
-     workspace with global and local data.
+   - [ ] Verify mode-specific tool exposure and disabled-mode behavior.
+   - [ ] Complete Vim help, README, help tags, and examples.
+   - [ ] Run the full repository checks and manually verify a temporary Git
+         workspace with global and local data.
 
 Each roadmap item should be usable and testable before starting the next item.
+
+## Implementation Status
+
+- [x] Memory and user context, including bounded storage, confirmation, prompt
+      context, tests, and documentation.
+- [x] Skill foundation, catalog discovery, and read-only `find_skill`.
+- [x] Project-local example skill at `.skills/example/SKILL.md`.
+- [ ] Skill management mutations and permissions.
+- [ ] Final integration, manual verification, and full polish.
 
 ## Feature 1: Memory and User Context
 
@@ -289,8 +297,8 @@ duplicated in the Skill packages.
 3. Implement and verify Skill package 3: read-only discovery.
 4. Implement and verify Skill packages 4-6: mutations and permissions.
 5. Implement and verify Skill packages 7-8: integration, tests, and docs.
-6. Add the shared `g:ollama_enable_skills` configuration default and pass it
-   through Vim settings before enabling either feature.
+6. Add the `g:ollama_enable_skills` configuration default and pass it through
+   Vim settings when Skills are enabled.
 
 ## Feature 1 Tests
 
@@ -358,7 +366,7 @@ feature summary and link to the detailed Vim help.
 - `MEMORY.md` and `USER.md` can be safely read and updated through the
   dedicated memory interface.
 - Memory and user context is bounded, labeled, untrusted, and omitted entirely
-  when `g:ollama_enable_skills` is false.
+  when `g:ollama_enable_memory` is false.
 - Global memory/user mutations require explicit user confirmation.
 - Memory behavior is independently tested and documented before Skill work
   begins.
