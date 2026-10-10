@@ -28,6 +28,11 @@ import zipfile
 
 import requests
 
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 from OllamaCredentials import OllamaCredentials
 from OllamaLogger import OllamaLogger
 
@@ -1802,6 +1807,8 @@ def _openai_request(messages, settings, tools):
     client_options = {"api_key": api_key}
     if settings.get("url"):
         client_options["base_url"] = settings["url"]
+    timeout = float(settings.get("timeout", 300))
+    client_options["timeout"] = httpx.Timeout(timeout, connect=5.0) if httpx else timeout
     client = OpenAI(**client_options)
     options = settings.get("options") or DEFAULT_OPTIONS
     if isinstance(options, str):

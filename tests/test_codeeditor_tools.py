@@ -1,6 +1,7 @@
 import sys
 import stat
 import tarfile
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -548,6 +549,89 @@ def test_completion_request_uses_bounded_timeout(monkeypatch):
 
     assert result == "completion"
     assert calls[0][1]["timeout"] == complete.COMPLETION_REQUEST_TIMEOUT
+
+
+def test_openai_edit_client_uses_bounded_timeout(monkeypatch):
+    captured = {}
+
+    class OpenAIClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **kwargs: SimpleNamespace(
+                        choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))]
+                    )
+                )
+            )
+
+    monkeypatch.setattr(CodeEditor, "OpenAI", OpenAIClient)
+    monkeypatch.setattr(CodeEditor.OllamaCredentials, "GetApiKey", lambda *args: "test-key")
+
+    CodeEditor._openai_request([], {"model": "test-model", "options": {}, "timeout": 120}, [])
+
+    if CodeEditor.httpx:
+        assert captured["timeout"].connect == 5.0
+        assert captured["timeout"].read == 120.0
+    else:
+        assert captured["timeout"] == 120.0
+
+
+def test_openai_completion_client_uses_bounded_timeout(monkeypatch):
+    captured = {}
+
+    class Completions:
+        def create(self, **kwargs):
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="completion"))])
+
+    class OpenAIClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = SimpleNamespace(completions=Completions())
+
+    monkeypatch.setattr(complete, "OpenAI", OpenAIClient)
+    monkeypatch.setattr(complete.OllamaCredentials, "GetApiKey", lambda *args: "test-key")
+    monkeypatch.setattr(complete, "log", SimpleNamespace(debug=lambda *args: None))
+
+    result = complete.generate_code_completion_openai(
+        "before<FILL_IN_HERE>after", None, "test-model", {}, None
+    )
+
+    assert result == "completion"
+    if complete.httpx:
+        assert captured["timeout"].connect == 5.0
+        assert captured["timeout"].read == 120.0
+    else:
+        assert captured["timeout"] == 120.0
+
+
+def test_openai_chat_client_uses_configured_timeout(monkeypatch):
+    chat = pytest.importorskip("chat")
+    captured = {}
+
+    class Stream:
+        def __aiter__(self):
+            async def chunks():
+                yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="reply"))])
+            return chunks()
+
+    class Completions:
+        async def create(self, **kwargs):
+            return Stream()
+
+    class AsyncOpenAIClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = SimpleNamespace(completions=Completions())
+
+    monkeypatch.setattr(chat, "AsyncOpenAI", AsyncOpenAIClient)
+    monkeypatch.setattr(chat.OllamaCredentials, "GetApiKey", lambda *args: "test-key")
+    monkeypatch.setattr(chat, "log", SimpleNamespace(debug=lambda *args: None, info=lambda *args: None, error=lambda *args: None))
+
+    asyncio.run(chat.stream_chat_message_openai([], None, "test-model", {}, None, False))
+
+    assert captured["timeout"].connect == 5.0
+    assert captured["timeout"].read == 10.0
 
 
 def test_range_edit_rejects_filesystem_tools(monkeypatch):

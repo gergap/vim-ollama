@@ -154,10 +154,17 @@ async def stream_chat_message_openai(messages, endpoint, model, options, credent
 
     if endpoint:
         log.info('Using OpenAI endpoint '+endpoint)
-        client = AsyncOpenAI(base_url=endpoint, api_key=api_key)
+        client = AsyncOpenAI(
+            base_url=endpoint,
+            api_key=api_key,
+            timeout=httpx.Timeout(float(timeout), connect=min(5.0, float(timeout))),
+        )
     else:
         log.info('Using official OpenAI endpoint')
-        client = AsyncOpenAI(api_key=api_key)
+        client = AsyncOpenAI(
+            api_key=api_key,
+            timeout=httpx.Timeout(float(timeout), connect=min(5.0, float(timeout))),
+        )
     assistant_message = ""
 
     temperature = options.get('temperature', DEFAULT_TEMPERATURE)

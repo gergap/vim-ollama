@@ -14,6 +14,11 @@ from typing import Optional
 from OllamaLogger import OllamaLogger
 from OllamaCredentials import OllamaCredentials
 
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 # try to load OpenAI package if it exists
 try:
     from openai import OpenAI
@@ -35,6 +40,7 @@ DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
 DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
 COMPLETION_REQUEST_TIMEOUT = (5, 120)
+OPENAI_REQUEST_TIMEOUT = httpx.Timeout(120.0, connect=5.0) if httpx else 120.0
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -290,10 +296,10 @@ def generate_code_completion_openai(prompt, baseurl, model, options, credentialn
     log.debug('Using OpenAI chat completion endpoint (prompt engineering)')
     if baseurl:
         log.debug(f'baseurl={baseurl}')
-        client = OpenAI(base_url=baseurl, api_key=api_key)
+        client = OpenAI(base_url=baseurl, api_key=api_key, timeout=OPENAI_REQUEST_TIMEOUT)
     else:
         log.debug(f'Using default OpenAI URL')
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=OPENAI_REQUEST_TIMEOUT)
 
     parts = prompt.split('<FILL_IN_HERE>')
     if len(parts) != 2:
@@ -374,10 +380,10 @@ def generate_code_completion_openai_legacy(prompt, baseurl, model, options, cred
 
     if baseurl:
         log.debug(f'baseurl={baseurl}')
-        client = OpenAI(base_url=baseurl, api_key=api_key)
+        client = OpenAI(base_url=baseurl, api_key=api_key, timeout=OPENAI_REQUEST_TIMEOUT)
     else:
         log.debug(f'Using default OpenAI URL')
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, timeout=OPENAI_REQUEST_TIMEOUT)
 
     config = {
         'pre': '<|fim_prefix|>',
