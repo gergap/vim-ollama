@@ -77,15 +77,20 @@ change.
 **Severity: High**  
 **References:** `autoload/ollama/edit.vim:673-696`, `autoload/ollama/edit.vim:804-822`, `python/CodeEditor.py:1146-1225`
 
-The non-sandboxed `execute` "Allow Always" decision is stored in
-`<cwd>/.ollama-execute.json`. The workspace file tools can read, create, or
-replace that file. A model can therefore write an `always` entry for a payload
-and then execute that payload without reaching the confirmation dialog.
+**Status: Fixed:** approvals are now stored at
+`~/.vim/state/ollama/execute-approvals.json`, outside the workspace, with
+atomic updates, private permissions, execution-context keys, and executable
+content-hash validation.
 
-**Recommendation:** Store approvals outside the workspace in a user-private
-state directory. Bind approvals to the real executable path, arguments, and a
-content hash; invalidate them when the file changes. Exclude approval state
-from agent filesystem tools.
+Before the fix, the non-sandboxed `execute` "Allow Always" decision was stored
+in `<cwd>/.ollama-execute.json`. The workspace file tools could read, create,
+or replace that file. A model could therefore write an `always` entry for a
+payload and then execute that payload without reaching the confirmation dialog.
+
+**Residual recommendation:** Keep approval state inaccessible to agent tools and
+consider expiring old approvals periodically. The current implementation
+invalidates approvals when the executable content, path, arguments, working
+directory, or sandbox state changes.
 
 ### S5. Project instructions are injected as trusted-looking system text
 

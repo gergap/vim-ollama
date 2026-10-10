@@ -671,12 +671,13 @@ function! ollama#edit#RunCheck(request_id, ...) abort
 endfunction
 
 function! s:ExecuteDecisionFile() abort
-    return g:ollama_edit_cwd .. '/.ollama-execute.json'
+    return expand('~/.vim/state/ollama/execute-approvals.json')
 endfunction
 
 function! s:LoadExecuteDecisions() abort
     let l:file = s:ExecuteDecisionFile()
-    if !filereadable(l:file) || getftype(l:file) ==# 'link'
+    let l:directory = fnamemodify(l:file, ':h')
+    if !filereadable(l:file) || getftype(l:file) ==# 'link' || getftype(l:directory) ==# 'link'
         return {}
     endif
     try
@@ -689,10 +690,52 @@ endfunction
 
 function! s:SaveExecuteDecisions(decisions) abort
     let l:file = s:ExecuteDecisionFile()
-    if getftype(l:file) ==# 'link'
-        throw 'execute decision file must not be a symbolic link'
+    let l:directory = fnamemodify(l:file, ':h')
+    if getftype(l:directory) ==# 'link'
+        throw 'execute approval directory must not be a symbolic link'
     endif
-    call writefile([json_encode(a:decisions)], l:file, 's')
+    if !isdirectory(l:directory)
+        if mkdir(l:directory, 'p', 0700) != 0 || getftype(l:directory) ==# 'link'
+            throw 'failed to create private execute approval directory'
+        endif
+    endif
+    if exists('*setfperm')
+        call setfperm(l:directory, 'rwx------')
+    endif
+    if getftype(l:file) ==# 'link'
+        throw 'execute approval file must not be a symbolic link'
+    endif
+    let l:temporary = l:file .. '.tmp'
+    if filereadable(l:temporary) || getftype(l:temporary) ==# 'link'
+        throw 'temporary execute approval file already exists'
+    endif
+    call writefile([json_encode(a:decisions)], l:temporary, 's')
+    if exists('*setfperm')
+        call setfperm(l:temporary, 'rw-------')
+    endif
+    if rename(l:temporary, l:file) != 0
+        call delete(l:temporary)
+        throw 'failed to atomically update execute approvals'
+    endif
+    if exists('*setfperm')
+        call setfperm(l:file, 'rw-------')
+    endif
+endfunction
+
+function! s:ExecuteApprovalKey(path, arguments, execute_cwd, sandboxed) abort
+    return json_encode({
+                \ 'path': fnamemodify(resolve(a:path), ':p'),
+                \ 'arguments': a:arguments,
+                \ 'cwd': fnamemodify(resolve(a:execute_cwd), ':p'),
+                \ 'sandboxed': a:sandboxed,
+                \ })
+endfunction
+
+function! s:ExecuteFileHash(path) abort
+    if !filereadable(a:path) || getftype(a:path) ==# 'link'
+        throw 'execute target changed or is no longer a regular file'
+    endif
+    return sha256(join(readfile(a:path, 'b'), "\n"))
 endfunction
 
 function! s:FinishExecute(request_id, state, job, status) abort
@@ -802,10 +845,12 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         let l:sandboxed = get(g:, 'ollama_bwrap_enabled', v:false)
         let l:decision = 'allowed'
         if !l:sandboxed
-            let l:key = fnamemodify(l:path, ':.')
+            let l:key = s:ExecuteApprovalKey(l:path, a:arguments.arguments, l:execute_cwd, l:sandboxed)
+            let l:file_hash = s:ExecuteFileHash(l:path)
             let l:decisions = s:LoadExecuteDecisions()
-            if get(l:decisions, l:key, '') !=# 'always'
-                let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
+            let l:approval = get(l:decisions, l:key, {})
+            if type(l:approval) != v:t_dict || get(l:approval, 'decision', '') !=# 'always' || get(l:approval, 'sha256', '') !=# l:file_hash
+                let l:choice = confirm('Execute ' .. fnamemodify(l:path, ':.') .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
                 if l:choice == 3 || l:choice == 0
                     call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
                     return
@@ -814,7 +859,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     let l:decision = 'allowed_once'
                 elseif l:choice == 2
                     let l:decision = 'allowed_always'
-                    let l:decisions[l:key] = 'always'
+                    let l:decisions[l:key] = {'decision': 'always', 'sha256': l:file_hash}
                     call s:SaveExecuteDecisions(l:decisions)
                 endif
             else
@@ -822,6 +867,9 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             endif
         else
             let l:decision = 'sandboxed'
+        endif
+        if !l:sandboxed && s:ExecuteFileHash(l:path) !=# l:file_hash
+            throw 'execute target changed after approval'
         endif
         let l:state = {
                     \ 'output': [],
