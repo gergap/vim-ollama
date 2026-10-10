@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
 import CodeEditor
+import complete
 from CodeEditor import apply_tool
 import OllamaCredentials as OllamaCredentialsModule
 from OllamaLogger import OllamaLogger
@@ -516,6 +517,37 @@ def test_request_diagnostic_contains_nested_request_sections():
     assert '"type": "function"' in diagnostic
     assert "#StartDiagnostic Request options" in diagnostic
     assert '"model": "test-model"' in diagnostic
+
+
+def test_completion_request_uses_bounded_timeout(monkeypatch):
+    calls = []
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"response": "completion"}
+
+    def post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return Response()
+
+    monkeypatch.setattr(complete.requests, "post", post)
+    monkeypatch.setattr(complete, "log", SimpleNamespace(debug=lambda *args: None, info=lambda *args: None))
+    monkeypatch.setattr(complete.OllamaCredentials, "GetApiKey", lambda *args: "")
+
+    result = complete.generate_code_completion(
+        {"pre": "<P>", "middle": "<M>", "suffix": "<S>", "eot": "<E>"},
+        "before<FILL_IN_HERE>after",
+        "http://localhost:11434",
+        "test-model",
+        {},
+        None,
+    )
+
+    assert result == "completion"
+    assert calls[0][1]["timeout"] == complete.COMPLETION_REQUEST_TIMEOUT
 
 
 def test_range_edit_rejects_filesystem_tools(monkeypatch):

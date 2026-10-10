@@ -151,17 +151,20 @@ validation.
 **Residual recommendation:** Keep password-store prompts non-interactive and
 consider making the timeout configurable for slow hardware-token setups.
 
-### S8. Completion HTTP requests have no timeout
+### S8. Ollama completion HTTP request has no timeout
 
 **Severity: Medium**  
 **References:** `python/complete.py:179`
 
-The completion request calls `requests.post` without a timeout. A stalled Ollama
-or proxy connection can block the completion worker indefinitely and make Vim
-appear hung. Other provider helpers have similar inconsistent timeout handling.
+**Status: Fixed:** the Ollama completion request now uses a bounded 5-second
+connect timeout and 120-second read timeout.
 
-**Recommendation:** Set bounded connect/read timeouts centrally and handle
-`requests` timeout exceptions with a cancellable failure path.
+Before the fix, the completion request called `requests.post` without a
+timeout. A stalled Ollama or proxy connection could block the completion
+worker indefinitely and make Vim appear hung.
+
+**Residual recommendation:** Verify that the optional OpenAI and Mistral SDK
+clients use bounded defaults or expose provider-specific timeout settings.
 
 ## Logic Bugs
 

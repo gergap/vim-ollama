@@ -34,6 +34,7 @@ DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
 DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
+COMPLETION_REQUEST_TIMEOUT = (5, 120)
 
 # When set to true, we use our own templates and don't use the Ollama built-in templates.
 # Is is the only way to make this work reliable. As soon is this works also with Ollama
@@ -176,7 +177,12 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
             data['options']['stop'] = configured_stops
         log.debug('request: ' + json.dumps(data, indent=4))
 
-        response = requests.post(endpoint, headers=headers, json=data)
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json=data,
+            timeout=COMPLETION_REQUEST_TIMEOUT,
+        )
         if response.status_code != 200:
             raise Exception(f"Error: {response.status_code} - {response.text}")
 
