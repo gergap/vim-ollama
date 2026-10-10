@@ -658,7 +658,7 @@ def _request_make(arguments):
         _progress(f"Tool error: {error}", tool="make")
         return {"ok": False, "message": error, "error": error, "diagnostics": []}
     targets = requested.split()
-    if any(not re.fullmatch(r"[A-Za-z0-9_./:+-]+", target) or target.startswith("-") for target in targets):
+    if any(not re.fullmatch(r"[A-Za-z0-9_:+-]+", target) or target.startswith("-") for target in targets):
         error = "make tool accepts only make target names; shell commands and options are not allowed"
         _progress(f"Tool error: {error}", tool="make")
         return {"ok": False, "message": error, "error": error, "diagnostics": []}

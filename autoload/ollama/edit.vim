@@ -583,7 +583,7 @@ function! ollama#edit#RunMake(request_id, arguments) abort
             throw 'makeprg must be a string, got ' .. typename(l:command)
         endif
         for l:target in l:targets
-            if type(l:target) != v:t_string || l:target =~# '^-' || l:target !~# '^[A-Za-z0-9_./:+-]\+$'
+            if type(l:target) != v:t_string || l:target =~# '^-' || l:target !~# '^[A-Za-z0-9_:+-]\+$'
                 throw 'make tool accepts only make target names; shell commands and options are not allowed'
             endif
             let l:command .= ' ' .. shellescape(l:target)

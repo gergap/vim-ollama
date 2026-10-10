@@ -1016,7 +1016,13 @@ def test_make_result_is_returned_to_model_without_becoming_buffer_operation(monk
     assert "diagnostics" in tool_result["content"]
 
 
-@pytest.mark.parametrize("arguments", ["all && touch hacked", "-f Makefile", "all; clean"])
+@pytest.mark.parametrize("arguments", [
+    "all && touch hacked",
+    "-f Makefile",
+    "all; clean",
+    "./evil",
+    "build/debug",
+])
 def test_make_rejects_command_arguments(arguments):
     result = CodeEditor._request_make({"arguments": arguments})
 
