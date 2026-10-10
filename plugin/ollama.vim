@@ -183,6 +183,9 @@ endif
 if !exists('g:ollama_enable_autocompact')
     let g:ollama_enable_autocompact = v:true
 endif
+if !exists('g:ollama_enable_subagents')
+    let g:ollama_enable_subagents = v:true
+endif
 if !exists('g:ollama_autocompact_threshold')
     let g:ollama_autocompact_threshold = 0.8
 endif

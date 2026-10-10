@@ -342,6 +342,28 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
     `let g:ollama_enable_autocompact = v:false` to preserve the existing
     un-compacted request behavior.
 
+SUBAGENT ANALYSIS                                             *vim-ollama-subagents*
+    When |g:ollama_enable_subagents| is enabled, OllamaEdit exposes a guarded
+    `subagent` tool for bounded read-only analysis. The initial interface is:
+>
+        task: string
+        files: [project-relative file names]
+        mode: "analyze"
+        max_output_chars: integer
+        timeout_seconds: integer
+<
+    Files must be explicitly selected, regular UTF-8 files below the current
+    workspace. Traversal, absolute paths, symlinks, oversized files, and
+    oversized aggregate input are rejected. The child receives no tools, cannot
+    write files, cannot call another subagent, and inherits the parent mode and
+    provider permissions. Results contain a bounded status, files, findings,
+    and diagnostics and are returned as untrusted context.
+
+    Task length, file count, file size, output size, timeout, and concurrent
+    child count are bounded. Read-only analysis is available in Plan, range,
+    explanation, and workspace sessions. Set
+    `let g:ollama_enable_subagents = v:false` to omit the tool completely.
+
                                                          *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
@@ -864,7 +886,17 @@ g:ollama_autocompact_summary_max_chars
         let g:ollama_autocompact_summary_max_chars = 6000
 <
 
-                                                  *g:ollama_quickfix_checkers*
+                                                  *g:ollama_enable_subagents*
+g:ollama_enable_subagents
+    - Description: Enables bounded, read-only subagent analysis for OllamaEdit.
+      When false, the subagent tool is not exposed.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enable_subagents = v:false
+<
+
+                                                   *g:ollama_quickfix_checkers*
 g:ollama_quickfix_checkers
     - Description: Configures checker commands used by `:OllamaQuickFix` for
       non-compiled filetypes. Each entry contains a command list and optional

@@ -115,6 +115,72 @@ def test_autocompact_fallback_trims_oversized_recent_content():
     assert any("content truncated by autocompact" in message.get("content", "") for message in messages)
 
 
+def test_subagent_is_exposed_only_when_enabled_and_inherits_read_only_scope(monkeypatch):
+    captured_tools = []
+    monkeypatch.setattr(
+        CodeEditor,
+        "_ollama_request",
+        lambda messages, settings, tools: captured_tools.extend(tools) or {"tool_calls": []},
+    )
+
+    CodeEditor._run_edit("inspect", [], "", {"provider": "ollama", "range_mode": True})
+    assert "subagent" not in {tool["function"]["name"] for tool in captured_tools}
+
+    captured_tools.clear()
+    CodeEditor._run_edit(
+        "inspect",
+        [],
+        "",
+        {"provider": "ollama", "range_mode": True, "enable_subagents": True},
+    )
+    assert "subagent" in {tool["function"]["name"] for tool in captured_tools}
+
+
+def test_subagent_analyzes_explicit_files_with_bounded_structured_result(tmp_path, monkeypatch):
+    source = tmp_path / "main.py"
+    source.write_text("print('hello')\n")
+    captured = {}
+
+    def request(messages, settings, tools):
+        captured["messages"] = messages
+        captured["settings"] = settings
+        captured["tools"] = tools
+        return {"role": "assistant", "content": "The file prints a greeting."}
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    result = CodeEditor._request_subagent(
+        {"task": "Summarize the file", "files": ["main.py"], "max_output_chars": 256, "timeout_seconds": 5},
+        {"provider": "ollama", "cwd": str(tmp_path)},
+    )
+
+    assert result == {
+        "ok": True,
+        "status": "completed",
+        "message": "subagent analysis completed",
+        "findings": "The file prints a greeting.",
+        "files": ["main.py"],
+        "truncated": False,
+    }
+    assert captured["tools"] == []
+    assert captured["settings"]["enable_subagents"] is False
+    assert "print('hello')" in captured["messages"][1]["content"]
+
+
+def test_subagent_rejects_traversal_and_symlink_paths(tmp_path):
+    source = tmp_path / "main.py"
+    source.write_text("pass\n")
+    link = tmp_path / "link.py"
+    link.symlink_to(source)
+    settings = {"provider": "ollama", "cwd": str(tmp_path)}
+
+    traversal = CodeEditor._request_subagent({"task": "inspect", "files": ["../main.py"]}, settings)
+    symlink = CodeEditor._request_subagent({"task": "inspect", "files": ["link.py"]}, settings)
+    assert traversal["status"] == "failed"
+    assert "parent-directory" in traversal["message"]
+    assert symlink["status"] == "failed"
+    assert "symlinks" in symlink["message"]
+
+
 def test_replace_lines_requires_exact_expected_text():
     document = ["one", "two", "three"]
 

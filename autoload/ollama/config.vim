@@ -40,6 +40,7 @@ let s:help_text = {
 \ 'ollama_enable_skills': 'Enable Skills discovery (default=v:true).',
 \ 'ollama_enabled_self_optimization': 'Enable guarded Skill self-optimization (default=v:true).',
 \ 'ollama_enable_autocompact': 'Enable automatic bounded context compaction (default=v:true).',
+\ 'ollama_enable_subagents': 'Enable bounded read-only subagent analysis (default=v:true).',
 \ 'ollama_autocompact_threshold': 'Compact when the usable context reaches this fraction (default=0.8).',
 \ 'ollama_autocompact_summary_max_chars': 'Maximum generated compaction summary size (default=4000).',
 \ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',
