@@ -10,7 +10,9 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
 import CodeEditor
 from CodeEditor import apply_tool
+import OllamaCredentials as OllamaCredentialsModule
 from OllamaLogger import OllamaLogger
+from OllamaCredentials import OllamaCredentials
 
 
 def test_insert_lines():
@@ -32,6 +34,74 @@ def test_logger_uses_private_directory_and_file_permissions(tmp_path):
     if logger.fh:
         logger.fh.close()
         logger.logger.removeHandler(logger.fh)
+
+
+def test_password_store_lookup_uses_safe_arguments_and_timeout(monkeypatch, tmp_path):
+    executable = tmp_path / "pass"
+    executable.write_text("")
+    executable.chmod(0o700)
+    calls = []
+
+    class Process:
+        returncode = 0
+        pid = 123
+
+        def communicate(self, **kwargs):
+            calls.append(kwargs)
+            return b"secret-value\nmetadata\n", b""
+
+        def kill(self):
+            raise AssertionError("process should not be killed")
+
+    def popen(command, **kwargs):
+        calls.append(command)
+        calls.append(kwargs)
+        return Process()
+
+    monkeypatch.setattr(OllamaCredentialsModule, "PASS_EXECUTABLE", str(executable))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(OllamaCredentialsModule.subprocess, "Popen", popen)
+
+    assert OllamaCredentials().GetApiKey("openai", "team/api-key") == "secret-value"
+    assert calls[0] == [str(executable), "show", "--", "team/api-key"]
+    assert calls[2]["timeout"] == OllamaCredentialsModule.PASS_TIMEOUT
+
+
+@pytest.mark.parametrize("credentialname", ["-export", "name\nwith-control"])
+def test_password_store_rejects_unsafe_credential_names(monkeypatch, credentialname):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="invalid characters"):
+        OllamaCredentials().GetApiKey("openai", credentialname)
+
+
+def test_password_store_timeout_kills_process(monkeypatch, tmp_path):
+    executable = tmp_path / "pass"
+    executable.write_text("")
+    executable.chmod(0o700)
+
+    class Process:
+        returncode = None
+        pid = 456
+        killed = False
+
+        def communicate(self, **kwargs):
+            if self.killed:
+                return b"", b""
+            raise OllamaCredentialsModule.subprocess.TimeoutExpired("pass", 10)
+
+        def kill(self):
+            self.killed = True
+
+    process = Process()
+    monkeypatch.setattr(OllamaCredentialsModule, "PASS_EXECUTABLE", str(executable))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(OllamaCredentialsModule.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(OllamaCredentialsModule.os, "killpg", lambda *args: (_ for _ in ()).throw(OSError()))
+
+    with pytest.raises(EnvironmentError, match="Missing OPENAI_API_KEY"):
+        OllamaCredentials().GetApiKey("openai", "team/api-key")
+    assert process.killed
 
 
 def test_replace_lines_requires_exact_expected_text():

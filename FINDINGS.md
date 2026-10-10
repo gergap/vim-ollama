@@ -139,15 +139,17 @@ bodies.
 **Severity: Medium**  
 **References:** `python/OllamaCredentials.py:51-64`
 
-`communicate()` has no timeout. A GPG agent or pinentry can block the Vim worker
-indefinitely, making cancellation ineffective. The code checks `/usr/bin/pass`
-but executes the unqualified `pass` from `PATH`, so a manipulated environment
-can select a different executable. Credential names are also passed without
-option separation or validation.
+**Status: Fixed:** lookup now uses the absolute `/usr/bin/pass` path, validates
+credential names, passes `--` before the entry name, and enforces a bounded
+10-second subprocess timeout with process cleanup.
 
-**Recommendation:** Execute `/usr/bin/pass` (or a configured absolute path),
-validate names and reject leading `-`, use `--` where supported, disable
-interactive prompting, and enforce a short subprocess timeout with cleanup.
+Before the fix, `communicate()` had no timeout. A GPG agent or pinentry could
+block the Vim worker indefinitely, and the code executed an unqualified `pass`
+from `PATH`. Credential names were also passed without option separation or
+validation.
+
+**Residual recommendation:** Keep password-store prompts non-interactive and
+consider making the timeout configurable for slow hardware-token setups.
 
 ### S8. Completion HTTP requests have no timeout
 

@@ -6,8 +6,24 @@
 # to retrieve API credentials. These can be set as env variables
 # or can be retrieved from UNIX Pass tool.
 import os
+import signal
 import subprocess
 from typing import Optional
+
+
+PASS_EXECUTABLE = "/usr/bin/pass"
+PASS_TIMEOUT = 10
+
+
+def _terminate_pass_process(process):
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            return
+        except (AttributeError, OSError):
+            pass
+    process.kill()
+
 
 class OllamaCredentials:
     def GetApiKey(self, provider: str, credentialname: Optional[str]) -> str:
@@ -49,19 +65,34 @@ class OllamaCredentials:
             return key.strip()
 
         # 3. Try UNIX pass if available
-        if credentialname and os.path.isfile("/usr/bin/pass") and os.access("/usr/bin/pass", os.X_OK):
+        if credentialname:
+            if (not isinstance(credentialname, str) or not credentialname
+                    or credentialname.startswith("-")
+                    or any(ord(character) < 32 or character.isspace() for character in credentialname)):
+                raise ValueError("credential name contains invalid characters")
+
+        if credentialname and os.path.isfile(PASS_EXECUTABLE) and os.access(PASS_EXECUTABLE, os.X_OK):
             try:
                 pass_process = subprocess.Popen(
-                    ["pass", "show", credentialname],
+                    [PASS_EXECUTABLE, "show", "--", credentialname],
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
+                    **({"start_new_session": True} if os.name == "posix" else {}),
                 )
-                password_bytes, _ = pass_process.communicate()
+                try:
+                    password_bytes, _ = pass_process.communicate(timeout=PASS_TIMEOUT)
+                except subprocess.TimeoutExpired:
+                    _terminate_pass_process(pass_process)
+                    pass_process.communicate()
+                    raise
+                if pass_process.returncode != 0:
+                    raise EnvironmentError("password store lookup failed")
                 password = password_bytes.decode("utf-8").split("\n", 1)[0].strip()
                 if password:
                     return password
-            except Exception as e:
-                print(f"Error retrieving password from password store: {e}")
+            except Exception:
+                pass
 
         # 4. No key found
         raise EnvironmentError(f"Missing {env_var} environment variable and no credential found in pass.")
