@@ -320,6 +320,28 @@ SELF-OPTIMIZATION                                           *vim-ollama-self-opt
     guidance and `skill_optimize` tool without disabling ordinary Skill
     discovery or explicitly requested `skill_manage` operations.
 
+AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autocompact*
+    When |g:ollama_enable_autocompact| is enabled, OllamaEdit estimates the
+    request context before each model call and compacts older conversation turns
+    before the configured context budget is exceeded. The system prompt, active
+    mode, tool permissions, current request, and recent tool results remain in
+    the conversation. Older turns become a bounded, explicitly labeled,
+    untrusted summary and cannot override safety or permission rules.
+
+    Compaction is deterministic and does not make a hidden extra model request.
+    If the summary is still too large, recent message content is truncated with
+    a marker rather than sending an over-budget request. Compaction never writes
+    Memory, USER.md, Skills, or project files. The progress view reports each
+    compaction event.
+
+    The Ollama `num_ctx` option is used when present; otherwise the default
+    context limit is 32768 tokens. The response reserve is derived from
+    `num_predict` or `max_tokens`. Configure the trigger fraction and summary
+    size with |g:ollama_autocompact_threshold| and
+    |g:ollama_autocompact_summary_max_chars|. Set
+    `let g:ollama_enable_autocompact = v:false` to preserve the existing
+    un-compacted request behavior.
+
                                                          *vim-ollama-websearch*
 WEB SEARCH PROVIDERS
     OllamaEdit, OllamaExplain, and OllamaQuickFix provide the read-only
@@ -810,6 +832,36 @@ g:ollama_enabled_self_optimization
     - Example:
 >
         let g:ollama_enabled_self_optimization = v:false
+<
+
+                                                  *g:ollama_enable_autocompact*
+g:ollama_enable_autocompact
+    - Description: Enables bounded automatic context compaction for OllamaEdit.
+      When false, no compaction state or summary is created.
+    - Default: 'v:true'
+    - Example:
+>
+        let g:ollama_enable_autocompact = v:false
+<
+
+                                                *g:ollama_autocompact_threshold*
+g:ollama_autocompact_threshold
+    - Description: Fraction of the usable context budget at which old turns
+      are compacted. Must be greater than 0 and at most 1.
+    - Default: 0.8
+    - Example:
+>
+        let g:ollama_autocompact_threshold = 0.7
+<
+
+                                        *g:ollama_autocompact_summary_max_chars*
+g:ollama_autocompact_summary_max_chars
+    - Description: Maximum size in characters of the generated untrusted
+      older-turn summary. Must be at least 256.
+    - Default: 4000
+    - Example:
+>
+        let g:ollama_autocompact_summary_max_chars = 6000
 <
 
                                                   *g:ollama_quickfix_checkers*

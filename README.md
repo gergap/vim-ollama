@@ -56,6 +56,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
     and `skill_manage` in workspace Build mode
   - Propose guarded, evidence-backed Skill improvements with
     `skill_optimize`
+   - Automatically compact older OllamaEdit context before model limits are
+     reached, while preserving recent tool results and safety state
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.

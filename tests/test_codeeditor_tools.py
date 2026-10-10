@@ -61,6 +61,60 @@ def test_memory_context_is_labeled_and_disabled_without_filesystem_access(tmp_pa
     assert not (tmp_path / "does-not-exist").exists()
 
 
+def test_autocompact_summarizes_old_turns_and_preserves_recent_state():
+    messages = [
+        {"role": "system", "content": "system rules"},
+        {"role": "user", "content": "old objective"},
+        {"role": "assistant", "content": "old answer"},
+        {"role": "user", "content": "recent question"},
+        {"role": "assistant", "content": "recent answer"},
+        {"role": "tool", "tool_name": "read_file", "content": "recent result"},
+    ]
+    settings = {
+        "enable_autocompact": True,
+        "autocompact_context_limit": 1024,
+        "autocompact_response_reserve": 128,
+        "autocompact_threshold": 0.01,
+        "autocompact_recent_messages": 3,
+    }
+
+    assert CodeEditor._maybe_compact_messages(messages, settings, [])
+    assert messages[0] == {"role": "system", "content": "system rules"}
+    assert "Untrusted generated summary" in messages[1]["content"]
+    assert "old objective" in messages[1]["content"]
+    assert messages[-1]["content"] == "recent result"
+
+
+def test_autocompact_is_disabled_without_touching_messages():
+    messages = [
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "x" * 10000},
+    ]
+    original = [dict(message) for message in messages]
+
+    assert not CodeEditor._maybe_compact_messages(messages, {"enable_autocompact": False}, [])
+    assert messages == original
+
+
+def test_autocompact_fallback_trims_oversized_recent_content():
+    messages = [
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "old"},
+        {"role": "assistant", "content": "x" * 10000},
+        {"role": "user", "content": "current"},
+    ]
+    settings = {
+        "enable_autocompact": True,
+        "autocompact_context_limit": 1024,
+        "autocompact_response_reserve": 128,
+        "autocompact_threshold": 0.01,
+        "autocompact_recent_messages": 2,
+    }
+
+    assert CodeEditor._maybe_compact_messages(messages, settings, [])
+    assert any("content truncated by autocompact" in message.get("content", "") for message in messages)
+
+
 def test_replace_lines_requires_exact_expected_text():
     document = ["one", "two", "three"]
 

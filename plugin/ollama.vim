@@ -180,6 +180,15 @@ endif
 if !exists('g:ollama_enabled_self_optimization')
     let g:ollama_enabled_self_optimization = v:true
 endif
+if !exists('g:ollama_enable_autocompact')
+    let g:ollama_enable_autocompact = v:true
+endif
+if !exists('g:ollama_autocompact_threshold')
+    let g:ollama_autocompact_threshold = 0.8
+endif
+if !exists('g:ollama_autocompact_summary_max_chars')
+    let g:ollama_autocompact_summary_max_chars = 4000
+endif
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024
