@@ -965,40 +965,44 @@ function! ollama#edit#UpdateProgress(timer) abort
 import json
 import vim
 
+def vim_json(value):
+    # Keep supplementary Unicode characters intact when Vim parses the command.
+    return json.dumps(value, ensure_ascii=False)
+
 try:
     events = CodeEditor.get_progress_events()
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
         if event.get('text', '').startswith('Waiting for model response'):
-            vim.command('call ollama#edit#StartSpinner(' + json.dumps(event.get('text', '')) + ')')
+            vim.command('call ollama#edit#StartSpinner(' + vim_json(event.get('text', '')) + ')')
         else:
             failed = event.get('fold_status') == 'FAILED' or event.get('text', '').startswith('Error:')
             vim.command('call ollama#edit#StopSpinner(' + str(0 if failed else 1) + ')')
 
         if not event.get('diagnostic') and not event.get('fold') and not event.get('fold_append'):
-            vim.command('call ollama#edit#AppendProgress(' + json.dumps(event.get('text', '')) + ')')
+            vim.command('call ollama#edit#AppendProgress(' + vim_json(event.get('text', '')) + ')')
         if event.get('text', '').startswith('Waiting for model response'):
             vim.command('call ollama#edit#ShowSpinner()')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
-            vim.command('call ollama#edit#RunMake(' + json.dumps(event['request_id']) + ', ' + json.dumps(arguments) + ')')
+            vim.command('call ollama#edit#RunMake(' + vim_json(event['request_id']) + ', ' + vim_json(arguments) + ')')
         if event.get('type') == 'check_request':
-            vim.command('call ollama#edit#RunCheck(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+            vim.command('call ollama#edit#RunCheck(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('type') == 'execute_request':
-            vim.command('call ollama#edit#RunExecute(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+            vim.command('call ollama#edit#RunExecute(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('type') == 'todo_request':
-            vim.command('call ollama#todo#Write(' + json.dumps(event['request_id']) + ', ' + json.dumps(event.get('arguments', {})) + ')')
+            vim.command('call ollama#todo#Write(' + vim_json(event['request_id']) + ', ' + vim_json(event.get('arguments', {})) + ')')
         if event.get('fold'):
-            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + json.dumps(event.get('text', '')) + ')')
+            vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(event.get('fold_title', event.get('tool', 'tool'))) + ', ' + vim_json(event.get('text', '')) + ')')
         if event.get('fold_append'):
-            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(event.get('fold_title', event['fold_append'])) + ', ' + json.dumps(event.get('fold_content', event.get('text', ''))) + ', 1, ' + json.dumps(event.get('fold_status', '')) + ')')
+            vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(event.get('fold_title', event['fold_append'])) + ', ' + vim_json(event.get('fold_content', event.get('text', ''))) + ', 1, ' + vim_json(event.get('fold_status', '')) + ')')
         if event.get('diagnostic'):
             diagnostic = event['diagnostic']
-            vim.command('call ollama#edit#AppendDiagnostic(' + json.dumps(diagnostic.get('title', 'tool output')) + ', ' + json.dumps(diagnostic.get('content', '')) + ')')
+            vim.command('call ollama#edit#AppendDiagnostic(' + vim_json(diagnostic.get('title', 'tool output')) + ', ' + vim_json(diagnostic.get('content', '')) + ')')
         if event.get('tool') in ('create_file', 'create_folder', 'delete_file', 'delete_folder') and event.get('path'):
             vim.command('call ollama#edit#RefreshNERDTree()')
         if event.get('tool') in ('create_file', 'insert_lines', 'delete_lines', 'replace_lines', 'write_file', 'chmod') and event.get('path'):
-            vim.command('call ollama#edit#ShowFile(' + json.dumps(event['path']) + ')')
+            vim.command('call ollama#edit#ShowFile(' + vim_json(event['path']) + ')')
     vim.command('let g:ollama_edit_progress_index = ' + str(len(events)))
 
     result, operations, error = CodeEditor.get_job_status()
@@ -1014,11 +1018,11 @@ try:
                 error = 'buffer changed while OllamaEdit was running'
             else:
                 changed_ranges = CodeEditor.apply_operations(bufnr, firstline, lastline, operations)
-                vim.command('call ollama#edit#StripTrailingWhitespace(' + str(bufnr) + ', ' + json.dumps(changed_ranges) + ')')
-                vim.command('call ollama#edit#ShowChanges(' + json.dumps(changed_ranges) + ')')
-        vim.command('call ollama#edit#EditCodeDone(' + json.dumps(result) + ', ' + json.dumps(error or '') + ')')
+                vim.command('call ollama#edit#StripTrailingWhitespace(' + str(bufnr) + ', ' + vim_json(changed_ranges) + ')')
+                vim.command('call ollama#edit#ShowChanges(' + vim_json(changed_ranges) + ')')
+        vim.command('call ollama#edit#EditCodeDone(' + vim_json(result) + ', ' + vim_json(error or '') + ')')
 except Exception as exception:
-    vim.command('call ollama#edit#EditCodeDone("Error", ' + json.dumps(str(exception)) + ')')
+    vim.command('call ollama#edit#EditCodeDone("Error", ' + vim_json(str(exception)) + ')')
 EOF
     call s:Spin()
 endfunction
