@@ -1630,7 +1630,7 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allo
     request_id = str(uuid.uuid4())
     with g_make_condition:
         g_make_results[request_id] = None
-    _progress("Waiting for execution confirmation", type="execute_request", request_id=request_id, arguments=arguments)
+    _progress("Submitting execution request", type="execute_request", request_id=request_id, arguments=arguments)
     with g_make_condition:
         while g_make_results[request_id] is None:
             g_make_condition.wait()

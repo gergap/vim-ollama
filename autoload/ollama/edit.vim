@@ -14,6 +14,7 @@ let s:session_range_mode = v:true
 let s:session_explain_mode = v:false
 let s:session_mode = 'build'
 let s:sandbox_session_approvals = {}
+let s:sandbox_permanent_approvals = {}
 let s:spinner_active = v:false
 let s:spinner_frame = 0
 let s:spinner_text = ''
@@ -468,15 +469,32 @@ function! s:SandboxWrap(command, write_paths, ...) abort
     endif
     let l:root = simplify(fnamemodify(g:ollama_edit_cwd, ':p'))
     let l:working_directory = a:0 > 0 ? a:1 : l:root
+    let l:network_allowed = get(g:, 'ollama_bwrap_network', v:false)
+                \ || (a:0 > 1 && a:2)
     let l:command = [l:bwrap, '--die-with-parent', '--new-session', '--unshare-all',
                 \ '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp']
-    if get(g:, 'ollama_bwrap_network', v:false)
+    if l:network_allowed
         call filter(l:command, 'v:val !=# "--unshare-all"')
     endif
     for l:directory in ['/usr', '/usr/local', '/bin', '/sbin', '/lib', '/lib64', '/etc']
         if isdirectory(l:directory)
             call extend(l:command, ['--ro-bind', l:directory, l:directory])
         endif
+    endfor
+    let l:readonly_paths = get(g:, 'ollama_bwrap_readonly_paths', [])
+    if type(l:readonly_paths) != v:t_list
+        throw 'ollama_bwrap_readonly_paths must be a list of absolute files or directories'
+    endif
+    for l:readonly_path in l:readonly_paths
+        if type(l:readonly_path) != v:t_string || l:readonly_path !~# '^/'
+            throw 'bubblewrap read-only paths must be absolute strings'
+        endif
+        let l:path = simplify(resolve(l:readonly_path))
+        if getftype(l:readonly_path) ==# 'link' || empty(l:path)
+                    \ || (!filereadable(l:path) && !isdirectory(l:path))
+            throw 'bubblewrap read-only path must be an existing regular file or directory: ' .. l:readonly_path
+        endif
+        call extend(l:command, ['--ro-bind', l:path, l:path])
     endfor
     call extend(l:command, ['--ro-bind', l:root, l:root])
     for l:relative in a:write_paths
@@ -494,30 +512,140 @@ function! s:SandboxWrap(command, write_paths, ...) abort
     return l:command
 endfunction
 
+function! s:SandboxPermanentApprovalFile() abort
+    return expand('$HOME/.vim/config/ollama-sandbox-approvals.json')
+endfunction
+
+function! s:LoadSandboxPermanentApprovals() abort
+    let l:file = s:SandboxPermanentApprovalFile()
+    if !filereadable(l:file) || getftype(l:file) ==# 'link'
+        return {}
+    endif
+    try
+        let l:approvals = json_decode(join(readfile(l:file), "\n"))
+        if type(l:approvals) == v:t_dict
+            " Read the original key/value format for migration.
+            return l:approvals
+        endif
+        if type(l:approvals) != v:t_list
+            return {}
+        endif
+        let l:keys = {}
+        for l:approval in l:approvals
+            if type(l:approval) != v:t_dict
+                        \ || type(get(l:approval, 'tool', v:null)) != v:t_string
+                        \ || type(get(l:approval, 'command', v:null)) != v:t_list
+                continue
+            endif
+            if !empty(filter(copy(l:approval.command), 'type(v:val) != v:t_string'))
+                continue
+            endif
+            let l:key = l:approval.tool .. "\n" .. join(l:approval.command, "\n")
+            let l:keys[l:key] = v:true
+        endfor
+        return l:keys
+    catch
+        return {}
+    endtry
+endfunction
+
+function! s:SaveSandboxPermanentApprovals(approvals) abort
+    let l:file = s:SandboxPermanentApprovalFile()
+    let l:directory = fnamemodify(l:file, ':h')
+    if !isdirectory(l:directory)
+        call mkdir(l:directory, 'p')
+    endif
+    if getftype(l:file) ==# 'link'
+        throw 'permanent sandbox approval file must not be a symbolic link'
+    endif
+    let l:lines = ['[']
+    let l:keys = keys(a:approvals)
+    let l:key_count = 0
+    for l:key in l:keys
+        let l:parts = split(l:key, "\n")
+        if len(l:parts) >= 2 && !empty(l:parts[0])
+            let l:key_count += 1
+        endif
+    endfor
+    let l:key_index = 0
+    for l:key in l:keys
+        let l:parts = split(l:key, "\n")
+        if len(l:parts) < 2 || empty(l:parts[0])
+            continue
+        endif
+        let l:tool = remove(l:parts, 0)
+        call add(l:lines, '  {')
+        call add(l:lines, '    "tool": ' .. json_encode(l:tool) .. ',')
+        call add(l:lines, '    "command": [')
+        for l:argument_index in range(len(l:parts))
+            let l:comma = l:argument_index + 1 < len(l:parts) ? ',' : ''
+            call add(l:lines, '      ' .. json_encode(l:parts[l:argument_index]) .. l:comma)
+        endfor
+        call add(l:lines, '    ]')
+        let l:key_index += 1
+        call add(l:lines, '  }' .. (l:key_index < l:key_count ? ',' : ''))
+    endfor
+    call add(l:lines, ']')
+    call writefile(l:lines, l:file, 's')
+endfunction
+
 function! s:ConfirmSandbox(tool, command, ...) abort
+    let l:allowlisted = a:0 > 1 && a:2
+    let l:approval_command = a:0 > 0 ? a:1 : a:command
+    let l:network_allowed = a:0 > 2 && a:3
     if !get(g:, 'ollama_bwrap_enabled', v:false)
         return v:true
     endif
     if !get(g:, 'ollama_bwrap_confirm', v:true)
+        if l:allowlisted
+            call ollama#edit#AppendProgress('Execution allowed per allowlist')
+        endif
         return v:true
     endif
-    let l:key = a:tool .. "\n" .. join(a:command, "\n")
+    let l:key = a:tool .. "\n" .. join(l:approval_command, "\n")
     if get(s:sandbox_session_approvals, l:key, v:false)
+        if l:allowlisted
+            call ollama#edit#AppendProgress('Execution allowed per allowlist')
+        endif
         return v:true
     endif
+    if empty(s:sandbox_permanent_approvals)
+        let s:sandbox_permanent_approvals = s:LoadSandboxPermanentApprovals()
+    endif
+    if get(s:sandbox_permanent_approvals, l:key, v:false)
+        if l:allowlisted
+            call ollama#edit#AppendProgress('Execution allowed per allowlist')
+        endif
+        return v:true
+    endif
+    let l:network_summary = l:network_allowed ? 'network access enabled' : 'network access disabled'
     let l:summary = a:tool ==# 'execute' && get(g:, 'ollama_bwrap_execute_allow_project_write', v:false)
-                \ ? 'Run the selected executable with project files writable and network access disabled?'
+                \ ? 'Run the selected executable with project files writable and ' .. l:network_summary .. '?'
                 \ : a:tool ==# 'execute'
-                \ ? 'Run the selected executable with project files read-only and network access disabled?'
+                \ ? 'Run the selected executable with project files read-only and ' .. l:network_summary .. '?'
                 \ : 'Run the configured checker with project files read-only and network access disabled?'
     if a:tool ==# 'execute' && a:0 > 0
         let l:display_command = join(map(copy(a:1), 'shellescape(v:val)'), ' ')
         let l:summary = "Execute:\n  " .. l:display_command .. "\n\n" .. l:summary
     endif
+    call ollama#edit#AppendProgress('Waiting for execution confirmation')
     let l:choice = confirm(l:summary,
-                \ "Allow &Once\nAllow for &Session\n&Cancel", 3)
+                \ "Allow &Once\nAllow for &Session\nAllow &Permanent\n&Cancel", 4)
     if l:choice == 2
         let s:sandbox_session_approvals[l:key] = v:true
+        return v:true
+    endif
+    if l:choice == 3
+        let s:sandbox_permanent_approvals[l:key] = v:true
+        try
+            call s:SaveSandboxPermanentApprovals(s:sandbox_permanent_approvals)
+        catch
+            call remove(s:sandbox_permanent_approvals, l:key)
+            echohl WarningMsg
+            echomsg 'Could not save permanent sandbox approval: ' .. v:exception
+            echohl None
+            return v:false
+        endtry
         return v:true
     endif
     return l:choice == 1
@@ -773,7 +901,9 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             throw 'execute tool requires a path and argument list'
         endif
         let l:relative = a:arguments.path
-        let l:execute_cwd = get(a:arguments, 'cwd', getcwd())
+        " The tool schema uses project-relative cwd values; an omitted cwd
+        " means the current project directory, represented as '.'.
+        let l:execute_cwd = get(a:arguments, 'cwd', '.')
         let l:timeout = get(a:arguments, 'timeout', 30)
         let l:kill_timeout = get(a:arguments, 'kill_timeout', 3)
         if type(l:timeout) != v:t_number || l:timeout < 0
@@ -824,6 +954,18 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                 throw 'system executable is not in g:ollama_execute_allowlist'
             endif
         endif
+        let l:network_allowed = get(g:, 'ollama_bwrap_network', v:false)
+        let l:network_allowlist = get(g:, 'ollama_bwrap_network_allowlist', [])
+        if type(l:network_allowlist) != v:t_list
+            throw 'ollama_bwrap_network_allowlist must be a list of absolute executable paths'
+        endif
+        for l:allowed_path in l:network_allowlist
+            if type(l:allowed_path) == v:t_string && l:allowed_path =~# '^/'
+                        \ && resolve(l:allowed_path) ==# resolve(l:path)
+                let l:network_allowed = v:true
+                break
+            endif
+        endfor
         if empty(l:path) || getftype(l:path) ==# 'link' || !filereadable(l:path) || !executable(l:path) || isdirectory(l:path)
             throw 'execute path must be an executable regular file'
         endif
@@ -839,6 +981,7 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             let l:key = fnamemodify(l:path, ':.')
             let l:decisions = s:LoadExecuteDecisions()
             if get(l:decisions, l:key, '') !=# 'always'
+                call ollama#edit#AppendProgress('Waiting for execution confirmation')
                 let l:choice = confirm('Execute ' .. l:key .. '?', "Allow &Once\nAllow &Always\n&Cancel", 3)
                 if l:choice == 3 || l:choice == 0
                     call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'execution cancelled by user', 'cancelled': v:true, 'decision': 'canceled', 'output': []})
@@ -877,8 +1020,8 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         let l:execute_command = copy(l:command)
         if l:sandboxed
             let l:write_paths = get(g:, 'ollama_bwrap_execute_allow_project_write', v:false) ? ['.'] : []
-            let l:command = s:SandboxWrap(l:command, l:write_paths, l:execute_cwd)
-            if !s:ConfirmSandbox('execute', l:command, l:execute_command)
+            let l:command = s:SandboxWrap(l:command, l:write_paths, l:execute_cwd, l:network_allowed)
+            if !s:ConfirmSandbox('execute', l:command, l:execute_command, !l:is_project_executable, l:network_allowed)
                 call ollama#edit#SubmitMakeResult(a:request_id, {'ok': v:false, 'message': 'sandboxed execute cancelled by user', 'output': '', 'decision': 'canceled'})
                 return
             endif

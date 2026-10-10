@@ -976,10 +976,42 @@ g:ollama_bwrap_network
       is disabled by default.
     - Default: 'v:false'
 
-                                                      *g:ollama_bwrap_confirm*
+                                           *g:ollama_bwrap_network_allowlist*
+g:ollama_bwrap_network_allowlist
+    - Description: List of exact absolute executable paths that may use the
+      network inside bubblewrap, for example `['/usr/bin/glab']`. This setting
+      applies per execution and does not enable network access for other
+      programs. The command confirmation describes when network access is
+      enabled.
+    - Default: []
+    - Example:
+>
+        let g:ollama_bwrap_network_allowlist = ['/usr/bin/glab']
+<
+
+                                           *g:ollama_bwrap_readonly_paths*
+g:ollama_bwrap_readonly_paths
+    - Description: List of exact absolute files or directories to expose
+      read-only inside bubblewrap. Use this for tool configuration and custom
+      certificate files that are outside the project, for example:
+>
+        let g:ollama_bwrap_readonly_paths = [
+                    \ expand('~/.config/glab-cli'),
+                    \ ]
+<
+      Paths are not writable and symbolic links are rejected. This setting is
+      empty by default and does not expose the rest of the home directory.
+
+                                                       *g:ollama_bwrap_confirm*
 g:ollama_bwrap_confirm
     - Description: Prompts before launching sandboxed `execute` and
-      `vim-check` commands. `vim-make` is not prompted.
+      `vim-check` commands. The prompt offers Once, Session, Permanent, and
+      Cancel. Permanent sandbox approvals are stored, keyed by the exact
+      executable and its arguments, in
+      `~/.vim/config/ollama-sandbox-approvals.json` as structured records
+      containing `tool` and a `command` array. Bubblewrap wrapper arguments are
+      not stored. Older key/value files are read and migrated when a new
+      permanent approval is saved. `vim-make` is not prompted.
     - Default: 'v:true'
 
                                   *g:ollama_bwrap_execute_allow_project_write*

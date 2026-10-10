@@ -213,6 +213,12 @@ endif
 if !exists('g:ollama_bwrap_network')
     let g:ollama_bwrap_network = v:false
 endif
+if !exists('g:ollama_bwrap_network_allowlist')
+    let g:ollama_bwrap_network_allowlist = []
+endif
+if !exists('g:ollama_bwrap_readonly_paths')
+    let g:ollama_bwrap_readonly_paths = []
+endif
 if !exists('g:ollama_bwrap_confirm')
     let g:ollama_bwrap_confirm = v:true
 endif
