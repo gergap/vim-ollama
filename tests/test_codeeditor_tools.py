@@ -1232,6 +1232,18 @@ def test_execute_rejects_paths_outside_workspace():
     assert "remain below the current directory" in result["error"]
 
 
+def test_execute_rejects_system_executable_not_in_allowlist(tmp_path):
+    result = CodeEditor._request_execute(
+        {"path": "/usr/bin/sh", "arguments": []},
+        cwd=str(tmp_path / "workspace"),
+        allow_system_tools=True,
+        execute_allowlist=[],
+    )
+
+    assert result["ok"] is False
+    assert "execute allowlist" in result["message"]
+
+
 @pytest.mark.parametrize("field", ["timeout", "kill_timeout"])
 def test_execute_rejects_negative_timeouts(field):
     result = CodeEditor._request_execute({

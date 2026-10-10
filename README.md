@@ -60,6 +60,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
     reached, while preserving recent tool results and safety state
   - Delegate bounded, read-only analysis of explicitly selected files to a
     permission-inheriting subagent
+  - Allow selected system executables, such as `/usr/bin/glab`, through the
+    exact-path `g:ollama_execute_allowlist` setting while retaining sandboxing
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.

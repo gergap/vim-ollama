@@ -598,11 +598,11 @@ EXECUTE_TOOLS = [
         "type": "function",
         "function": {
             "name": "execute",
-            "description": "Execute an existing executable file below the current directory for testing. User confirmation is required before execution. Timeout values are in seconds. NEVER invoke system tools!",
+            "description": "Execute an existing executable file below the current directory for testing, or an explicitly allowlisted system executable. User confirmation is required before execution. Never use a shell.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Relative path to an executable file below the current directory."},
+                    "path": {"type": "string", "description": "Relative path to a project executable, or an absolute path listed in g:ollama_execute_allowlist."},
                     "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
                     "cwd": {"type": "string", "description": "Optional project-relative working directory for the executable. Defaults to Vim's current working directory."},
                     "timeout": {"type": "number", "minimum": 0, "default": 30, "description": "Seconds before sending SIGTERM."},
@@ -1549,7 +1549,7 @@ def _request_check(arguments):
         return g_make_results.pop(request_id)
 
 
-def _request_execute(arguments, cwd=None, allow_system_tools=False):
+def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allowlist=None):
     if not isinstance(arguments, dict):
         error = "execute tool requires a path and argument list"
         _progress(f"Tool error: {error}", tool="execute")
@@ -1614,6 +1614,14 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False):
         resolved = os.path.realpath(resolved)
         if not resolved.startswith(allowed_roots):
             return {"ok": False, "message": f"execute denied: system tool is outside the sandbox system paths: {path}", "denied": path, "output": ""}
+        configured_allowlist = execute_allowlist if isinstance(execute_allowlist, list) else []
+        allowed_paths = {
+            os.path.realpath(item)
+            for item in configured_allowlist
+            if isinstance(item, str) and os.path.isabs(item) and "\x00" not in item
+        }
+        if os.path.realpath(resolved) not in allowed_paths:
+            return {"ok": False, "message": f"execute denied: system executable is not in the execute allowlist: {path}", "denied": path, "output": ""}
         path = resolved
         local_path = resolved
     arguments = dict(arguments)
@@ -3079,7 +3087,12 @@ def _run_edit(request, code, filetype, settings):
                 elif name in CHECK_TOOL_NAMES:
                     result = _request_check(arguments)
                 elif name in EXECUTE_TOOL_NAMES:
-                    result = _request_execute(arguments, settings.get("cwd"), settings.get("sandbox_system_tools", False))
+                    result = _request_execute(
+                        arguments,
+                        settings.get("cwd"),
+                        settings.get("sandbox_system_tools", False),
+                        settings.get("execute_allowlist", []),
+                    )
                 elif name in TODO_TOOL_NAMES:
                     result = _request_todo(arguments)
                 elif name in GIT_TOOL_NAMES:

@@ -219,6 +219,9 @@ endif
 if !exists('g:ollama_bwrap_execute_allow_project_write')
     let g:ollama_bwrap_execute_allow_project_write = v:false
 endif
+if !exists('g:ollama_execute_allowlist')
+    let g:ollama_execute_allowlist = []
+endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif

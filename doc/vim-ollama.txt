@@ -218,8 +218,9 @@ TOOLS                                                       *vim-ollama-tools*
     todowrite       Replace the current session TODO list.
     vim-make        Run Vim's configured makeprg with validated target names.
     vim-check       Run the configured language checker for a project file.
-    execute         Run an existing executable project or system tool. User
-                    confirmation or the configured bubblewrap sandbox applies.
+    execute         Run an existing project executable or an explicitly
+                    allowlisted system executable. User confirmation or the
+                    configured bubblewrap sandbox applies.
 
     The following Git tools are available in workspace Build mode when Git is
     installed. They are not available in range Build mode or Plan mode:

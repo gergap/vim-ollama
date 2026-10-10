@@ -789,10 +789,12 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
             throw 'execute path must be relative and remain below the current directory'
         endif
         if l:relative =~# '^/' && !get(g:, 'ollama_bwrap_enabled', v:false)
-            throw 'absolute system paths require bubblewrap'
+            throw 'absolute system paths require bubblewrap and an execute allowlist entry'
         endif
         let l:is_absolute = l:relative =~# '^/'
         let l:path = l:is_absolute ? simplify(l:relative) : simplify(g:ollama_edit_cwd .. '/' .. l:relative)
+        let l:is_project_executable = !l:is_absolute && getftype(l:path) ==# 'file'
+                    \ && getftype(l:path) !=# 'link' && executable(l:path)
         let l:execute_cwd = simplify(g:ollama_edit_cwd .. '/' .. l:execute_cwd)
         if getftype(l:execute_cwd) ==# 'link' || !isdirectory(l:execute_cwd)
             throw 'execute cwd must be an existing project directory'
@@ -804,6 +806,23 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         if get(g:, 'ollama_bwrap_enabled', v:false) && l:is_absolute
                     \ && l:path !~# '^/usr/\|^/bin/\|^/sbin/\|^/lib/\|^/lib64/'
             throw 'absolute path is outside the sandbox system paths'
+        endif
+        if l:is_absolute || !l:is_project_executable
+            let l:allowlist = get(g:, 'ollama_execute_allowlist', [])
+            if type(l:allowlist) != v:t_list
+                throw 'ollama_execute_allowlist must be a list of absolute executable paths'
+            endif
+            let l:allowed = v:false
+            for l:allowed_path in l:allowlist
+                if type(l:allowed_path) == v:t_string && l:allowed_path =~# '^/'
+                            \ && resolve(l:allowed_path) ==# resolve(l:path)
+                    let l:allowed = v:true
+                    break
+                endif
+            endfor
+            if !l:allowed
+                throw 'system executable is not in g:ollama_execute_allowlist'
+            endif
         endif
         if empty(l:path) || getftype(l:path) ==# 'link' || !filereadable(l:path) || !executable(l:path) || isdirectory(l:path)
             throw 'execute path must be an executable regular file'
@@ -1090,6 +1109,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'mode': get(g:, 'ollama_edit_mode', 'build'),
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),
                 \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
+                \ 'execute_allowlist': get(g:, 'ollama_execute_allowlist', []),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)
     let l:code_json = json_encode(a:code)
