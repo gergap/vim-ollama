@@ -55,22 +55,22 @@ directly. For native builds, use a dedicated out-of-tree build directory or
 explicitly document that the whole source tree is writable. Keep target
 validation strict and add an explicit confirmation for unsandboxed builds.
 
-### S3. Workspace file mutations have no per-operation confirmation or review
+### S3. Build-mode project writes are intentionally unconfirmed (design clarification)
 
-**Severity: High, conditional on an untrusted or misdirected model**  
-**References:** `python/CodeEditor.py:1146-1254`, `python/CodeEditor.py:1840-1855`
+**Disposition: Not a vulnerability under the stated design**
+**References:** `python/CodeEditor.py:864-881`, `python/CodeEditor.py:1146-1254`, `python/CodeEditor.py:1836-1843`
 
-Once a workspace session is opened, `create_file`, `delete_file`,
-`delete_folder`, `chmod`, line edits, and archive extraction are applied
-immediately. There is no user confirmation, diff approval, or session-level
-revocation for destructive filesystem operations. A prompt injection can thus
-create a payload, mark it executable, remove files, and invoke later operations
-within one approved session.
+The plugin intentionally permits filesystem mutations inside the active project
+directory in Build/workspace mode. Plan mode exposes only read-only tools and
+rejects write calls, while `_safe_path` rejects absolute paths, parent
+components, and resolved paths outside the workspace. Therefore the absence of
+per-operation confirmation for allowed Build-mode project writes is not itself
+a security defect; it is the selected permission model.
 
-**Recommendation:** Require confirmation for destructive operations, show a
-reviewable diff/summary for writes, and make the permission explicit and
-revocable per session. Add a second confirmation before executing files created
-or changed during the same session.
+The model should still receive clear prompts describing this boundary, and the
+existing S4 finding remains separate: modifying an approval file to bypass an
+execution confirmation is different from making an otherwise permitted project
+change.
 
 ### S4. Persistent execution approvals are writable by the agent
 
