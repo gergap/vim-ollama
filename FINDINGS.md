@@ -97,18 +97,22 @@ directory, or sandbox state changes.
 **Severity: Medium to High when combined with S1-S3**  
 **References:** `python/CodeEditor.py:1426-1449`, `python/CodeEditor.py:1520-1527`
 
-`AGENTS.md` and `CLAUDE.md` files are loaded from every ancestor up to the
-filesystem root and appended as `Instructions from ...` to the system prompt.
-They are not marked as untrusted data, there is no total size/count limit, and
-they are included in modes where the prompt says the model is read-only.
+**Status: Fixed:** discovery now stops at the nearest Git root (or the current
+workspace when no Git root exists), limits the number and total size of loaded
+files, and wraps their content in an explicit untrusted-instructions frame.
+
+Before the fix, `AGENTS.md` and `CLAUDE.md` files were loaded from every
+ancestor up to the filesystem root and appended as trusted-looking
+`Instructions from ...` text. They were not marked as untrusted data and had no
+total size/count limit.
 
 A cloned repository can therefore supply authoritative-looking instructions
 that steer web requests, file changes, or execution. The risk is amplified by
 the unrestricted web tool and unsandboxed make path.
 
-**Recommendation:** Stop discovery at the Git/workspace root, cap total files
-and bytes, and clearly frame all project-provided text as untrusted content
-that cannot grant permissions or override mode/tool restrictions.
+**Residual recommendation:** Keep the untrusted framing authoritative in all
+future prompt changes and retain the file/count limits when adding other
+instruction sources.
 
 ### S6. Debug logs expose full prompts, source, and tool results in `/tmp`
 
