@@ -33,11 +33,11 @@ verified independently before skill discovery and management are added:
           distinguishing them from isolated failures or unsafe instructions.
     - [x] Add a guarded proposal workflow that records rationale, evidence,
           intended scope, and expected benefit before changing a skill.
-    - [ ] Add validation and evaluation hooks for proposed skill changes,
+    - [x] Add validation and evaluation hooks for proposed skill changes,
           including stale-hash protection, rollback, and failure reporting.
     - [x] Require explicit confirmation for global self-optimization and keep
           project self-optimization within workspace Build permissions.
-    - [ ] Add tests and documentation for enabled, disabled, rejected, and
+    - [x] Add tests and documentation for enabled, disabled, rejected, and
           confirmed self-optimization paths.
 
 Each roadmap item should be usable and testable before starting the next item.

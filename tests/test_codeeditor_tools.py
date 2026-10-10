@@ -364,7 +364,40 @@ def test_self_optimization_requires_evidence_and_stores_bounded_proposal(tmp_pat
     finally:
         monkeypatch.undo()
     assert applied["ok"]
+    assert proposal_id in CodeEditor.g_skill_proposals
+    evaluated = CodeEditor._skill_optimize({
+        "action": "evaluate", "proposal_id": proposal_id, "passed": True,
+        "report": "Focused validation passed.",
+    }, settings)
+    assert evaluated["ok"]
     assert proposal_id not in CodeEditor.g_skill_proposals
+
+
+def test_failed_self_optimization_evaluation_restores_previous_skill(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "example"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    before = "---\nname: example\ndescription: Example\n---\nUse it.\n"
+    skill_path.write_text(before)
+    digest = __import__("hashlib").sha256(skill_path.read_bytes()).hexdigest()
+    settings = {"cwd": str(tmp_path)}
+    proposal = CodeEditor._skill_optimize({
+        "action": "propose", "scope": "project", "name": "example",
+        "rationale": "Repeated improvement.", "evidence": "Verified twice.",
+        "expected_benefit": "More reliable work.", "old_string": "Use it.",
+        "new_string": "Validate it.", "expected_hash": digest,
+    }, settings)
+    proposal_id = proposal["proposal_id"]
+    monkeypatch.setattr(CodeEditor, "_request_skill_manage", lambda arguments, current_settings: CodeEditor._apply_skill_manage(arguments, current_settings))
+    applied = CodeEditor._skill_optimize({"action": "apply", "proposal_id": proposal_id}, settings)
+    assert applied["ok"]
+    failed = CodeEditor._skill_optimize({
+        "action": "evaluate", "proposal_id": proposal_id, "passed": False,
+        "report": "Focused validation failed.",
+    }, settings)
+    assert failed["rollback"] == "restored"
+    assert skill_path.read_text() == before
 
 
 def test_self_optimization_tool_is_independently_gated(monkeypatch):

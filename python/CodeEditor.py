@@ -234,7 +234,7 @@ SELF_OPTIMIZATION_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {"type": "string", "enum": ["propose", "apply"]},
+                    "action": {"type": "string", "enum": ["propose", "apply", "evaluate"]},
                     "proposal_id": {"type": "string"},
                     "scope": {"type": "string", "enum": ["project", "global"]},
                     "name": {"type": "string"},
@@ -246,6 +246,8 @@ SELF_OPTIMIZATION_TOOLS = [
                     "new_string": {"type": "string"},
                     "replace_all": {"type": "boolean"},
                     "expected_hash": {"type": "string"},
+                    "passed": {"type": "boolean"},
+                    "report": {"type": "string"},
                 },
                 "required": ["action"],
                 "additionalProperties": False,
@@ -1190,6 +1192,8 @@ def _skill_manage_plan(arguments, settings):
             target = _skill_file_path(skill_dir, file_path, allow_skill=True)
             current = _skill_read_bytes(target)
             if "old_string" in operation:
+                if isinstance(operation.get("expected_hash"), str) and hashlib.sha256(current).hexdigest() != operation["expected_hash"]:
+                    raise ValueError(f"stale expected_hash for skill: {name}")
                 old = operation.get("old_string")
                 new = operation.get("new_string", "")
                 _skill_text_bytes(old, "old_string")
@@ -1369,14 +1373,19 @@ def _skill_optimization_proposal(arguments, settings):
         "expected_hash": current_hash,
         "operation": operation,
         "diff": {"before_hash": current_hash, "after_hash": hashlib.sha256(raw).hexdigest()},
+        "_before_raw": current,
+        "_after_raw": raw,
+        "_target": skill_path,
+        "_status": "proposed",
     }
     with g_thread_lock:
         if len(g_skill_proposals) >= MAX_SKILL_PROPOSALS:
             oldest = next(iter(g_skill_proposals))
             del g_skill_proposals[oldest]
         g_skill_proposals[proposal_id] = proposal
+    public_proposal = {key: value for key, value in proposal.items() if not key.startswith("_")}
     return {"ok": True, "message": f"created Skill proposal {proposal_id}",
-            "proposal_id": proposal_id, "proposal": proposal}
+            "proposal_id": proposal_id, "proposal": public_proposal}
 
 
 def _skill_optimize(arguments, settings):
@@ -1385,8 +1394,44 @@ def _skill_optimize(arguments, settings):
     action = arguments.get("action")
     if action == "propose":
         return _skill_optimization_proposal(arguments, settings)
+    if action == "evaluate":
+        proposal_id = arguments.get("proposal_id")
+        passed = arguments.get("passed")
+        if not isinstance(proposal_id, str) or not proposal_id:
+            raise ValueError("evaluating self-optimization requires proposal_id")
+        if not isinstance(passed, bool):
+            raise ValueError("evaluation passed must be boolean")
+        report = _proposal_text(arguments.get("report"), "report")
+        with g_thread_lock:
+            proposal = g_skill_proposals.get(proposal_id)
+        if not proposal or proposal.get("_status") != "applied":
+            raise ValueError("only an applied Skill proposal can be evaluated")
+        if passed:
+            with g_thread_lock:
+                g_skill_proposals.pop(proposal_id, None)
+            return {"ok": True, "message": "Skill proposal evaluation accepted", "proposal_id": proposal_id, "report": report}
+        target = proposal["_target"]
+        try:
+            current = _skill_read_bytes(target)
+        except ValueError as error:
+            return {"ok": False, "message": f"evaluation failed; rollback refused: {error}",
+                    "proposal_id": proposal_id, "report": report, "rollback": "refused"}
+        if hashlib.sha256(current).hexdigest() != proposal.get("_applied_hash"):
+            return {"ok": False, "message": "evaluation failed but Skill changed externally; rollback refused", "proposal_id": proposal_id, "report": report, "rollback": "refused"}
+        before = proposal.get("_before_raw")
+        if before is None:
+            os.unlink(target)
+            try:
+                os.rmdir(os.path.dirname(target))
+            except OSError:
+                pass
+        else:
+            _atomic_skill_write(target, before)
+        with g_thread_lock:
+            g_skill_proposals.pop(proposal_id, None)
+        return {"ok": True, "message": "evaluation failed; previous Skill restored", "proposal_id": proposal_id, "report": report, "rollback": "restored"}
     if action != "apply":
-        raise ValueError("skill_optimize action must be propose or apply")
+        raise ValueError("skill_optimize action must be propose, apply, or evaluate")
     proposal_id = arguments.get("proposal_id")
     if not isinstance(proposal_id, str) or not proposal_id:
         raise ValueError("applying self-optimization requires proposal_id")
@@ -1394,14 +1439,17 @@ def _skill_optimize(arguments, settings):
         proposal = g_skill_proposals.get(proposal_id)
     if not proposal:
         raise ValueError("Skill proposal was not found or has expired")
+    if proposal.get("_status") != "proposed":
+        raise ValueError("Skill proposal has already been applied")
     operation = dict(proposal["operation"])
     apply_arguments = {"scope": proposal["scope"], "operations": [operation]}
     result = _request_skill_manage(apply_arguments, settings)
     if result.get("ok"):
         with g_thread_lock:
-            g_skill_proposals.pop(proposal_id, None)
+            proposal["_status"] = "applied"
+            proposal["_applied_hash"] = hashlib.sha256(_skill_read_bytes(proposal["_target"])).hexdigest()
     return {"ok": result.get("ok", False), "message": result.get("message", ""),
-            "proposal_id": proposal_id, "result": result}
+            "proposal_id": proposal_id, "result": result, "evaluation_required": bool(result.get("ok"))}
 
 
 def _request_make(arguments):

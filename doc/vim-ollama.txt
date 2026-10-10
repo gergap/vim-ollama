@@ -310,8 +310,11 @@ SELF-OPTIMIZATION                                           *vim-ollama-self-opt
     weaken safety or permissions are not valid evidence. Applying a proposal
     rechecks its hash and uses the normal `skill_manage` scope permissions and
     confirmation flow. Global changes require Vim confirmation; project
-    changes require workspace Build permission. Failed or stale proposals leave
-    the previous Skill unchanged.
+    changes require workspace Build permission. Use `evaluate` with a focused
+    test, checker result, or explicit user acceptance signal after applying a
+    proposal. A passed evaluation finalizes it; a failed evaluation restores
+    the prior content. Failed or stale proposals, including externally changed
+    Skills, never overwrite newer content.
 
     Set `g:ollama_enabled_self_optimization` to `v:false` to omit the prompt
     guidance and `skill_optimize` tool without disabling ordinary Skill
