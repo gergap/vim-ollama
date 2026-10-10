@@ -81,7 +81,7 @@ def main():
                         help="Specify log level")
     parser.add_argument('-f', '--log-filename', type=str, default="list_models.log",
                         help="Specify log filename")
-    parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
+    parser.add_argument('-d', '--log-dir', type=str, default=OllamaLogger.DEFAULT_LOG_DIR,
                         help="Specify log file directory")
     parser.add_argument('-k', '--keyname', default=None,
                         help="Credential name to lookup API key and password store")

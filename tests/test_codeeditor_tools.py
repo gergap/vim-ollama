@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
 import CodeEditor
 from CodeEditor import apply_tool
+from OllamaLogger import OllamaLogger
 
 
 def test_insert_lines():
@@ -19,6 +20,18 @@ def test_insert_lines():
 
     assert result["ok"]
     assert document == ["one", "two", "three"]
+
+
+def test_logger_uses_private_directory_and_file_permissions(tmp_path):
+    log_dir = tmp_path / "logs"
+    logger = OllamaLogger(str(log_dir), "private.log")
+
+    assert stat.S_IMODE(log_dir.stat().st_mode) == 0o700
+    assert stat.S_IMODE((log_dir / "private.log").stat().st_mode) == 0o600
+
+    if logger.fh:
+        logger.fh.close()
+        logger.logger.removeHandler(logger.fh)
 
 
 def test_replace_lines_requires_exact_expected_text():

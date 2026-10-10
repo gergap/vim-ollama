@@ -414,7 +414,7 @@ if __name__ == "__main__":
                             help="Specify log level")
         parser.add_argument('-f', '--log-filename', type=str, default="complete.log",
                             help="Specify log filename")
-        parser.add_argument('-d', '--log-dir', type=str, default="/tmp/logs",
+        parser.add_argument('-d', '--log-dir', type=str, default=OllamaLogger.DEFAULT_LOG_DIR,
                             help="Specify log file directory")
         parser.add_argument('-T', action='store_false', default=True,
                             help="Use Ollama code generation suffix (experimental)")

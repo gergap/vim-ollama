@@ -322,10 +322,10 @@ function! s:FinalizeSetupTask()
                 \ "",
                 \ "\" debug settings",
                 \ "\"let g:ollama_debug = 4",
-                \ "\" general log file location",
-                \ "\"let g:ollama_logfile = '/tmp/logs/vim-ollama.log'",
-                \ "\" ollama chat conversation log",
-                \ "\"let g:ollama_review_logfile = '/tmp/logs/vim-ollama-review.log'",
+                \ "\" general Vimscript log file location (debug logs may contain sensitive data)",
+                \ "\"let g:ollama_logfile = '/path/to/vim-ollama.log'",
+                \ "\" Vimscript chat conversation log (debug level only)",
+                \ "\"let g:ollama_review_logfile = '/path/to/vim-ollama-review.log'",
                 \ "",
                 \ "\" vim: filetype=vim.ollama" ]
     call writefile(l:config, l:config_file)

@@ -599,7 +599,7 @@ def cancel_edit():
 
 def CreateLogger():
     global log
-    log = OllamaLogger("/tmp/logs", "edit.log")
+    log = OllamaLogger(log_filename="edit.log")
     log.setLevel(0)
 
 

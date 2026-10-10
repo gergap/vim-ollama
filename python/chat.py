@@ -275,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--nothinking", action="store_true", help="Disable thinking output (if provided by the model).")
     parser.add_argument("-l", "--log-level", type=int, default=OllamaLogger.ERROR, help="Log level.")
     parser.add_argument("-f", "--log-filename", type=str, default="chat.log", help="Log filename.")
-    parser.add_argument("-d", "--log-dir", type=str, default="/tmp/logs", help="Log file directory.")
+    parser.add_argument("-d", "--log-dir", type=str, default=OllamaLogger.DEFAULT_LOG_DIR, help="Log file directory.")
     parser.add_argument('-k', '--keyname', default=None,
                         help="Credential name to lookup API key and password store")
     args = parser.parse_args()

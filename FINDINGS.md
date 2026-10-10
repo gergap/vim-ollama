@@ -114,20 +114,25 @@ the unrestricted web tool and unsandboxed make path.
 future prompt changes and retain the file/count limits when adding other
 instruction sources.
 
-### S6. Debug logs expose full prompts, source, and tool results in `/tmp`
+### S6. Debug log privacy and permissions
 
 **Severity: Medium**  
 **References:** `python/CodeEditor.py:597-600`, `python/OllamaLogger.py:18-39`, `python/CodeEditor.py:1782-1824`, `python/complete.py:177-186`
 
-The default logger writes to `/tmp/logs`. `RotatingFileHandler` uses normal
-process umask, commonly creating world-readable files, and the directory is
-shared. Debug paths log complete message histories, prompts, source text, tool
-arguments, and responses. Completion logging also records request and response
-content. Prompts can contain credentials or proprietary source.
+**Status: Fixed:** Python logging now defaults to
+`~/.vim/state/ollama/logs`, creates the directory with `0700`, and creates log
+and rotated files with `0600` using a restrictive `umask`.
 
-**Recommendation:** Use a user-private state directory with mode `0700` and
-files mode `0600`; only create file logging when explicitly enabled; redact
-authorization material and avoid logging complete request/response bodies.
+Before the fix, the default logger wrote to `/tmp/logs`. `RotatingFileHandler`
+used the normal umask, commonly creating world-readable files, and the
+directory was shared. Debug paths log complete message histories, prompts,
+source text, tool arguments, and responses. Completion logging also records
+request and response content. Prompts can contain credentials or proprietary
+source.
+
+**Residual recommendation:** Only create file logging when explicitly enabled
+and redact authorization material; avoid logging complete request/response
+bodies.
 
 ### S7. Password-store lookup is unbounded and uses a PATH-resolved executable
 

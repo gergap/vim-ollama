@@ -9,13 +9,36 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
+
+DEFAULT_LOG_DIR = os.path.expanduser("~/.vim/state/ollama/logs")
+
+
+class SecureRotatingFileHandler(RotatingFileHandler):
+    """Rotating file handler that creates log files with owner-only access."""
+
+    def _open(self):
+        previous_umask = os.umask(0o077)
+        try:
+            return super()._open()
+        finally:
+            os.umask(previous_umask)
+
+    def doRollover(self):
+        super().doRollover()
+        for suffix in [""] + [f".{index}" for index in range(1, self.backupCount + 1)]:
+            path = self.baseFilename + suffix
+            if os.path.isfile(path) and not os.path.islink(path):
+                os.chmod(path, 0o600)
+
+
 class OllamaLogger:
+    DEFAULT_LOG_DIR = DEFAULT_LOG_DIR
     ERROR = logging.ERROR
     WARNING = logging.WARNING
     INFO = logging.INFO
     DEBUG = logging.DEBUG
 
-    def __init__(self, log_dir = '/tmp/logs', log_filename = 'ollama.log', log_level = logging.ERROR):
+    def __init__(self, log_dir=DEFAULT_LOG_DIR, log_filename='ollama.log', log_level=logging.ERROR):
         # Create a logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
@@ -24,11 +47,20 @@ class OllamaLogger:
         self.fh = None  # File handler
 
         try:
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir, exist_ok=True)
+            if os.path.islink(log_dir):
+                raise OSError("log directory must not be a symbolic link")
+            previous_umask = os.umask(0o077)
+            try:
+                os.makedirs(log_dir, mode=0o700, exist_ok=True)
+            finally:
+                os.umask(previous_umask)
+            os.chmod(log_dir, 0o700)
 
             log_path = os.path.join(log_dir, log_filename)
-            fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=2)
+            if os.path.islink(log_path):
+                raise OSError("log file must not be a symbolic link")
+            fh = SecureRotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=2)
+            os.chmod(log_path, 0o600)
             fh.setLevel(log_level)
 
             # Create a logging format for the file handler

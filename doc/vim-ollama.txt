@@ -860,6 +860,12 @@ g:ollama_nothinking
 
 You can enable logging by specifying the following variables.
 
+Debug logging can include prompts, source code, model responses, tool
+arguments, and chat conversations. Treat log files as sensitive. Python logs
+default to `~/.vim/state/ollama/logs`; the directory is created with mode
+0700 and log/rotation files with mode 0600. The Python command-line tools also
+accept `--log-dir` when a different location is explicitly required.
+
                                                               *g:ollama_debug*
 g:ollama_debug
     - Description: Sets the debug level of the logging infrastructure.
@@ -872,9 +878,8 @@ g:ollama_debug
 <
                                                             *g:ollama_logfile*
 g:ollama_logfile
-    - Description: Configure the path of the log file.
-      Note that the log file path of the python code is currently hardcoded to
-      '/tmp/logs'.
+    - Description: Configure the Vimscript log file path. This setting does not
+      change the separate Python log files.
     - Default: A random file in your temp directory will be created using
       tempname(). This can result in a path like '/tmp/vBu3NCc/5-ollama.log'
     - Example:
@@ -884,18 +889,20 @@ g:ollama_logfile
                                                      *g:ollama_review_logfile*
 g:ollama_review_logfile
     - Description: Configure the path for logging chat conversations.
-      This only will be logged on _Debug_ level (4).
+      This is only logged on _Debug_ level (4). This setting controls Vim's
+      chat log and does not change the separate Python chat log.
     - Default: A random file in your temp directory will be created using
       tempname(). This can result in a path like '/tmp/vBu3NCc/5-ollama-review.log'
     - Example:
 >
         let g:ollama_review_logfile = '/path/to/vim-ollama-review.log'
 
-By default, the Python scripts used underneath use separate log files. The
-variable `g:ollama_debug` is passed to the Python calls to enable also the
-logging mechanism of the according script. However, the default log path
-is `/tmp/logs`, and the log filenames are `complete.log` for tab completions
-and `chat.log` for chat conversations.
+By default, the Python scripts used underneath use separate log files below
+`~/.vim/state/ollama/logs`. The variable `g:ollama_debug` is passed to the
+Python calls to enable the logging mechanism of the corresponding script. The
+default Python filenames are `edit.log` for OllamaEdit, `complete.log` for tab
+completion, `chat.log` for chat conversations, and `list_models.log` for model
+listing. Python log files are restricted to the current user when created.
 
 ==============================================================================
 8. License                                                *vim-ollama-license*
