@@ -272,6 +272,10 @@ function! ollama#edit#AppendProgress(text) abort
     endif
 endfunction
 
+function! ollama#edit#ContextStatus() abort
+    return get(g:, 'ollama_context_status', '')
+endfunction
+
 function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     if !bufexists(s:conversation_bufnr) || empty(a:content)
         return
@@ -1160,6 +1164,9 @@ try:
             vim.command('call ollama#edit#AppendProgress(' + vim_json(event.get('text', '')) + ')')
         if event.get('text', '').startswith('Waiting for model response'):
             vim.command('call ollama#edit#ShowSpinner()')
+        if event.get('type') == 'context_usage':
+            vim.command('let g:ollama_context_status = ' + vim_json(event.get('text', '')))
+            vim.command('redrawstatus')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + vim_json(event['request_id']) + ', ' + vim_json(arguments) + ')')
@@ -1225,6 +1232,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let g:ollama_edit_lastline = s:lastline
     let g:ollama_edit_changedtick = b:changedtick
     let g:ollama_edit_cwd = getcwd()
+    let g:ollama_context_status = ''
     let g:ollama_edit_checker = get(a:settings, 'checker', {})
 
     let l:is_openai = g:ollama_edit_provider =~# '^openai'

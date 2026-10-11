@@ -62,8 +62,14 @@ verified independently before skill discovery and management are added:
           documentation for subagent calls.
 8. Context Status Info
     - [x] Add helper function to get Context info like '178.9K (36%)'
-    - [ ] Support displaying this info in normal Vim Status line
-    - [ ] Add Vim Airline extension to display this info
+    - [x] Support displaying this info in normal Vim Status line
+    - [x] Add Vim Airline extension to display this info
+9. Refactor command
+    - [ ] Add a new OllamaRefactor command that takes a range:
+    Example: user selects some lines in a long function and uses this command.
+    The code should be moved to a new functions with the required arguments and
+    the lines should be replaced with this new function call. In C this should be
+    a local (static) function.
 
 
 Each roadmap item should be usable and testable before starting the next item.

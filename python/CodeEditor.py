@@ -3129,7 +3129,7 @@ def _run_edit(request, code, filetype, settings):
         message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
         context = _context_usage(message, settings)
         if context:
-            _progress(context)
+            _progress(context, type="context_usage")
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
             messages.append({key: value for key, value in message.items() if key not in ("_ollama_usage", "_provider_usage")})

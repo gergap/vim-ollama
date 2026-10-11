@@ -335,8 +335,36 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
     Compaction is deterministic and does not make a hidden extra model request.
     If the summary is still too large, recent message content is truncated with
     a marker rather than sending an over-budget request. Compaction never writes
-    Memory, USER.md, Skills, or project files. The progress view reports each
-    compaction event.
+     Memory, USER.md, Skills, or project files. The progress view reports each
+     compaction event.
+
+    The latest context usage is available to Vim statuslines through
+    `ollama#edit#ContextStatus()`. Add it to an existing statusline without
+    replacing the rest of that statusline:
+>
+        set statusline+=\ %{ollama#edit#ContextStatus()}
+<
+    The expression returns an empty string until OllamaEdit has received usage
+    information. It then displays values such as `Context: 8.9k / 160.0k
+    (6%)`. The value is refreshed after each provider response.
+
+    Vim Airline users can enable the bundled `ollama` extension and add its
+    `ollama_context` part to an Airline section. To display only the context
+    value in section X:
+>
+        let g:airline_extensions = get(g:, 'airline_extensions', []) + ['ollama']
+        call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+        let g:airline_section_x = airline#section#create(['ollama_context'])
+<
+    To display both the filename and context, use:
+>
+        call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+        let g:airline_section_x = airline#section#create(['filename', ' ', 'ollama_context'])
+<
+    `filename` is an Airline part and is not added by vim-ollama. If you
+    already customize `g:airline_section_x`, keep those existing parts and
+    append `ollama_context` to that list. The extension only defines the part;
+    it does not replace Airline sections automatically.
 
     The Ollama `num_ctx` option is used when present; otherwise the default
     context limit is 32768 tokens. The response reserve is derived from

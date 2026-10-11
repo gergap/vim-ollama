@@ -195,6 +195,25 @@ endif
 if !exists('g:ollama_autocompact_context_limit')
     let g:ollama_autocompact_context_limit = 32768
 endif
+if !exists('g:ollama_context_status')
+    let g:ollama_context_status = ''
+endif
+
+function! s:RegisterAirlineContext() abort
+    if !exists('*airline#parts#define_function')
+        return
+    endif
+    call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+    if exists('*airline#update_statusline')
+        call airline#update_statusline()
+    endif
+endfunction
+
+call s:RegisterAirlineContext()
+augroup OllamaAirlineContext
+    autocmd!
+    autocmd VimEnter * call <SID>RegisterAirlineContext()
+augroup END
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024
