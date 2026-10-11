@@ -3022,7 +3022,27 @@ def _run_edit(request, code, filetype, settings):
                 name = call.function.name
                 raw_arguments = call.function.arguments
                 call_id = call.id
-            arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+            try:
+                arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+            except json.JSONDecodeError as error:
+                result = {
+                    "ok": False,
+                    "error": f"invalid JSON in {name or 'tool'} arguments: {error.msg}",
+                    "message": "The tool arguments were malformed JSON; retry with valid JSON.",
+                }
+                _progress(
+                    f"Tool error: {result['error']}",
+                    tool=name or "unknown",
+                    fold_append=name or "unknown",
+                    fold_title=name or "unknown",
+                    fold_status="FAILED",
+                    fold_content=result["message"],
+                )
+                if provider == "ollama":
+                    messages.append({"role": "tool", "tool_name": name or "unknown", "content": json.dumps(result)})
+                else:
+                    messages.append({"role": "tool", "tool_call_id": call_id, "content": json.dumps(result)})
+                continue
             original_arguments = arguments
             if name in ("buf_insert_lines", "insert_lines") and isinstance(arguments, dict) and isinstance(arguments.get("content"), str):
                 arguments = dict(arguments)

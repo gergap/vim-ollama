@@ -1217,6 +1217,20 @@ def test_make_result_is_returned_to_model_without_becoming_buffer_operation(monk
     assert "diagnostics" in tool_result["content"]
 
 
+def test_malformed_tool_arguments_are_returned_as_tool_errors(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "bad-1", "function": {"name": "read_file", "arguments": '{"path":"main.py"'}}]},
+        {"content": "retrying"},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, messages = CodeEditor._run_edit("inspect", [], "", {"provider": "ollama"})
+
+    assert operations == []
+    tool_result = next(message for message in messages if message.get("role") == "tool")
+    assert "malformed JSON" in tool_result["content"]
+
+
 @pytest.mark.parametrize("arguments", ["all && touch hacked", "-f Makefile", "all; clean"])
 def test_make_rejects_command_arguments(arguments):
     result = CodeEditor._request_make({"arguments": arguments})
