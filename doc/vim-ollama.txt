@@ -291,8 +291,11 @@ SKILLS                                                       *vim-ollama-skills*
     The workspace Build-only |skill_manage| tool manages skills with explicit
     `scope` (`project` or `global`) and batched operations: `create`, guarded
     `patch`, supporting-file `write_file` and `remove_file`, and hash-guarded
-    `delete`. Supporting-file operations cannot target SKILL.md. All paths,
-    names, and frontmatter are validated before mutations begin. Global Skill
+    `delete`. Supporting files, including helper scripts, must use a path
+    relative to the selected Skill directory, for example `scripts/test.py`;
+    they must not be written directly into the project root. Supporting-file
+    operations cannot target SKILL.md. All paths, names, and frontmatter are
+    validated before mutations begin. Global Skill
     mutations require Vim confirmation; project mutations use workspace Build
     permission. Stale hashes, ambiguous patches, symbolic links, and traversal
     paths are rejected. `absorbed_into` is reported only and does not merge

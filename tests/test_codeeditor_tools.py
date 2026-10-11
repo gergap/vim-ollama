@@ -1,3 +1,4 @@
+import json
 import sys
 import stat
 import tarfile
@@ -303,9 +304,9 @@ def test_edit_prompts_include_scope_and_project_instructions(tmp_path):
 
     assert "Working directory:" in system
     assert "Use the project style." in system
-    assert "Use the todowrite tool for non-trivial tasks" in system
-    assert "Only one item should be in_progress at a time." in system
-    assert "Complete all applicable todo items before finishing the response." in system
+    assert "For non-trivial work, use todowrite" in system
+    assert "one item in_progress" in system
+    assert "finish all applicable items" in system
     assert "src/main.c" in prompt
     assert "lines 4-6" in prompt
     assert "4|old" in prompt
@@ -331,6 +332,22 @@ def test_workspace_edit_prompt_allows_filesystem_tools(monkeypatch):
     assert "create_file" in names
     assert "insert_lines" in names
     assert "buf_insert_lines" not in names
+
+
+def test_skill_prompt_requires_relevant_skill_loading(tmp_path):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "connection-test"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: connection-test\ndescription: Run a live connection test.\n---\nTest it.\n"
+    )
+    prompt = CodeEditor._system_prompt({
+        "cwd": str(tmp_path), "enable_skills": True,
+        "range_mode": False, "mode": "build",
+    })
+    assert "Before acting, scan Available Skills" in prompt
+    assert "relevant or even partially relevant" in prompt
+    assert "connection-test" in prompt
 
 
 def test_memory_tool_is_workspace_build_only_and_feature_gated(monkeypatch):
@@ -580,6 +597,27 @@ def test_automatic_self_optimization_review_is_interval_gated(monkeypatch):
     assert CodeEditor.g_self_optimization_iterations == 0
 
 
+def test_self_optimization_review_recovers_from_invalid_proposal(monkeypatch, tmp_path):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "example"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: example\ndescription: Example\n---\nUse it.\n")
+    responses = iter([
+        {"tool_calls": [{"function": {"name": "skill_optimize", "arguments": json.dumps({
+            "action": "propose", "scope": "project", "name": "example",
+            "rationale": "Needs improvement.", "evidence": "Verified workflow.",
+            "expected_benefit": "More reliable.", "content":
+                "---\nname: example\ndescription: Example\n---\nUse it.\n",
+        })}}]},
+        {"tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    CodeEditor._run_self_optimization_review([], {
+        "provider": "ollama", "cwd": str(tmp_path), "enable_skills": True,
+        "enable_self_optimization": True, "mode": "build", "range_mode": False,
+    })
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")
@@ -685,7 +723,7 @@ def test_plan_mode_exposes_only_read_tools(monkeypatch):
     assert operations == []
     assert "Plan mode" in messages[0]["content"]
     assert "If asked to create or modify files, deny the request" in messages[0]["content"]
-    assert "If asked to create or modify files, deny the request" in messages[1]["content"]
+    assert "Plan mode is read-only" in messages[1]["content"]
 
 
 def test_plan_mode_rejects_write_tool_calls(monkeypatch):
@@ -805,7 +843,7 @@ def test_workspace_prompt_does_not_include_buffer_snapshot():
     )
 
     assert "should not be included" not in prompt
-    assert "filesystem" in prompt
+    assert "supplied tools" in prompt
 
 
 def test_request_diagnostic_contains_nested_request_sections():
