@@ -177,8 +177,8 @@ endif
 if !exists('g:ollama_enable_skills')
     let g:ollama_enable_skills = v:true
 endif
-if !exists('g:ollama_enabled_self_optimization')
-    let g:ollama_enabled_self_optimization = v:true
+if !exists('g:ollama_enable_self_optimization')
+    let g:ollama_enable_self_optimization = v:true
 endif
 if !exists('g:ollama_enable_autocompact')
     let g:ollama_enable_autocompact = v:true

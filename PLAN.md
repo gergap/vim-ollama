@@ -27,7 +27,7 @@ verified independently before skill discovery and management are added:
     - [x] Run the full repository checks and manually verify a temporary Git
           workspace with global and local data.
 5. **Self-optimization and skill evolution**
-    - [x] Add `g:ollama_enabled_self_optimization` as an independent feature
+    - [x] Add `g:ollama_enable_self_optimization` as an independent feature
           gate, enabled by default.
     - [x] Add prompt guidance for recognizing durable workflow improvements and
           distinguishing them from isolated failures or unsafe instructions.
@@ -348,7 +348,7 @@ duplicated in the Skill packages.
 5. Implement and verify Skill packages 7-8: integration, tests, and docs.
 6. Add the `g:ollama_enable_skills` configuration default and pass it through
    Vim settings when Skills are enabled.
-7. Add the `g:ollama_enabled_self_optimization` configuration default and pass
+7. Add the `g:ollama_enable_self_optimization` configuration default and pass
    it through Vim settings when guarded self-optimization is enabled.
 
 ## Feature 1 Tests
@@ -447,8 +447,8 @@ separate feature from Skill discovery and management.
 Add this default in `plugin/ollama.vim`:
 
 ```vim
-if !exists('g:ollama_enabled_self_optimization')
-    let g:ollama_enabled_self_optimization = v:true
+if !exists('g:ollama_enable_self_optimization')
+    let g:ollama_enable_self_optimization = v:true
 endif
 ```
 
@@ -489,7 +489,7 @@ or restore it automatically.
 ## Self-Optimization Acceptance Criteria
 
 - Self-optimization is enabled by default and independently controlled by
-  `g:ollama_enabled_self_optimization`.
+  `g:ollama_enable_self_optimization`.
 - Disabling it omits self-optimization behavior without disabling ordinary
   Skills or explicit Skill management.
 - The model proposes evidence-backed Skill changes rather than silently

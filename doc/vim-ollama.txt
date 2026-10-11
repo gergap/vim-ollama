@@ -302,7 +302,7 @@ SKILLS                                                       *vim-ollama-skills*
     operating mode, or tool restrictions.
 
 SELF-OPTIMIZATION                                           *vim-ollama-self-optimization*
-    When |g:ollama_enabled_self_optimization| is enabled, workspace Build
+    When |g:ollama_enable_self_optimization| is enabled, workspace Build
     sessions may use `skill_optimize` to propose an evidence-backed Skill
     improvement. The proposal records the target, scope, rationale, evidence,
     expected benefit, exact change, and current content hash before anything
@@ -320,7 +320,7 @@ SELF-OPTIMIZATION                                           *vim-ollama-self-opt
     the prior content. Failed or stale proposals, including externally changed
     Skills, never overwrite newer content.
 
-    Set `g:ollama_enabled_self_optimization` to `v:false` to omit the prompt
+    Set `g:ollama_enable_self_optimization` to `v:false` to omit the prompt
     guidance and `skill_optimize` tool without disabling ordinary Skill
     discovery or explicitly requested `skill_manage` operations.
 
@@ -878,14 +878,14 @@ g:ollama_enable_skills
         let g:ollama_enable_skills = v:false
 <
 
-                                             *g:ollama_enabled_self_optimization*
-g:ollama_enabled_self_optimization
+                                              *g:ollama_enable_self_optimization*
+g:ollama_enable_self_optimization
     - Description: Enables guarded, proposal-based Skill self-optimization.
       When false, ordinary Skill discovery and management remain available.
     - Default: 'v:true'
     - Example:
 >
-        let g:ollama_enabled_self_optimization = v:false
+        let g:ollama_enable_self_optimization = v:false
 <
 
                                                   *g:ollama_enable_autocompact*

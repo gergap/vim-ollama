@@ -1247,7 +1247,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                  \ 'instructions': get(g:, 'ollama_edit_instructions', ''),
                  \ 'enable_memory': get(g:, 'ollama_enable_memory', v:true),
                  \ 'enable_skills': get(g:, 'ollama_enable_skills', v:true),
-                 \ 'enable_self_optimization': get(g:, 'ollama_enabled_self_optimization', v:true),
+                  \ 'enable_self_optimization': get(g:, 'ollama_enable_self_optimization', v:true),
                   \ 'enable_autocompact': get(g:, 'ollama_enable_autocompact', v:true),
                   \ 'enable_subagents': get(g:, 'ollama_enable_subagents', v:true),
                    \ 'autocompact_threshold': get(g:, 'ollama_autocompact_threshold', 0.8),
