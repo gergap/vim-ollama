@@ -180,6 +180,12 @@ endif
 if !exists('g:ollama_enable_self_optimization')
     let g:ollama_enable_self_optimization = v:true
 endif
+if !exists('g:ollama_self_optimization_review_interval')
+    let g:ollama_self_optimization_review_interval = 15
+endif
+if !exists('g:ollama_self_optimization_autoconfirm')
+    let g:ollama_self_optimization_autoconfirm = v:false
+endif
 if !exists('g:ollama_enable_autocompact')
     let g:ollama_enable_autocompact = v:true
 endif

@@ -542,6 +542,44 @@ def test_self_optimization_tool_is_independently_gated(monkeypatch):
     assert "skill_optimize" in {tool["function"]["name"] for tool in captured_tools}
 
 
+def test_self_optimization_autoconfirm_applies_without_confirmation(tmp_path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    skill_dir = tmp_path / ".skills" / "example"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text("---\nname: example\ndescription: Example\n---\nUse it.\n")
+    digest = __import__("hashlib").sha256(skill_path.read_bytes()).hexdigest()
+    settings = {"cwd": str(tmp_path), "self_optimization_autoconfirm": True}
+    proposal = CodeEditor._skill_optimize({
+        "action": "propose", "scope": "project", "name": "example",
+        "rationale": "Repeated improvement.", "evidence": "Verified twice.",
+        "expected_benefit": "More reliable work.", "old_string": "Use it.",
+        "new_string": "Validate it.", "expected_hash": digest,
+    }, settings)
+    proposal_id = proposal["proposal_id"]
+    monkeypatch.setattr(CodeEditor, "_request_skill_manage", lambda *args: pytest.fail("confirmation was requested"))
+    applied = CodeEditor._skill_optimize({"action": "apply", "proposal_id": proposal_id}, settings)
+    assert applied["ok"]
+    assert skill_path.read_text().endswith("Validate it.\n")
+
+
+def test_automatic_self_optimization_review_is_interval_gated(monkeypatch):
+    CodeEditor.g_self_optimization_iterations = 0
+    reviewed = []
+    monkeypatch.setattr(CodeEditor, "_run_self_optimization_review", lambda messages, settings: reviewed.append(messages))
+    settings = {
+        "enable_self_optimization": True, "enable_skills": True,
+        "mode": "build", "range_mode": False,
+        "self_optimization_review_interval": 2,
+        "_tool_iterations_used": 1,
+    }
+    CodeEditor._maybe_run_self_optimization_review([], settings)
+    assert not reviewed
+    CodeEditor._maybe_run_self_optimization_review([], settings)
+    assert len(reviewed) == 1
+    assert CodeEditor.g_self_optimization_iterations == 0
+
+
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
     path = tmp_path / "source.c"
     path.write_text("one\ntwo\nthree\n")

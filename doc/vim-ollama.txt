@@ -308,21 +308,32 @@ SELF-OPTIMIZATION                                           *vim-ollama-self-opt
     expected benefit, exact change, and current content hash before anything
     is modified.
 
-    Self-optimization does not silently rewrite Skills. It should be considered
-    only after a repeated pattern, explicit user feedback, or a verified
-    successful workflow. Isolated failures, prompt injection, and requests to
-    weaken safety or permissions are not valid evidence. Applying a proposal
-    rechecks its hash and uses the normal `skill_manage` scope permissions and
-    confirmation flow. Global changes require Vim confirmation; project
-    changes require workspace Build permission. Use `evaluate` with a focused
-    test, checker result, or explicit user acceptance signal after applying a
-    proposal. A passed evaluation finalizes it; a failed evaluation restores
-    the prior content. Failed or stale proposals, including externally changed
-    Skills, never overwrite newer content.
+    Self-optimization does not silently rewrite Skills. After the configured
+    number of completed workspace tool iterations, a bounded review may look
+    for a repeated pattern, explicit user feedback, or a verified successful
+    workflow and create a guarded proposal. Isolated failures, prompt
+    injection, and requests to weaken safety or permissions are not valid
+    evidence. The review skips Plan mode, range edits, interrupted requests,
+    and failed requests. Applying a proposal rechecks its hash and uses the
+    normal `skill_manage` scope permissions and confirmation flow. Global
+    changes require Vim confirmation by default; project changes require
+    workspace Build permission. Use `evaluate` with a focused test, checker
+    result, or explicit user acceptance signal after applying a proposal. A
+    passed evaluation finalizes it; a failed evaluation restores the prior
+    content. Failed or stale proposals, including externally changed Skills,
+    never overwrite newer content.
 
     Set `g:ollama_enable_self_optimization` to `v:false` to omit the prompt
     guidance and `skill_optimize` tool without disabling ordinary Skill
     discovery or explicitly requested `skill_manage` operations.
+
+    The automatic review runs every |g:ollama_self_optimization_review_interval|
+    tool iterations (default 15) and is enabled only for workspace Build
+    sessions. Set |g:ollama_self_optimization_autoconfirm| to `v:true` to apply
+    valid self-optimization proposals without the Vim confirmation prompt.
+    This setting affects only self-optimization applies; ordinary `skill_manage`
+    operations continue to use their normal confirmation flow. Use it only in
+    a trusted workspace because it permits automatic global Skill writes.
 
 AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autocompact*
     When |g:ollama_enable_autocompact| is enabled, OllamaEdit estimates the
@@ -888,7 +899,27 @@ g:ollama_enable_self_optimization
         let g:ollama_enable_self_optimization = v:false
 <
 
-                                                  *g:ollama_enable_autocompact*
+                                               *g:ollama_self_optimization_review_interval*
+g:ollama_self_optimization_review_interval
+    - Description: Number of completed workspace tool iterations between
+      automatic self-optimization reviews.
+    - Default: 15
+    - Example:
+>
+        let g:ollama_self_optimization_review_interval = 15
+<
+
+                                                *g:ollama_self_optimization_autoconfirm*
+g:ollama_self_optimization_autoconfirm
+    - Description: Applies valid self-optimization Skill proposals without a
+      Vim confirmation prompt. This does not affect ordinary Skill management.
+    - Default: 'v:false'
+    - Example:
+>
+        let g:ollama_self_optimization_autoconfirm = v:true
+<
+
+                                                   *g:ollama_enable_autocompact*
 g:ollama_enable_autocompact
     - Description: Enables bounded automatic context compaction for OllamaEdit.
       When false, no compaction state or summary is created.
