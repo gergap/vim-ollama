@@ -40,25 +40,31 @@ verified independently before skill discovery and management are added:
     - [x] Add tests and documentation for enabled, disabled, rejected, and
           confirmed self-optimization paths.
 6. **Automatic context compaction**
-   - [ ] Add `g:ollama_enable_autocompact` as an independent feature gate,
-         enabled by default.
-   - [ ] Track the effective context budget and compact before requests exceed
-         the configured model limit.
-   - [ ] Preserve the system prompt, active mode, tool permissions, pending
-         confirmations, and the current task objective across compaction.
-   - [ ] Summarize older conversation turns into bounded, clearly labeled,
-         untrusted context without silently dropping recent tool results.
-   - [ ] Add configurable thresholds, summary limits, failure handling, tests,
-         and documentation.
+    - [x] Add `g:ollama_enable_autocompact` as an independent feature gate,
+          enabled by default.
+    - [x] Track the effective context budget and compact before requests exceed
+          the configured model limit.
+    - [x] Preserve the system prompt, active mode, tool permissions, pending
+          confirmations, and the current task objective across compaction.
+    - [x] Summarize older conversation turns into bounded, clearly labeled,
+          untrusted context without silently dropping recent tool results.
+    - [ ] Add user inspection, clearing, and regeneration of compacted history.
+    - [x] Add configurable thresholds, summary limits, failure handling, tests,
+          and documentation.
 7. **Subagent delegation**
-   - [ ] Add a guarded subagent tool for bounded delegated analysis, including
-         single-file analysis as the first supported use case.
-   - [ ] Define inherited mode, filesystem, tool, timeout, and output-size
-         restrictions for subagents; prevent unrestricted recursive delegation.
-   - [ ] Return structured, labeled results and failures while keeping the main
-         conversation context bounded.
-   - [ ] Add approval, cancellation, concurrency, isolation, tests, and
-         documentation for subagent calls.
+    - [x] Add a guarded subagent tool for bounded delegated analysis, including
+          single-file analysis as the first supported use case.
+    - [x] Define inherited mode, filesystem, tool, timeout, and output-size
+          restrictions for subagents; prevent unrestricted recursive delegation.
+    - [x] Return structured, labeled results and failures while keeping the main
+          conversation context bounded.
+    - [x] Add approval, cancellation, concurrency, isolation, tests, and
+          documentation for subagent calls.
+8. Context Status Info
+    - [x] Add helper function to get Context info like '178.9K (36%)'
+    - [ ] Support displaying this info in normal Vim Status line
+    - [ ] Add Vim Airline extension to display this info
+
 
 Each roadmap item should be usable and testable before starting the next item.
 
@@ -70,9 +76,10 @@ Each roadmap item should be usable and testable before starting the next item.
 - [x] Project-local example skill at `.skills/example/SKILL.md`.
 - [x] Skill management mutations and permissions.
 - [x] Final integration, manual verification, and full polish.
-- [ ] Self-optimization and skill evolution.
-- [ ] Automatic context compaction.
-- [ ] Subagent delegation.
+- [x] Self-optimization and skill evolution.
+- [ ] Automatic context compaction (core behavior complete; history inspection,
+      clearing, and regeneration remain).
+- [x] Subagent delegation.
 
 ## Feature 1: Memory and User Context
 

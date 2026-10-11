@@ -894,9 +894,12 @@ g:ollama_autocompact_summary_max_chars
 g:ollama_autocompact_context_limit
     - Description: Context-window size in tokens for OpenAI-compatible edit
       providers, including Mistral through its OpenAI-compatible endpoint.
-      Ollama uses `options.num_ctx` instead. Set this to the actual model
-      context limit so usage percentages and automatic compaction are accurate.
-    - Default: 32768
+      Ollama uses `options.num_ctx` instead. OllamaEdit first tries common
+      provider model metadata fields such as `max_context_length`; this value
+      is the fallback when the endpoint does not expose one. Set it to the
+      actual model context limit when necessary so usage percentages and
+      automatic compaction are accurate.
+    - Default: 32768 (fallback)
     - Example:
 >
         let g:ollama_autocompact_context_limit = 128000

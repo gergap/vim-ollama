@@ -2779,6 +2779,79 @@ def _maybe_compact_messages(messages, settings, tools):
     return True
 
 
+def _sanitize_openai_messages(messages):
+    """Remove orphan tool results before OpenAI-compatible requests."""
+    sanitized = []
+    pending_tool_ids = set()
+    removed = 0
+    for message in messages:
+        if not isinstance(message, dict):
+            sanitized.append(message)
+            pending_tool_ids.clear()
+            continue
+        role = message.get("role")
+        if role == "assistant" and message.get("tool_calls"):
+            if pending_tool_ids and sanitized and sanitized[-1].get("role") == "assistant":
+                sanitized.pop()
+                removed += 1
+            pending_tool_ids = {
+                call.get("id")
+                for call in message["tool_calls"]
+                if isinstance(call, dict) and isinstance(call.get("id"), str) and call.get("id")
+            }
+            sanitized.append(message)
+            continue
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if call_id not in pending_tool_ids:
+                removed += 1
+                continue
+            pending_tool_ids.remove(call_id)
+            sanitized.append(message)
+            continue
+        if pending_tool_ids:
+            if sanitized and sanitized[-1].get("role") == "assistant" and sanitized[-1].get("tool_calls"):
+                sanitized.pop()
+                removed += 1
+            pending_tool_ids.clear()
+        sanitized.append(message)
+    return sanitized, removed
+
+
+def _provider_model_context_limit(settings):
+    """Detect an OpenAI-compatible model context limit when the API exposes it."""
+    fallback = settings.get("provider_context_limit", DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT)
+    if settings.get("provider", "ollama") == "ollama" or settings.get("_context_limit_checked"):
+        return fallback
+    settings["_context_limit_checked"] = True
+    if OpenAI is None:
+        return fallback
+    try:
+        credentialname = settings.get("credentialname")
+        api_key = OllamaCredentials().GetApiKey("openai", credentialname)
+        client_options = {"api_key": api_key, "timeout": settings.get("timeout", 300)}
+        if settings.get("url"):
+            client_options["base_url"] = settings["url"]
+        client = OpenAI(**client_options)
+        model = client.models.retrieve(settings.get("model") or DEFAULT_OPENAI_MODEL)
+        if hasattr(model, "model_dump"):
+            model = model.model_dump()
+        elif hasattr(model, "dict"):
+            model = model.dict()
+        if not isinstance(model, dict):
+            return fallback
+        for field in ("max_context_length", "context_length", "context_window", "context_length_tokens"):
+            value = model.get(field)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 1024:
+                settings["provider_context_limit"] = value
+                settings["provider_context_limit_source"] = field
+                return value
+    except Exception as error:
+        if log is not None:
+            log.debug(f"Provider context limit detection unavailable: {error}")
+    return fallback
+
+
 def _openai_request(messages, settings, tools):
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Install it with pip install openai.")
@@ -2792,9 +2865,16 @@ def _openai_request(messages, settings, tools):
     options = settings.get("options") or DEFAULT_OPTIONS
     if isinstance(options, str):
         options = json.loads(options)
+    provider_messages, removed_messages = _sanitize_openai_messages(messages)
+    messages[:] = provider_messages
+    if removed_messages:
+        _progress(
+            f"Removed {removed_messages} orphaned OpenAI-compatible tool message(s) before request",
+            type="message_repair",
+        )
     request = {
         "model": settings.get("model") or DEFAULT_OPENAI_MODEL,
-        "messages": messages,
+        "messages": provider_messages,
         "tools": tools,
         "tool_choice": "auto",
         "temperature": options.get("temperature", 0),
@@ -3034,6 +3114,8 @@ def _run_edit(request, code, filetype, settings):
 
     tool_names = [tool["function"]["name"] for tool in tools]
     _info(f"available tools: {tool_names}")
+    if provider != "ollama":
+        _provider_model_context_limit(settings)
 
     max_operations = settings.get("max_operations", MAX_TOOL_CALLS)
     if isinstance(max_operations, bool) or not isinstance(max_operations, int) or max_operations < 1:

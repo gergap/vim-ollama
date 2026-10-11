@@ -1012,6 +1012,59 @@ def test_autocompact_uses_openai_compatible_provider_context_limit():
     assert config["context_limit"] == 8192
 
 
+def test_provider_context_limit_uses_model_metadata_before_fallback(monkeypatch):
+    class FakeModels:
+        def retrieve(self, model):
+            assert model == "mistral-large-latest"
+            return {"id": model, "max_context_length": 131072}
+
+    class FakeOpenAI:
+        def __init__(self, **options):
+            self.models = FakeModels()
+
+    monkeypatch.setattr(CodeEditor, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(CodeEditor.OllamaCredentials, "GetApiKey", lambda self, provider, name: "key")
+    settings = {
+        "provider": "mistral",
+        "model": "mistral-large-latest",
+        "provider_context_limit": 32768,
+    }
+
+    assert CodeEditor._provider_model_context_limit(settings) == 131072
+    assert settings["provider_context_limit_source"] == "max_context_length"
+
+
+def test_provider_context_limit_keeps_fallback_when_metadata_is_unavailable(monkeypatch):
+    class FakeModels:
+        def retrieve(self, model):
+            raise RuntimeError("model metadata is unsupported")
+
+    class FakeOpenAI:
+        def __init__(self, **options):
+            self.models = FakeModels()
+
+    monkeypatch.setattr(CodeEditor, "OpenAI", FakeOpenAI)
+    monkeypatch.setattr(CodeEditor.OllamaCredentials, "GetApiKey", lambda self, provider, name: "key")
+    settings = {"provider": "openai", "provider_context_limit": 65536}
+
+    assert CodeEditor._provider_model_context_limit(settings) == 65536
+
+
+def test_openai_message_sanitizer_removes_orphan_tool_results_and_preserves_pairs():
+    messages = [
+        {"role": "system", "content": "rules"},
+        {"role": "user", "content": "inspect"},
+        {"role": "tool", "tool_call_id": "orphan", "content": "bad"},
+        {"role": "assistant", "tool_calls": [{"id": "call-1", "function": {"name": "read_file"}}]},
+        {"role": "tool", "tool_call_id": "call-1", "content": "ok"},
+    ]
+
+    sanitized, removed = CodeEditor._sanitize_openai_messages(messages)
+
+    assert removed == 1
+    assert [message["role"] for message in sanitized] == ["system", "user", "assistant", "tool"]
+
+
 def test_filesystem_tools_are_limited_to_current_directory(tmp_path):
     apply_tool([], "create_folder", {"path": "new"}, str(tmp_path))
     apply_tool([], "create_file", {"path": "new/file.txt", "content": "hello"}, str(tmp_path))
