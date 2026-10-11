@@ -272,9 +272,12 @@ SKILLS                                                       *vim-ollama-skills*
 
         ~/.vim/config/skills/<name>/SKILL.md    global skills
         <git-root>/.skills/<name>/SKILL.md      project skills
+        <plugin>/skills/<name>/SKILL.md         bundled read-only skills
 
     The nearest Git root is used for project skills; discovery does not search
-    above it. A project skill overrides a global skill with the same name.
+    above it. Project and global skills override bundled skills with the same
+    name. Bundled skills are distributed with the plugin and are not copied
+    into the user's global skill directory or modified by skill_manage.
     Skill names must be safe directory names. Symbolic links, traversal paths,
     malformed frontmatter, and oversized SKILL.md files are rejected or
     omitted with diagnostics.

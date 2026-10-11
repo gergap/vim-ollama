@@ -374,6 +374,17 @@ def test_skill_catalog_uses_project_precedence_and_loads_supporting_files(tmp_pa
     assert result["skill"]["supporting_files"] == ["checklist.md"]
 
 
+def test_bundled_bubblewrap_skill_is_available_without_user_or_project_skills(tmp_path):
+    result = CodeEditor._find_skill(
+        {"cwd": str(tmp_path), "skills_global_dir": str(tmp_path / "no-global-skills")},
+        {"name": "bubblewrap-tool-diagnostics"},
+    )
+
+    assert result["ok"]
+    assert result["skill"]["scope"] == "bundled"
+    assert "g:ollama_bwrap_network_allowlist" in result["skill"]["content"]
+
+
 def test_skill_discovery_rejects_unsafe_names_and_omits_disabled_tool(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="safe directory"):
         CodeEditor._find_skill({"cwd": str(tmp_path)}, {"name": "../escape"})
