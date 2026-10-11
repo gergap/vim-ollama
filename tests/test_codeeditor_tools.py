@@ -992,6 +992,26 @@ def test_context_usage_is_omitted_without_num_ctx():
     assert context is None
 
 
+@pytest.mark.parametrize("provider", ["openai", "mistral"])
+def test_context_usage_is_reported_for_openai_compatible_providers(provider):
+    context = CodeEditor._context_usage(
+        {"_provider_usage": {"prompt_tokens": 42000, "completion_tokens": 6700}},
+        {"provider": provider, "provider_context_limit": 131072},
+    )
+
+    assert context == "Context: 48.7k / 131.1k (37%)"
+
+
+def test_autocompact_uses_openai_compatible_provider_context_limit():
+    config = CodeEditor._autocompact_options({
+        "provider": "mistral",
+        "enable_autocompact": True,
+        "provider_context_limit": 8192,
+    })
+
+    assert config["context_limit"] == 8192
+
+
 def test_filesystem_tools_are_limited_to_current_directory(tmp_path):
     apply_tool([], "create_folder", {"path": "new"}, str(tmp_path))
     apply_tool([], "create_file", {"path": "new/file.txt", "content": "hello"}, str(tmp_path))

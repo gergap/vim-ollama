@@ -2620,10 +2620,18 @@ def _ollama_request(messages, settings, tools):
 
 def _context_usage(message, settings):
     usage = message.get("_ollama_usage") if isinstance(message, dict) else None
+    usage_kind = "ollama"
+    if not isinstance(usage, dict) and isinstance(message, dict):
+        usage = message.get("_provider_usage")
+        usage_kind = "provider"
     if not isinstance(usage, dict):
         return None
-    prompt_tokens = usage.get("prompt_eval_count")
-    response_tokens = usage.get("eval_count")
+    if usage_kind == "ollama":
+        prompt_tokens = usage.get("prompt_eval_count")
+        response_tokens = usage.get("eval_count")
+    else:
+        prompt_tokens = usage.get("prompt_tokens")
+        response_tokens = usage.get("completion_tokens")
     if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0
                for value in (prompt_tokens, response_tokens)):
         return None
@@ -2631,6 +2639,8 @@ def _context_usage(message, settings):
     if isinstance(options, str):
         options = json.loads(options)
     num_ctx = options.get("num_ctx") if isinstance(options, dict) else None
+    if settings.get("provider", "ollama") != "ollama":
+        num_ctx = settings.get("provider_context_limit", DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT)
     if not isinstance(num_ctx, int) or isinstance(num_ctx, bool) or num_ctx <= 0:
         return None
     used = prompt_tokens + response_tokens
@@ -2655,7 +2665,10 @@ def _autocompact_options(settings):
 
     context_limit = settings.get("autocompact_context_limit")
     if context_limit is None:
-        context_limit = options.get("num_ctx", DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT)
+        if settings.get("provider", "ollama") != "ollama":
+            context_limit = settings.get("provider_context_limit", DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT)
+        else:
+            context_limit = options.get("num_ctx", DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT)
     if isinstance(context_limit, bool) or not isinstance(context_limit, int) or context_limit < 1024:
         raise ValueError("autocompact context limit must be an integer of at least 1024 tokens")
 
@@ -2789,8 +2802,33 @@ def _openai_request(messages, settings, tools):
     }
     if settings.get("show_llm_request", False):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
-    message = client.chat.completions.create(**request).choices[0].message
-    return message
+    response = client.chat.completions.create(**request)
+    message = response.choices[0].message
+    normalized = {
+        "role": "assistant",
+        "content": message.content or "",
+    }
+    tool_calls = []
+    for call in message.tool_calls or []:
+        tool_calls.append({
+            "id": call.id,
+            "type": getattr(call, "type", "function"),
+            "function": {
+                "name": call.function.name,
+                "arguments": call.function.arguments,
+            },
+        })
+    if tool_calls:
+        normalized["tool_calls"] = tool_calls
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        if hasattr(usage, "model_dump"):
+            usage = usage.model_dump()
+        elif hasattr(usage, "dict"):
+            usage = usage.dict()
+        if isinstance(usage, dict):
+            normalized["_provider_usage"] = usage
+    return normalized
 
 
 def _subagent_file(cwd, relative_path):
@@ -3012,7 +3050,7 @@ def _run_edit(request, code, filetype, settings):
             _progress(context)
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
-            messages.append({key: value for key, value in message.items() if key != "_ollama_usage"})
+            messages.append({key: value for key, value in message.items() if key not in ("_ollama_usage", "_provider_usage")})
         else:
             messages.append(message.model_dump(exclude_none=True))
         if not tool_calls:

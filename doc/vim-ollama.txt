@@ -890,7 +890,19 @@ g:ollama_autocompact_summary_max_chars
         let g:ollama_autocompact_summary_max_chars = 6000
 <
 
-                                                  *g:ollama_enable_subagents*
+                                            *g:ollama_autocompact_context_limit*
+g:ollama_autocompact_context_limit
+    - Description: Context-window size in tokens for OpenAI-compatible edit
+      providers, including Mistral through its OpenAI-compatible endpoint.
+      Ollama uses `options.num_ctx` instead. Set this to the actual model
+      context limit so usage percentages and automatic compaction are accurate.
+    - Default: 32768
+    - Example:
+>
+        let g:ollama_autocompact_context_limit = 128000
+<
+
+                                                   *g:ollama_enable_subagents*
 g:ollama_enable_subagents
     - Description: Enables bounded, read-only subagent analysis for OllamaEdit.
       When false, the subagent tool is not exposed.

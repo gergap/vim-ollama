@@ -192,6 +192,9 @@ endif
 if !exists('g:ollama_autocompact_summary_max_chars')
     let g:ollama_autocompact_summary_max_chars = 4000
 endif
+if !exists('g:ollama_autocompact_context_limit')
+    let g:ollama_autocompact_context_limit = 32768
+endif
 
 if !exists('g:ollama_extract_max_size')
     let g:ollama_extract_max_size = 100 * 1024 * 1024

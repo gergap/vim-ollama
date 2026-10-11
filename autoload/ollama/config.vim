@@ -43,6 +43,7 @@ let s:help_text = {
 \ 'ollama_enable_subagents': 'Enable bounded read-only subagent analysis (default=v:true).',
 \ 'ollama_autocompact_threshold': 'Compact when the usable context reaches this fraction (default=0.8).',
 \ 'ollama_autocompact_summary_max_chars': 'Maximum generated compaction summary size (default=4000).',
+\ 'ollama_autocompact_context_limit': 'Context window size for OpenAI-compatible providers (default=32768).',
 \ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',
 \ 'ollama_show_llm_request': 'Show complete LLM requests in folded diagnostics.',
 \ 'ollama_edit_max_operations': 'Maximum tool calls allowed in one edit request.',
