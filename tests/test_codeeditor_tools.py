@@ -844,6 +844,7 @@ def test_workspace_prompt_does_not_include_buffer_snapshot():
 
     assert "should not be included" not in prompt
     assert "supplied tools" in prompt
+    assert "successful intermediate commands are not task completion" in prompt
 
 
 def test_request_diagnostic_contains_nested_request_sections():
@@ -1066,6 +1067,13 @@ def test_context_usage_is_omitted_without_num_ctx():
     )
 
     assert context is None
+
+
+def test_model_options_keep_safe_output_limit_when_num_predict_is_omitted():
+    options = CodeEditor._model_options({"options": {"num_ctx": 160000, "keep_alive": 1800}})
+    assert options["num_ctx"] == 160000
+    assert options["keep_alive"] == 1800
+    assert options["num_predict"] == 4096
 
 
 @pytest.mark.parametrize("provider", ["openai", "mistral"])
