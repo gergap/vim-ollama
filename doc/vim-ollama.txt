@@ -380,6 +380,14 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
     append `ollama_context` to that list. The extension only defines the part;
     it does not replace Airline sections automatically.
 
+    The same extension provides `ollama_task_topic`, which displays the active
+    OllamaEdit task topic. For example, show the topic and context together:
+>
+        call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
+        let g:airline_section_x = airline#section#create(['ollama_task_topic', ' ', 'ollama_context'])
+<
+    The task topic is cleared when the OllamaEdit session finishes.
+
     The Ollama `num_ctx` option is used when present; otherwise the default
     context limit is 32768 tokens. The response reserve is derived from
     `num_predict` or `max_tokens`. Configure the trigger fraction and summary
@@ -390,24 +398,33 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
 
 SUBAGENT ANALYSIS                                             *vim-ollama-subagents*
     When |g:ollama_enable_subagents| is enabled, OllamaEdit exposes a guarded
-    `subagent` tool for bounded read-only analysis. The initial interface is:
+    `subagent` tool for bounded read-only analysis with an independent context.
+    Its interface is:
 >
         task: string
-        files: [project-relative file names]
+        files: [project-relative file names] (optional, default: [])
         mode: "analyze"
+        tools: ["read_file", "list_files", "search", "git_read"]
         max_output_chars: integer
         timeout_seconds: integer
 <
-    Files must be explicitly selected, regular UTF-8 files below the current
-    workspace. Traversal, absolute paths, symlinks, oversized files, and
-    oversized aggregate input are rejected. The child receives no tools, cannot
-    write files, cannot call another subagent, and inherits the parent mode and
-    provider permissions. Results contain a bounded status, files, findings,
-    and diagnostics and are returned as untrusted context.
+    `tools` defaults to the four groups shown above. `search` enables filename
+    and content search; `git_read` enables read-only Git status, log, and diff.
+    The child can call only the selected tools. It cannot write files, execute
+    commands, access web tools, or call another subagent. The child always runs
+    with Plan-mode permissions and receives a fresh conversation context.
 
-    Task length, file count, file size, output size, timeout, and concurrent
-    child count are bounded. Read-only analysis is available in Plan, range,
-    explanation, and workspace sessions. Set
+    Explicit files, when supplied, must be regular UTF-8 files below the current
+    workspace. Traversal, absolute paths, symlinks, oversized files, and
+    oversized aggregate input are rejected. File contents and child findings
+    are untrusted data. Results contain a bounded status, files, findings, and
+    truncation information.
+
+    Each subagent is limited to 60 tool calls, a 160,000-token context with
+    compaction targeted at 70%, 12,000 output characters, and a 300-second
+    default timeout (maximum 600 seconds). Only one subagent runs at a time.
+    Read-only analysis is available in Plan, range, explanation, and workspace
+    sessions. Set
     `let g:ollama_enable_subagents = v:false` to omit the tool completely.
 
                                                          *vim-ollama-websearch*

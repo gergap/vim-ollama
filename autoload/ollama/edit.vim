@@ -301,6 +301,11 @@ function! ollama#edit#ContextStatus() abort
     return get(g:, 'ollama_context_status', '')
 endfunction
 
+function! ollama#edit#TaskTopicStatus() abort
+    let l:topic = get(g:, 'ollama_task_topic', '')
+    return empty(l:topic) ? '' : 'Task: ' .. l:topic
+endfunction
+
 function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     if !bufexists(s:conversation_bufnr) || empty(a:content)
         return
@@ -1148,6 +1153,8 @@ endfunction
 function! ollama#edit#EditCodeDone(status, ...) abort
     call s:CloseProgress()
     let g:edit_in_progress = 0
+    let g:ollama_task_topic = ''
+    redrawstatus
 
     if s:resume_conversation_insert && bufexists(s:conversation_bufnr)
         let s:resume_conversation_insert = v:false
@@ -1249,6 +1256,10 @@ try:
         if event.get('type') == 'context_usage':
             vim.command('let g:ollama_context_status = ' + vim_json(event.get('text', '')))
             vim.command('redrawstatus')
+        if event.get('type') == 'task_topic':
+            topic = event.get('topic', '') if event.get('status') == 'active' else ''
+            vim.command('let g:ollama_task_topic = ' + vim_json(topic))
+            vim.command('redrawstatus')
         if event.get('type') == 'make_request':
             arguments = event.get('arguments', {}).get('arguments', '')
             vim.command('call ollama#edit#RunMake(' + vim_json(event['request_id']) + ', ' + vim_json(arguments) + ')')
@@ -1315,6 +1326,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let g:ollama_edit_changedtick = b:changedtick
     let g:ollama_edit_cwd = getcwd()
     let g:ollama_context_status = ''
+    let g:ollama_task_topic = ''
     let g:ollama_edit_checker = get(a:settings, 'checker', {})
 
     let l:is_openai = g:ollama_edit_provider =~# '^openai'

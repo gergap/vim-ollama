@@ -1,9 +1,10 @@
 " SPDX-License-Identifier: GPL-3.0-or-later
-" Context usage part for Vim Airline.
+" OllamaEdit status parts for Vim Airline.
 
 function! airline#extensions#ollama#init(ext) abort
     if !exists('*airline#parts#define_function')
         return
     endif
     call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+    call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
 endfunction

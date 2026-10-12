@@ -3497,6 +3497,12 @@ def _run_edit(request, code, filetype, settings):
                 elif name in TASK_TOPIC_TOOL_NAMES:
                     result = _request_task_topic(arguments)
                     task_topic = result
+                    _progress(
+                        result["topic"] if result["status"] == "active" else "",
+                        type="task_topic",
+                        topic=result["topic"],
+                        status=result["status"],
+                    )
                 elif name in SELF_OPTIMIZATION_TOOL_NAMES:
                     if not skills_enabled or not self_optimization_enabled or mode != "build" or range_mode:
                         raise ValueError("skill_optimize requires workspace Build mode with self-optimization enabled")

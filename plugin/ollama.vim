@@ -207,12 +207,16 @@ endif
 if !exists('g:ollama_context_status')
     let g:ollama_context_status = ''
 endif
+if !exists('g:ollama_task_topic')
+    let g:ollama_task_topic = ''
+endif
 
 function! s:RegisterAirlineContext() abort
     if !exists('*airline#parts#define_function')
         return
     endif
     call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+    call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
     if exists('*airline#update_statusline')
         call airline#update_statusline()
     endif
