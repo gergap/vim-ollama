@@ -485,6 +485,21 @@ function! s:SandboxWrap(command, write_paths, ...) abort
             call extend(l:command, ['--ro-bind', l:directory, l:directory])
         endif
     endfor
+    if l:network_allowed && filereadable('/etc/resolv.conf')
+        " /etc/resolv.conf is often a symlink into /run, which is not mounted.
+        let l:resolv_target = resolve('/etc/resolv.conf')
+        if getftype('/etc/resolv.conf') ==# 'link' && filereadable(l:resolv_target)
+            let l:target = ''
+            for l:part in split(substitute(fnamemodify(l:resolv_target, ':h'), '^/', '', ''), '/')
+                let l:target ..= '/' .. l:part
+                call add(l:command, '--dir')
+                call add(l:command, l:target)
+            endfor
+            call extend(l:command, ['--ro-bind', l:resolv_target, l:resolv_target])
+        else
+            call extend(l:command, ['--ro-bind', '/etc/resolv.conf', '/etc/resolv.conf'])
+        endif
+    endif
     let l:readonly_paths = get(g:, 'ollama_bwrap_readonly_paths', [])
     if type(l:readonly_paths) != v:t_list
         throw 'ollama_bwrap_readonly_paths must be a list of absolute files or directories'
@@ -842,6 +857,15 @@ function! s:SaveExecuteDecisions(decisions) abort
     call writefile([json_encode(a:decisions)], l:file, 's')
 endfunction
 
+function! s:BubblewrapDiagnostic(output) abort
+    for l:line in split(a:output, "\n")
+        if l:line =~? '^\s*\%(bwrap\|bubblewrap\)\s*:'
+            return l:line
+        endif
+    endfor
+    return ''
+endfunction
+
 function! s:FinishExecute(request_id, state, job, status) abort
     let a:state.finished = v:true
     if a:state.timeout_timer != -1
@@ -852,12 +876,39 @@ function! s:FinishExecute(request_id, state, job, status) abort
     endif
     let l:output = join(a:state.output, "\n")
     let l:timed_out = get(a:state, 'timed_out', v:false)
-    let l:label = get(a:state, 'sandboxed', v:false) ? 'Sandboxed execution' : 'Execution'
+    let l:sandboxed = get(a:state, 'sandboxed', v:false)
+    let l:label = l:sandboxed ? 'Sandboxed execution' : 'Execution'
+    let l:bwrap_diagnostic = l:sandboxed && a:status != 0 ? s:BubblewrapDiagnostic(l:output) : ''
+    let l:readonly_paths = get(a:state, 'readonly_paths', [])
+    let l:policy = l:sandboxed
+                \ ? 'network access ' .. (get(a:state, 'network_allowed', v:false) ? 'enabled' : 'disabled')
+                \ .. '; external read-only paths: ' .. (empty(l:readonly_paths) ? 'none' : join(l:readonly_paths, ', '))
+                \ : ''
+    let l:failure_kind = ''
+    if a:status != 0 && !l:timed_out
+        if !empty(l:bwrap_diagnostic)
+            let l:failure_kind = 'bubblewrap'
+            let l:message = 'bubblewrap failed before the executable started: ' .. l:bwrap_diagnostic .. ' (' .. l:policy .. ')'
+        elseif l:sandboxed && !empty(l:output)
+            let l:failure_kind = 'command'
+            let l:message = 'sandboxed command exited with an error; the output below is from the executable, not bubblewrap (' .. l:policy .. ')'
+        elseif l:sandboxed
+            let l:failure_kind = 'unknown'
+            let l:message = 'sandboxed command exited without diagnostic output; bubblewrap failure could not be confirmed (' .. l:policy .. ')'
+        else
+            let l:failure_kind = 'command'
+            let l:message = 'command failed'
+        endif
+    else
+        let l:message = l:timed_out ? tolower(l:label) .. ' timed out and was terminated' : a:status == 0 ? tolower(l:label) .. ' completed successfully' : tolower(l:label) .. ' failed'
+    endif
     let l:result = {
                 \ 'ok': a:status == 0,
-                \ 'message': (l:timed_out ? tolower(l:label) .. ' timed out and was terminated' : a:status == 0 ? tolower(l:label) .. ' completed successfully' : tolower(l:label) .. ' failed') .. ' (Process exited with exit code ' .. a:status .. ')',
+                \ 'message': l:message .. ' (Process exited with exit code ' .. a:status .. ')',
                 \ 'output': l:output,
                 \ 'exit_code': a:status,
+                \ 'failure_kind': l:failure_kind,
+                \ 'sandbox_policy': l:sandboxed ? {'network_allowed': get(a:state, 'network_allowed', v:false), 'readonly_paths': l:readonly_paths} : {},
                 \ 'decision': get(a:state, 'decision', 'allowed'),
                 \ }
     call ollama#edit#SubmitMakeResult(a:request_id, l:result)
@@ -1012,6 +1063,8 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
                     \ 'timeout_timer': -1,
                     \ 'kill_timer': -1,
                     \ 'kill_timeout': l:kill_timeout,
+                    \ 'network_allowed': l:network_allowed,
+                    \ 'readonly_paths': get(g:, 'ollama_bwrap_readonly_paths', []),
                     \ 'decision': l:decision,
                     \ }
         let l:options = {

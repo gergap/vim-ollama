@@ -1021,6 +1021,27 @@ def test_glob_fold_title_includes_pattern(monkeypatch, tmp_path):
     assert start_event["fold_title"] == "glob . *.c"
 
 
+def test_find_skill_fold_title_includes_name(monkeypatch):
+    responses = iter([
+        {"tool_calls": [{"id": "skill-1", "function": {"name": "find_skill", "arguments": {
+            "name": "bubblewrap-tool-diagnostics",
+        }}}]},
+        {"tool_calls": []},
+    ])
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    monkeypatch.setattr(CodeEditor, "_find_skill", lambda settings, arguments: {
+        "ok": True,
+        "message": f"found skill {arguments['name']}",
+    })
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append(details))
+
+    CodeEditor._run_edit("load the diagnostic skill", [], "", {"provider": "ollama", "enable_skills": True})
+
+    start_event = next(event for event in progress if event.get("fold") and event.get("tool") == "find_skill")
+    assert start_event["fold_title"] == "find_skill bubblewrap-tool-diagnostics"
+
+
 def test_tool_fold_reports_failure(monkeypatch):
     responses = iter([
         {"tool_calls": [{"id": "read-1", "function": {"name": "read_file", "arguments": {
@@ -1424,6 +1445,8 @@ def test_execute_rejects_system_executable_not_in_allowlist(tmp_path):
 
     assert result["ok"] is False
     assert "execute allowlist" in result["message"]
+    assert "g:ollama_execute_allowlist" in result["message"]
+    assert result["resolved"].startswith("/")
 
 
 @pytest.mark.parametrize("field", ["timeout", "kill_timeout"])

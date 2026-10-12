@@ -18,11 +18,26 @@ Stop the current job, inspect the complete diagnostic, and classify the
 failure first. Do not work around a sandbox failure by changing the command,
 using a shell, invoking another executable, or weakening the sandbox.
 
-An error such as `sandboxed execution failed (Process exited with exit code N)`
-only proves that the executable started and returned N. It is an application
-failure when the following output is a normal tool/API/configuration error,
-such as an authentication failure, invalid arguments, a missing repository
-remote, or an API response. Do not classify those as bubblewrap errors.
+The execute result classifies non-zero exits when possible. Treat
+`failure_kind: bubblewrap` and a message beginning with `bubblewrap failed`
+as sandbox-launch failures. Treat `failure_kind: command` and a message saying
+that the output is from the executable as application failures. The latter
+includes normal tool/API/configuration errors such as authentication failure,
+invalid arguments, a missing repository remote, or an API response. Do not
+classify those as bubblewrap errors.
+
+If the result has `failure_kind: unknown`, the command exited without useful
+diagnostic output and the cause cannot be determined from the exit code alone.
+Report that uncertainty instead of claiming bubblewrap was blocked.
+
+Bubblewrap does not provide per-file or per-socket denial logs for the wrapped
+program. Use the result's `sandbox_policy` to see whether networking was
+enabled and which external paths were mounted read-only. A missing file or
+credential path must be added explicitly to
+`g:ollama_bwrap_readonly_paths`; a network-dependent command must be added to
+`g:ollama_bwrap_network_allowlist`. Do not infer the exact denied path from an
+exit code, and do not rerun a potentially mutating command under tracing just
+to discover it.
 
 Treat errors mentioning bubblewrap, `bwrap`, an inaccessible path, a missing
 file that is known to exist outside the project, permission denied before the

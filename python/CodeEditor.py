@@ -1694,7 +1694,16 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allo
             if isinstance(item, str) and os.path.isabs(item) and "\x00" not in item
         }
         if os.path.realpath(resolved) not in allowed_paths:
-            return {"ok": False, "message": f"execute denied: system executable is not in the execute allowlist: {path}", "denied": path, "output": ""}
+            return {
+                "ok": False,
+                "message": (
+                    f"execute denied: system executable is not in the execute allowlist: {path} "
+                    f"(resolved to {resolved}). Add '{resolved}' to g:ollama_execute_allowlist."
+                ),
+                "denied": path,
+                "resolved": resolved,
+                "output": "",
+            }
         path = resolved
         local_path = resolved
     arguments = dict(arguments)
@@ -3237,6 +3246,8 @@ def _run_edit(request, code, filetype, settings):
             fold_title = f"{name} {fold_path}" if fold_path else name
             if name in ("grep", "glob") and isinstance(arguments, dict) and arguments.get("pattern"):
                 fold_title += f" {arguments['pattern']}"
+            if name == "find_skill" and isinstance(arguments, dict) and arguments.get("name"):
+                fold_title += f" {arguments['name']}"
             call_json = json.dumps(display_arguments, indent=2)
             _progress(f"Tool call: {name}\n{call_json}", tool=name, arguments=arguments, fold=True, fold_title=fold_title)
             try:
