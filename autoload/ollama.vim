@@ -536,7 +536,9 @@ function ollama#Command(command) abort
     if a:command == 'setup'
         call ollama#setup#Setup()
     elseif a:command == 'config'
-        execute ":e ~/.vim/config/ollama.vim"
+        " Avoid re-entering Vim's vim.vim syntax script from the modeline.
+        noautocmd execute "edit ~/.vim/config/ollama.vim"
+        setlocal filetype=vim.ollama
     elseif a:command == 'enable'
         call ollama#Enable()
     elseif a:command == 'disable'
