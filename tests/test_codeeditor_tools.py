@@ -162,9 +162,57 @@ def test_subagent_analyzes_explicit_files_with_bounded_structured_result(tmp_pat
         "files": ["main.py"],
         "truncated": False,
     }
-    assert captured["tools"] == []
+    assert {tool["function"]["name"] for tool in captured["tools"]} == {
+        "read_file", "glob", "grep", "list_files", "git_status", "git_log", "git_diff",
+    }
     assert captured["settings"]["enable_subagents"] is False
+    assert captured["settings"]["mode"] == "plan"
     assert "print('hello')" in captured["messages"][1]["content"]
+
+
+def test_subagent_runs_read_tools_in_own_context_and_rejects_writes(tmp_path, monkeypatch):
+    (tmp_path / "main.py").write_text("answer = 42\n")
+    responses = iter([
+        {"tool_calls": [{"id": "read-1", "function": {
+            "name": "read_file", "arguments": {"path": "main.py"}
+        }}]},
+        {"role": "assistant", "content": "The answer is 42."},
+    ])
+    captured = {}
+
+    def request(messages, settings, tools):
+        captured.setdefault("requests", []).append((messages[:], settings.copy(), tools))
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    result = CodeEditor._request_subagent(
+        {
+            "task": "Inspect the value",
+            "files": [],
+            "tools": ["read_file"],
+            "max_output_chars": 256,
+            "timeout_seconds": 5,
+        },
+        {"provider": "ollama", "cwd": str(tmp_path), "mode": "build"},
+    )
+
+    assert result["findings"] == "The answer is 42."
+    assert captured["requests"][0][2][0]["function"]["name"] == "read_file"
+    assert "answer = 42" in captured["requests"][1][0][-1]["content"]
+    assert captured["requests"][0][1]["mode"] == "plan"
+
+    responses = iter([{
+        "tool_calls": [{"id": "write-1", "function": {
+            "name": "create_file", "arguments": {"path": "nope", "content": "x"}
+        }}]
+    }])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+    result = CodeEditor._request_subagent(
+        {"task": "Write a file", "tools": ["read_file"]},
+        {"provider": "ollama", "cwd": str(tmp_path)},
+    )
+    assert result["status"] == "failed"
+    assert not (tmp_path / "nope").exists()
 
 
 def test_subagent_rejects_traversal_and_symlink_paths(tmp_path):
@@ -616,6 +664,37 @@ def test_self_optimization_review_recovers_from_invalid_proposal(monkeypatch, tm
         "provider": "ollama", "cwd": str(tmp_path), "enable_skills": True,
         "enable_self_optimization": True, "mode": "build", "range_mode": False,
     })
+
+
+def test_active_task_topic_gets_one_completion_reinforcement(monkeypatch):
+    requests = []
+    responses = iter([
+        {"tool_calls": [{"function": {"name": "task_topic", "arguments": json.dumps({
+            "topic": "Review the last two commits",
+            "criteria": ["inspect both commits", "write and verify the report"],
+            "status": "active",
+        })}}]},
+        {"tool_calls": []},
+        {"tool_calls": []},
+    ])
+
+    def request(messages, settings, tools):
+        requests.append(list(messages))
+        return next(responses)
+
+    monkeypatch.setattr(CodeEditor, "_ollama_request", request)
+    operations, messages = CodeEditor._run_edit(
+        "review the last two commits", [], "", {
+            "provider": "ollama", "range_mode": False, "enable_skills": True,
+        },
+    )
+
+    assert operations == []
+    assert len(requests) == 3
+    assert any(
+        message.get("role") == "user" and "returned no tool calls" in message.get("content", "")
+        for message in messages
+    )
 
 
 def test_file_line_tools_use_absolute_file_lines(tmp_path):
