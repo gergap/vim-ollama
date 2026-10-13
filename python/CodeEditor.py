@@ -41,7 +41,7 @@ DEFAULT_PROVIDER = "ollama"
 DEFAULT_HOST = "http://localhost:11434"
 DEFAULT_MODEL = "qwen3.8:27b"
 DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
-DEFAULT_OPTIONS = {"temperature": 0, "top_p": 0.95, "num_predict": 4096}
+DEFAULT_OPTIONS = {"temperature": 0, "top_p": 0.95, "num_predict": 16384}
 MAX_TOOL_CALLS = 64
 DEFAULT_AUTOCOMPACT_CONTEXT_LIMIT = 32768
 DEFAULT_AUTOCOMPACT_THRESHOLD = 0.8
@@ -2694,11 +2694,17 @@ def _ollama_request(messages, settings, tools):
     if api_key:
         headers["Authorization"] = "Bearer " + api_key
     request = {"model": model, "messages": messages, "tools": tools, "stream": True, "options": options}
+    # Native Ollama otherwise decides independently whether a thinking model
+    # should spend the request budget reasoning. Keep edit behavior aligned
+    # with the OpenCode setup while allowing callers to disable it explicitly.
+    request["think"] = settings.get("think", True)
     if settings.get("show_llm_request", False):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     content = []
+    thinking = []
     tool_calls = []
     usage = {}
+    done_reason = None
     with requests.post(
         endpoint,
         headers=headers,
@@ -2712,9 +2718,13 @@ def _ollama_request(messages, settings, tools):
             if not line:
                 continue
             payload = json.loads(line)
+            if payload.get("done_reason"):
+                done_reason = payload["done_reason"]
             chunk = payload.get("message") or {}
             if chunk.get("content"):
                 content.append(chunk["content"])
+            if chunk.get("thinking"):
+                thinking.append(chunk["thinking"])
             for index, call in enumerate(chunk.get("tool_calls") or []):
                 while len(tool_calls) <= index:
                     tool_calls.append({"function": {}})
@@ -2737,6 +2747,10 @@ def _ollama_request(messages, settings, tools):
         message["tool_calls"] = tool_calls
     if usage:
         message["_ollama_usage"] = usage
+    if thinking:
+        message["_ollama_thinking"] = "".join(thinking)
+    if done_reason:
+        message["_ollama_done_reason"] = done_reason
     return message
 
 
@@ -3334,11 +3348,27 @@ def _run_edit(request, code, filetype, settings):
             _progress(context, type="context_usage")
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
-            messages.append({key: value for key, value in message.items() if key not in ("_ollama_usage", "_provider_usage")})
+            messages.append({
+                key: value for key, value in message.items()
+                if key not in ("_ollama_usage", "_provider_usage", "_ollama_thinking", "_ollama_done_reason")
+            })
         else:
             messages.append(message.model_dump(exclude_none=True))
         if not tool_calls:
             content = message.get("content", "") if isinstance(message, dict) else (message.content or "")
+            if (isinstance(message, dict) and not content.strip()
+                    and message.get("_ollama_thinking")
+                    and message.get("_ollama_done_reason") in ("length", "stop")):
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Continue the implementation. Your previous response contained only "
+                        "internal reasoning and no final answer or tool call. Use the supplied "
+                        "tools now; do not stop after inspection."
+                    ),
+                })
+                _progress("Model returned reasoning without an action; requesting continuation")
+                continue
             topic_active = isinstance(task_topic, dict) and task_topic.get("status") == "active"
             todo_incomplete = (not range_mode and isinstance(todo_items, list) and any(
                 isinstance(item, dict) and item.get("status") in ("pending", "in_progress")

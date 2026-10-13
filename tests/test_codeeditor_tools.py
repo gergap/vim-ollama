@@ -1151,6 +1151,29 @@ def test_final_model_response_is_not_truncated(monkeypatch):
     assert progress[-1] == "Model: " + content
 
 
+def test_reasoning_only_response_requests_continuation(monkeypatch):
+    responses = iter([
+        {
+            "role": "assistant",
+            "content": "",
+            "_ollama_thinking": "I need to inspect and implement this.",
+            "_ollama_done_reason": "length",
+            "tool_calls": [],
+        },
+        {"role": "assistant", "content": "Finished.", "tool_calls": []},
+    ])
+    monkeypatch.setattr(CodeEditor, "_ollama_request", lambda messages, settings, tools: next(responses))
+
+    operations, messages = CodeEditor._run_edit("implement it", [], "text", {"provider": "ollama"})
+
+    assert operations == []
+    assert messages[-1]["role"] == "assistant"
+    assert any(
+        message.get("role") == "user" and "Continue the implementation" in message.get("content", "")
+        for message in messages
+    )
+
+
 def test_context_usage_is_reported_from_ollama_counts():
     context = CodeEditor._context_usage(
         {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},
@@ -1173,7 +1196,7 @@ def test_model_options_keep_safe_output_limit_when_num_predict_is_omitted():
     options = CodeEditor._model_options({"options": {"num_ctx": 160000, "keep_alive": 1800}})
     assert options["num_ctx"] == 160000
     assert options["keep_alive"] == 1800
-    assert options["num_predict"] == 4096
+    assert options["num_predict"] == 16384
 
 
 @pytest.mark.parametrize("provider", ["openai", "mistral"])
