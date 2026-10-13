@@ -2702,6 +2702,9 @@ def _ollama_request(messages, settings, tools):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     content = []
     thinking = []
+    thinking_pending = []
+    thinking_pending_chars = 0
+    thinking_last_report = time.monotonic()
     tool_calls = []
     usage = {}
     done_reason = None
@@ -2724,7 +2727,17 @@ def _ollama_request(messages, settings, tools):
             if chunk.get("content"):
                 content.append(chunk["content"])
             if chunk.get("thinking"):
-                thinking.append(chunk["thinking"])
+                thinking_chunk = chunk["thinking"]
+                thinking.append(thinking_chunk)
+                if settings.get("show_thinking", False):
+                    thinking_pending.append(thinking_chunk)
+                    thinking_pending_chars += len(thinking_chunk)
+                    now = time.monotonic()
+                    if thinking_pending_chars >= 256 or now - thinking_last_report >= 0.5:
+                        _progress("".join(thinking_pending), type="thinking")
+                        thinking_pending = []
+                        thinking_pending_chars = 0
+                        thinking_last_report = now
             for index, call in enumerate(chunk.get("tool_calls") or []):
                 while len(tool_calls) <= index:
                     tool_calls.append({"function": {}})
@@ -2742,6 +2755,9 @@ def _ollama_request(messages, settings, tools):
             for key in ("prompt_eval_count", "eval_count"):
                 if isinstance(payload.get(key), int) and not isinstance(payload.get(key), bool):
                     usage[key] = payload[key]
+    if settings.get("show_thinking", False):
+        if thinking_pending:
+            _progress("".join(thinking_pending), type="thinking")
     message = {"role": "assistant", "content": "".join(content)}
     if tool_calls:
         message["tool_calls"] = tool_calls

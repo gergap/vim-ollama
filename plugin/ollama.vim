@@ -165,6 +165,9 @@ endif
 if !exists('g:ollama_show_llm_request')
     let g:ollama_show_llm_request = v:false
 endif
+if !exists('g:ollama_edit_show_thinking')
+    let g:ollama_edit_show_thinking = v:false
+endif
 if !exists('g:ollama_edit_max_operations')
     let g:ollama_edit_max_operations = 64
 endif

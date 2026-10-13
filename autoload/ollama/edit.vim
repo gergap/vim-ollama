@@ -20,6 +20,7 @@ let s:spinner_frame = 0
 let s:spinner_text = ''
 let s:spinner_line = 0
 let s:spinner_start = []
+let s:thinking_line = 0
 let s:resume_conversation_insert = v:false
 let g:edit_in_progress = 0
 
@@ -93,9 +94,11 @@ function! s:OpenConversation(request) abort
     syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
     syntax match OllamaEditCheckmark /^✓/
     syntax match OllamaEditCross /^✗/
+    syntax match OllamaEditThinking /^> .*/
+    highlight default OllamaEditThinking cterm=italic ctermfg=2 gui=italic guifg=#5fd787
     syntax match OllamaPlanPrompt /^\[Plan\]/ containedin=ALL
     syntax match OllamaBuildPrompt /^\[Build\]/ containedin=ALL
-    setlocal wrap
+    "setlocal wrap
     setlocal modifiable
     setlocal foldmethod=expr
     setlocal foldexpr=ollama#edit#ConversationFold(v:lnum)
@@ -114,6 +117,7 @@ function! s:OpenConversation(request) abort
     augroup END
     let s:conversation_bufnr = bufnr('%')
     let s:conversation_winid = win_getid()
+    let s:thinking_line = 0
     let l:title = 'OllamaEdit'
     let l:intro = empty(a:request) ? ['Type a request and press <Enter>.'] : split('Request: ' .. a:request, "\n", v:true)
     call setline(1, [l:title, repeat('=', strdisplaywidth(l:title)), ''] + l:intro + [''])
@@ -269,6 +273,27 @@ function! ollama#edit#AppendProgress(text) abort
         finally
             call setbufvar(s:conversation_bufnr, 'ollama_internal_update', l:internal_update)
         endtry
+    endif
+endfunction
+
+function! ollama#edit#AppendThinking(text) abort
+    if !bufexists(s:conversation_bufnr)
+        return
+    endif
+    let l:parts = split(a:text, "\n", v:true)
+    if empty(l:parts)
+        return
+    endif
+    if s:thinking_line > 0 && l:parts[0] !=# ''
+        let l:current = getbufline(s:conversation_bufnr, s:thinking_line)[0]
+        call setbufline(s:conversation_bufnr, s:thinking_line, l:current .. l:parts[0])
+        call remove(l:parts, 0)
+    endif
+    if !empty(l:parts)
+        let l:lines = map(l:parts, {_, value -> '> ' .. value})
+        let l:line_count = getbufinfo(s:conversation_bufnr)[0].linecount
+        call appendbufline(s:conversation_bufnr, l:line_count - 1, l:lines)
+        let s:thinking_line = l:line_count - 1 + len(l:lines)
     endif
 endfunction
 
@@ -1207,13 +1232,17 @@ try:
     events = CodeEditor.get_progress_events()
     start = int(vim.eval('g:ollama_edit_progress_index'))
     for event in events[start:]:
+        if event.get('type') != 'thinking':
+            vim.command('let s:thinking_line = 0')
         if event.get('text', '').startswith('Waiting for model response'):
             vim.command('call ollama#edit#StartSpinner(' + vim_json(event.get('text', '')) + ')')
         else:
             failed = event.get('fold_status') == 'FAILED' or event.get('text', '').startswith('Error:')
             vim.command('call ollama#edit#StopSpinner(' + str(0 if failed else 1) + ')')
 
-        if not event.get('diagnostic') and not event.get('fold') and not event.get('fold_append'):
+        if event.get('type') == 'thinking':
+            vim.command('call ollama#edit#AppendThinking(' + vim_json(event.get('text', '')) + ')')
+        elif not event.get('diagnostic') and not event.get('fold') and not event.get('fold_append'):
             vim.command('call ollama#edit#AppendProgress(' + vim_json(event.get('text', '')) + ')')
         if event.get('text', '').startswith('Waiting for model response'):
             vim.command('call ollama#edit#ShowSpinner()')
@@ -1312,6 +1341,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                  \ 'use_claude_md_file': get(g:, 'ollama_use_claude_md_file', v:true),
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
+                \ 'show_thinking': get(g:, 'ollama_edit_show_thinking', v:false),
                 \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
                 \ 'mode': get(g:, 'ollama_edit_mode', 'build'),
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),

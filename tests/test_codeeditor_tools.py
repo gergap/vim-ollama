@@ -1174,6 +1174,44 @@ def test_reasoning_only_response_requests_continuation(monkeypatch):
     )
 
 
+def test_ollama_request_can_report_streamed_thinking(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_lines(self, decode_unicode=True):
+            yield json.dumps({"message": {"thinking": "x" * 256}})
+            yield json.dumps({"message": {"content": "done"}, "done": True})
+
+    captured = {}
+    progress = []
+    monkeypatch.setattr(CodeEditor, "_check_ollama_tool_support", lambda settings: None)
+    monkeypatch.setattr(CodeEditor, "_progress", lambda text, **details: progress.append((text, details)))
+
+    def post(endpoint, headers, json, stream, timeout):
+        captured["request"] = json
+        return Response()
+
+    monkeypatch.setattr(CodeEditor.requests, "post", post)
+    message = CodeEditor._ollama_request(
+        [{"role": "user", "content": "work"}],
+        {"url": "http://localhost:11434", "model": "qwen3.8:27b", "show_thinking": True},
+        [],
+    )
+
+    assert captured["request"]["think"] is True
+    assert message["content"] == "done"
+    thinking_events = [text for text, details in progress if details.get("type") == "thinking"]
+    assert thinking_events
+    assert all(not text.startswith("Thinking:") for text in thinking_events)
+
+
 def test_context_usage_is_reported_from_ollama_counts():
     context = CodeEditor._context_usage(
         {"_ollama_usage": {"prompt_eval_count": 42000, "eval_count": 6700}},

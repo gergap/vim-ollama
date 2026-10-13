@@ -95,3 +95,5 @@ let g:ollama_bwrap_readonly_paths = [expand('~/.config/glab-cli')]
 let g:ollama_debug = 0
 " Show complete LLM requests in folded diagnostics when troubleshooting.
 let g:ollama_show_llm_request = v:false
+" Show streamed thinking progress during OllamaEdit requests
+let g:ollama_edit_show_thinking = v:false

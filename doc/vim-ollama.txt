@@ -1014,6 +1014,16 @@ g:ollama_show_llm_request
     - Example:
 >
         let g:ollama_show_llm_request = v:true
+
+                                                        *g:ollama_edit_show_thinking*
+g:ollama_edit_show_thinking
+    - Description: When set to v:true, show bounded streamed thinking progress
+      from native OllamaEdit requests in the conversation buffer as italic
+      green `> ` quote lines. This is disabled by default and has no effect for
+      OpenAI-compatible providers.
+    - Example:
+>
+        let g:ollama_edit_show_thinking = v:true
 <
 
                                                 *g:ollama_edit_max_operations*

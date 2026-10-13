@@ -48,6 +48,7 @@ let s:help_text = {
 \ 'ollama_autocompact_context_limit': 'Context window size for OpenAI-compatible providers (default=32768).',
 \ 'ollama_quickfix_checkers': 'Checker commands by filetype for OllamaQuickFix.',
 \ 'ollama_show_llm_request': 'Show complete LLM requests in folded diagnostics.',
+\ 'ollama_edit_show_thinking': 'Show streamed OllamaEdit thinking progress (default=v:false).',
 \ 'ollama_edit_max_operations': 'Maximum tool calls allowed in one edit request.',
 \ 'ollama_extract_max_size': 'Maximum uncompressed archive extraction size in bytes.',
 \ 'ollama_bwrap_enabled': 'Run external tool calls inside bubblewrap.',
