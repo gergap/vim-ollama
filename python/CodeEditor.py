@@ -2688,12 +2688,19 @@ def _ollama_request(messages, settings, tools):
     endpoint = baseurl.rstrip("/") + "/api/chat"
     model = settings.get("model") or DEFAULT_MODEL
     options = _model_options(settings)
+    # Ollama expects keep_alive alongside options, not inside the options map.
+    # Read it from the existing edit-options configuration for compatibility.
+    keep_alive = settings.get("keep_alive")
+    if keep_alive is None:
+        keep_alive = options.pop("keep_alive", None)
     headers = {"Content-Type": "application/json"}
     credentialname = settings.get("credentialname")
     api_key = OllamaCredentials().GetApiKey("ollama", credentialname)
     if api_key:
         headers["Authorization"] = "Bearer " + api_key
     request = {"model": model, "messages": messages, "tools": tools, "stream": True, "options": options}
+    if keep_alive is not None:
+        request["keep_alive"] = keep_alive
     # Native Ollama otherwise decides independently whether a thinking model
     # should spend the request budget reasoning. Keep edit behavior aligned
     # with the OpenCode setup while allowing callers to disable it explicitly.
