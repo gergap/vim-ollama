@@ -93,6 +93,7 @@ function! s:OpenConversation(request) abort
     " Apply this after the filetype so its ftplugin cannot re-enable wrapping.
     setlocal textwidth=0 formatoptions-=t formatoptions-=c formatoptions-=r formatoptions-=o
     setlocal wrap linebreak
+    setlocal nocursorcolumn
     " avoid showing _ as errors in Markdown
     silent! syntax clear markdownError
     syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
