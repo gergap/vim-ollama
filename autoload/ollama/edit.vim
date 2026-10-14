@@ -89,6 +89,10 @@ function! s:OpenConversation(request) abort
     setlocal buftype=prompt bufhidden=hide noswapfile
     setlocal filetype=markdown
     setlocal nospell
+    " Keep long requests on one logical line; PromptEntered receives one line.
+    " Apply this after the filetype so its ftplugin cannot re-enable wrapping.
+    setlocal textwidth=0 formatoptions-=t formatoptions-=c formatoptions-=r formatoptions-=o
+    setlocal wrap linebreak
     " avoid showing _ as errors in Markdown
     silent! syntax clear markdownError
     syntax match OllamaEditSpinner /^[⣾⣽⣻⢿⡿⣟⣯⣷]/
