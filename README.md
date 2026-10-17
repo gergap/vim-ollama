@@ -67,7 +67,8 @@ alternative for me. I prefer using Vim in the terminal and do not want to switch
    - Expose explicitly selected tool configuration or certificate paths
      read-only with `g:ollama_bwrap_readonly_paths`
    - Persist sandbox approvals with the `Permanent` option in
-     `~/.vim/config/ollama-sandbox-approvals.json`
+     `~/.vim/config/ollama-sandbox-approvals.json`; execute confirmations can
+     save either the exact command or a token-safe smart pattern
 - Python venv support for easier installation (NEW in V1.1)
 - OpenAI endpoint support for using LMStudio, Open WebUI, or commercial OpenAI services (NEW in 1.2)
 - Mistral AI support (NEW in 1.2). If you need to use a cloud service for performance reasons, this is a good choice.

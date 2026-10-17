@@ -49,7 +49,9 @@ path or capability before proposing a fix.
 
 Prepare the user-facing Vim configuration using exact canonical executable
 paths. Do not add wildcard paths or broad directories to the executable
-allowlist.
+allowlist. The execute confirmation's optional smart permanent approval is a
+separate command-token pattern and does not replace this executable-path
+requirement.
 
 ```vim
 let g:ollama_execute_allowlist = ['/absolute/path/to/program']

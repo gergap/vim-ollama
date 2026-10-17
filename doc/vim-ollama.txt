@@ -1113,12 +1113,19 @@ g:ollama_bwrap_readonly_paths
 g:ollama_bwrap_confirm
     - Description: Prompts before launching sandboxed `execute` and
       `vim-check` commands. The prompt offers Once, Session, Permanent, and
-      Cancel. Permanent sandbox approvals are stored, keyed by the exact
-      executable and its arguments, in
+      Cancel. For `execute`, when a broader safe token pattern can be derived,
+      the prompt also offers Permanent (exact) and Permanent (smart). The
+      smart form preserves the executable and command group/options, then
+      allows additional argument tokens. For example, `clang-format-19 -i
+      filename.c` becomes `clang-format-19 -i *`; an invocation such as
+      `glab ci get project` becomes `glab ci *`, without allowing another
+      top-level `glab` group. The wildcard matches argument tokens only; it is never
+      passed to a shell. Permanent sandbox approvals are stored in
       `~/.vim/config/ollama-sandbox-approvals.json` as structured records
       containing `tool` and a `command` array. Bubblewrap wrapper arguments are
       not stored. Older key/value files are read and migrated when a new
-      permanent approval is saved. `vim-make` is not prompted.
+      permanent approval is saved. Exact approvals remain available when a
+      smart pattern would be too broad. `vim-make` is not prompted.
     - Default: 'v:true'
 
                                   *g:ollama_bwrap_execute_allow_project_write*

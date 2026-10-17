@@ -642,6 +642,55 @@ function! s:SaveSandboxPermanentApprovals(approvals) abort
     call writefile(l:lines, l:file, 's')
 endfunction
 
+function! s:SandboxApprovalMatches(approvals, tool, command) abort
+    let l:exact_key = a:tool .. "\n" .. join(a:command, "\n")
+    if get(a:approvals, l:exact_key, v:false)
+        return v:true
+    endif
+    for l:key in keys(a:approvals)
+        let l:parts = split(l:key, "\n")
+        if len(l:parts) < 3 || l:parts[0] !=# a:tool
+            continue
+        endif
+        let l:pattern = l:parts[1:]
+        if l:pattern[-1] !=# '*' || len(a:command) < len(l:pattern)
+            continue
+        endif
+        let l:matches = v:true
+        for l:index in range(len(l:pattern) - 2)
+            if l:pattern[l:index] !=# a:command[l:index]
+                let l:matches = v:false
+                break
+            endif
+        endfor
+        if l:matches
+            return v:true
+        endif
+    endfor
+    return v:false
+endfunction
+
+function! s:SmartSandboxCommand(command) abort
+    if len(a:command) < 2
+        return copy(a:command)
+    endif
+    let l:positional = []
+    for l:index in range(1, len(a:command) - 1)
+        if a:command[l:index] !~# '^-' && a:command[l:index] !=# '*'
+            call add(l:positional, l:index)
+        endif
+    endfor
+    if empty(l:positional)
+        return copy(a:command)
+    endif
+    " Preserve the first command group (for example glab ci), while replacing
+    " file operands and nested subcommands with a token-level suffix wildcard.
+    let l:keep_until = len(l:positional) > 1 ? l:positional[0] : l:positional[-1] - 1
+    let l:smart = a:command[0 : l:keep_until]
+    call add(l:smart, '*')
+    return l:smart ==# a:command ? copy(a:command) : l:smart
+endfunction
+
 function! s:ConfirmSandbox(tool, command, ...) abort
     let l:allowlisted = a:0 > 1 && a:2
     let l:approval_command = a:0 > 0 ? a:1 : a:command
@@ -656,7 +705,7 @@ function! s:ConfirmSandbox(tool, command, ...) abort
         return v:true
     endif
     let l:key = a:tool .. "\n" .. join(l:approval_command, "\n")
-    if get(s:sandbox_session_approvals, l:key, v:false)
+    if s:SandboxApprovalMatches(s:sandbox_session_approvals, a:tool, l:approval_command)
         if l:allowlisted
             call ollama#edit#AppendProgress('Execution allowed per allowlist')
         endif
@@ -665,7 +714,7 @@ function! s:ConfirmSandbox(tool, command, ...) abort
     if empty(s:sandbox_permanent_approvals)
         let s:sandbox_permanent_approvals = s:LoadSandboxPermanentApprovals()
     endif
-    if get(s:sandbox_permanent_approvals, l:key, v:false)
+    if s:SandboxApprovalMatches(s:sandbox_permanent_approvals, a:tool, l:approval_command)
         if l:allowlisted
             call ollama#edit#AppendProgress('Execution allowed per allowlist')
         endif
@@ -682,14 +731,24 @@ function! s:ConfirmSandbox(tool, command, ...) abort
         let l:summary = "Execute:\n  " .. l:display_command .. "\n\n" .. l:summary
     endif
     call ollama#edit#AppendProgress('Waiting for execution confirmation')
-    let l:choice = confirm(l:summary,
-                \ "Allow &Once\nAllow for &Session\nAllow &Permanent\n&Cancel", 4)
+    let l:smart_command = a:tool ==# 'execute' && a:0 > 0 ? s:SmartSandboxCommand(a:1) : []
+    let l:has_smart = !empty(l:smart_command) && l:smart_command !=# a:1
+    if l:has_smart
+        let l:smart_display_command = join(map(copy(l:smart_command), 'shellescape(v:val)'), ' ')
+        let l:summary ..= "\n\nSmart permanent pattern:\n  " .. l:smart_display_command
+    endif
+    let l:choices = l:has_smart
+                \ ? "Allow &Once\nAllow for &Session\nAllow &Permanent (exact)\n&Allow smart permanent\n&Cancel"
+                \ : "Allow &Once\nAllow for &Session\nAllow &Permanent\n&Cancel"
+    let l:choice = confirm(l:summary, l:choices, l:has_smart ? 5 : 4)
     if l:choice == 2
         let s:sandbox_session_approvals[l:key] = v:true
         return v:true
     endif
-    if l:choice == 3
-        let s:sandbox_permanent_approvals[l:key] = v:true
+    if l:choice == 3 || (l:has_smart && l:choice == 4)
+        let l:permanent_command = l:has_smart && l:choice == 4 ? l:smart_command : l:approval_command
+        let l:permanent_key = a:tool .. "\n" .. join(l:permanent_command, "\n")
+        let s:sandbox_permanent_approvals[l:permanent_key] = v:true
         try
             call s:SaveSandboxPermanentApprovals(s:sandbox_permanent_approvals)
         catch
