@@ -171,6 +171,9 @@ endif
 if !exists('g:ollama_edit_max_operations')
     let g:ollama_edit_max_operations = 64
 endif
+if !exists('g:ollama_edit_prompt_history_limit')
+    let g:ollama_edit_prompt_history_limit = 50
+endif
 if !exists('g:ollama_edit_mode')
     let g:ollama_edit_mode = 'build'
 endif

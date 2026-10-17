@@ -111,8 +111,8 @@ function! s:OpenConversation(request) abort
     setlocal foldlevel=0
     let b:ollama_edit_conversation = v:true
     let b:ollama_stick_to_bottom = v:true
-    let b:ollama_edit_prompt_history = []
-    let b:ollama_edit_prompt_history_index = 0
+    let b:ollama_edit_prompt_history = s:LoadPromptHistory()
+    let b:ollama_edit_prompt_history_index = len(b:ollama_edit_prompt_history)
     augroup OllamaEditConversation
         autocmd! * <buffer>
         autocmd BufWinEnter,BufWritePost,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
@@ -133,6 +133,64 @@ function! s:OpenConversation(request) abort
     inoremap <silent><buffer> <Tab> <C-R>=ollama#edit#ToggleMode()<CR>
     inoremap <silent><buffer> <Up> <C-R>=ollama#edit#PromptHistory(-1)<CR>
     inoremap <silent><buffer> <Down> <C-R>=ollama#edit#PromptHistory(1)<CR>
+endfunction
+
+function! s:PromptHistoryPath() abort
+    return expand('$HOME/.vim/config/ollama-edit-history')
+endfunction
+
+function! s:PromptHistoryLimit() abort
+    return max([1, str2nr(get(g:, 'ollama_edit_prompt_history_limit', 50))])
+endfunction
+
+function! s:LoadPromptHistory() abort
+    let l:path = s:PromptHistoryPath()
+    if !filereadable(l:path)
+        return []
+    endif
+    try
+        let l:history = readfile(l:path, '', s:PromptHistoryLimit())
+    catch
+        call ollama#logger#Warn('Unable to read OllamaEdit prompt history: ' .. v:exception)
+        return []
+    endtry
+    return filter(l:history, {_, value -> !empty(value)})
+endfunction
+
+function! s:SavePromptHistory(history) abort
+    let l:path = s:PromptHistoryPath()
+    let l:directory = fnamemodify(l:path, ':h')
+    if !isdirectory(l:directory)
+        try
+            call mkdir(l:directory, 'p')
+        catch
+            call ollama#logger#Warn('Unable to create OllamaEdit prompt history directory: ' .. v:exception)
+            return
+        endtry
+    endif
+    let l:temporary = l:path .. '.tmp'
+    try
+        if writefile(a:history, l:temporary) != 0 || rename(l:temporary, l:path) != 0
+            throw 'atomic write failed'
+        endif
+    catch
+        silent! call delete(l:temporary)
+        call ollama#logger#Warn('Unable to save OllamaEdit prompt history: ' .. v:exception)
+    endtry
+endfunction
+
+function! s:AddPromptToHistory(text) abort
+    let l:history = get(b:, 'ollama_edit_prompt_history', [])
+    if empty(l:history) || l:history[-1] !=# a:text
+        call add(l:history, a:text)
+    endif
+    let l:limit = s:PromptHistoryLimit()
+    if len(l:history) > l:limit
+        let l:history = l:history[-l:limit:]
+    endif
+    let b:ollama_edit_prompt_history = l:history
+    let b:ollama_edit_prompt_history_index = len(l:history)
+    call s:SavePromptHistory(l:history)
 endfunction
 
 function! s:ModeLabel() abort
@@ -1266,12 +1324,7 @@ function! ollama#edit#PromptEntered(text) abort
     endif
     let s:resume_conversation_insert = v:true
     stopinsert
-    let l:history = get(b:, 'ollama_edit_prompt_history', [])
-    if empty(l:history) || l:history[-1] !=# a:text
-        call add(l:history, a:text)
-    endif
-    let b:ollama_edit_prompt_history = l:history
-    let b:ollama_edit_prompt_history_index = len(l:history)
+    call s:AddPromptToHistory(a:text)
     if g:edit_in_progress
         call ollama#edit#AppendProgress('An OllamaEdit request is already running.')
         return

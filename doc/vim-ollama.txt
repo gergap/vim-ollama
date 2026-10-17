@@ -144,7 +144,10 @@ The vim-ollama plugin provides the following commands:
     Press <Tab> at the conversation prompt to switch between Plan and Build
     modes before submitting the next request.
     Press <Up> and <Down> at the prompt to browse previously submitted
-    requests. Moving past the newest request clears the prompt.
+    requests. Moving past the newest request clears the prompt. The most
+    recent requests are persisted in ~/.vim/config/ollama-edit-history, so
+    they remain available after restarting Vim. The number of saved requests
+    is controlled by |g:ollama_edit_prompt_history_limit|.
     - Usage:
 >
         :[range]OllamaEdit [prompt]
@@ -869,7 +872,20 @@ g:ollama_edit_options
                 \ 'num_predict': 256
                 \ }
 <
-                                                 *g:ollama_use_agents_md_file*
+
+                                          *g:ollama_edit_prompt_history_limit*
+g:ollama_edit_prompt_history_limit
+    - Description: Maximum number of recent OllamaEdit prompts persisted for
+      the <Up>/<Down> prompt history. Set to 0 or a negative value to retain
+      one entry (the minimum); delete ~/.vim/config/ollama-edit-history to
+      clear the stored history.
+    - Default: 50
+    - Example:
+>
+        let g:ollama_edit_prompt_history_limit = 100
+<
+
+                                                  *g:ollama_use_agents_md_file*
 g:ollama_use_agents_md_file
     - Description: Controls whether OllamaEdit loads `AGENTS.md` files from
       the working directory and its parent directories into the model context.

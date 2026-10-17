@@ -34,6 +34,7 @@ let s:help_text = {
 \ 'ollama_edit_provider': 'Provider for edit tasks: "ollama" or "openai".',
 \ 'ollama_edit_model': 'Model used for text editing.',
 \ 'ollama_edit_options': 'Options for edit model.',
+\ 'ollama_edit_prompt_history_limit': 'Maximum number of persistent OllamaEdit prompts (default=50).',
 \ 'ollama_use_agents_md_file': 'Use AGENTS.md project instructions for OllamaEdit (default=v:true).',
 \ 'ollama_use_claude_md_file': 'Use CLAUDE.md project instructions for OllamaEdit (default=v:true).',
 \ 'ollama_enable_memory': 'Enable global Memory/USER.md context (default=v:true).',
