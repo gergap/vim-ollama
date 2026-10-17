@@ -632,7 +632,7 @@ EXECUTE_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Relative path to a project executable, or an absolute path listed in g:ollama_execute_allowlist."},
+                    "path": {"type": "string", "description": "Relative or absolute executable path. Project executables require g:ollama_execute_allow_project_executables; system executables require g:ollama_execute_allowlist."},
                     "arguments": {"type": "array", "items": {"type": "string"}, "description": "Arguments passed to the executable without a shell."},
                     "cwd": {"type": "string", "description": "Optional project-relative working directory for the executable. Defaults to Vim's current working directory."},
                     "timeout": {"type": "number", "minimum": 0, "default": 30, "description": "Seconds before sending SIGTERM."},
@@ -1685,7 +1685,7 @@ def _request_check(arguments):
         return g_make_results.pop(request_id)
 
 
-def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allowlist=None):
+def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allowlist=None, allow_project_executables=False):
     if not isinstance(arguments, dict):
         error = "execute tool requires a path and argument list"
         _progress(f"Tool error: {error}", tool="execute")
@@ -1694,14 +1694,6 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allo
     requested_arguments = arguments.get("arguments")
     if not isinstance(path, str) or not path or "\x00" in path:
         error = "execute path must be a non-empty string"
-        _progress(f"Tool error: {error}", tool="execute")
-        return {"ok": False, "message": error, "error": error}
-    if any(part == ".." for part in path.replace("\\", "/").split("/")):
-        error = "execute path must be relative and remain below the current directory"
-        _progress(f"Tool error: {error}", tool="execute")
-        return {"ok": False, "message": error, "error": error}
-    if (os.path.isabs(path) or ntpath.isabs(path)) and not allow_system_tools:
-        error = "execute path must be relative and remain below the current directory"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
     execute_cwd = arguments.get("cwd")
@@ -1731,18 +1723,32 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allo
         error = "execute requires a current directory"
         _progress(f"Tool error: {error}", tool="execute")
         return {"ok": False, "message": error, "error": error}
-    local_path = os.path.normpath(path if os.path.isabs(path) else os.path.join(cwd, path))
-    local_cwd = os.path.normpath(cwd)
-    is_local_executable = (
-        not os.path.isabs(path)
-        and os.path.commonpath([local_path, local_cwd]) == local_cwd
-        and os.path.isfile(local_path)
-        and os.access(local_path, os.X_OK)
-        and not os.path.islink(local_path)
-    )
-    if not is_local_executable:
+    project_path = os.path.realpath(os.path.abspath(cwd))
+    local_path = os.path.realpath(path if os.path.isabs(path) else os.path.join(project_path, path))
+    try:
+        is_project_path = os.path.commonpath([project_path, local_path]) == project_path
+    except ValueError:
+        is_project_path = False
+    is_project_executable = is_project_path and os.path.isfile(local_path) and os.access(local_path, os.X_OK)
+    if is_project_executable:
+        if not allow_project_executables:
+            return {
+                "ok": False,
+                "message": (
+                    f"execute denied: project executables are disabled: {path}. "
+                    "Set g:ollama_execute_allow_project_executables to v:true to allow them."
+                ),
+                "denied": path,
+                "resolved": local_path,
+                "output": "",
+            }
+    else:
+        if is_project_path and (os.path.isabs(path) or "/" in path or "\\" in path):
+            return {"ok": False, "message": f"execute denied: project executable not found: {path}", "denied": path, "output": ""}
+        if not is_project_path and not os.path.isabs(path) and ("/" in path or "\\" in path):
+            return {"ok": False, "message": f"execute denied: {path} resolves outside the current project", "denied": path, "output": ""}
         if not allow_system_tools:
-            return {"ok": False, "message": f"execute denied: {path} is not an executable below the current directory", "denied": path, "output": ""}
+            return {"ok": False, "message": f"execute denied: system executables are disabled: {path}", "denied": path, "output": ""}
         resolved = os.path.realpath(path) if os.path.isabs(path) else shutil.which(path)
         allowed_roots = ("/usr/", "/bin/", "/sbin/", "/lib/", "/lib64/")
         if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
@@ -1770,6 +1776,7 @@ def _request_execute(arguments, cwd=None, allow_system_tools=False, execute_allo
         path = resolved
         local_path = resolved
     arguments = dict(arguments)
+    arguments["path"] = local_path
     arguments["timeout"] = timeout
     arguments["kill_timeout"] = kill_timeout
     request_id = str(uuid.uuid4())
@@ -3532,6 +3539,7 @@ def _run_edit(request, code, filetype, settings):
                         settings.get("cwd"),
                         settings.get("sandbox_system_tools", False),
                         settings.get("execute_allowlist", []),
+                        settings.get("execute_allow_project_executables", False),
                     )
                 elif name in TODO_TOOL_NAMES:
                     result = _request_todo(arguments)

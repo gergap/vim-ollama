@@ -2,6 +2,8 @@ import json
 import sys
 import stat
 import tarfile
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1601,11 +1603,18 @@ def test_make_rejects_command_arguments(arguments):
     assert "only make target names" in result["error"]
 
 
-def test_execute_rejects_paths_outside_workspace():
-    result = CodeEditor._request_execute({"path": "../program", "arguments": []})
+def test_execute_rejects_paths_outside_workspace(tmp_path):
+    project = tmp_path / "workspace"
+    project.mkdir()
+
+    result = CodeEditor._request_execute(
+        {"path": "../program", "arguments": []},
+        cwd=str(project),
+        allow_project_executables=True,
+    )
 
     assert result["ok"] is False
-    assert "remain below the current directory" in result["error"]
+    assert "resolves outside the current project" in result["message"]
 
 
 def test_execute_rejects_system_executable_not_in_allowlist(tmp_path):
@@ -1620,6 +1629,101 @@ def test_execute_rejects_system_executable_not_in_allowlist(tmp_path):
     assert "execute allowlist" in result["message"]
     assert "g:ollama_execute_allowlist" in result["message"]
     assert result["resolved"].startswith("/")
+
+
+def _project_exec_path(tmp_path):
+    project = tmp_path / "workspace"
+    project.mkdir()
+    script = project / "build"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return project, script
+
+
+@pytest.mark.parametrize("absolute", [False, True])
+def test_execute_allows_canonical_project_executable_with_option(tmp_path, monkeypatch, absolute):
+    project, script = _project_exec_path(tmp_path)
+    result_box = {}
+    submitted_arguments = []
+
+    original_progress = CodeEditor._progress
+
+    def progress(message, **kwargs):
+        if kwargs.get("type") == "execute_request":
+            submitted_arguments.append(kwargs["arguments"])
+        return original_progress(message, **kwargs)
+
+    monkeypatch.setattr(CodeEditor, "_progress", progress)
+
+    def run():
+        result_box["value"] = CodeEditor._request_execute(
+            {"path": str(script) if absolute else "sub/../build", "arguments": []},
+            cwd=str(project),
+            execute_allowlist=[],
+            allow_project_executables=True,
+        )
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    deadline = time.time() + 2
+    submitted = False
+    while not submitted and time.time() < deadline:
+        request_id = next(iter(CodeEditor.g_make_results), None)
+        if request_id is not None:
+            CodeEditor.submit_make_result(request_id, {"ok": True, "output": ""})
+            submitted = True
+        else:
+            time.sleep(0.02)
+    thread.join(2)
+    assert submitted
+    assert result_box["value"]["ok"] is True
+    assert submitted_arguments[0]["path"] == str(script.resolve())
+
+
+@pytest.mark.parametrize("absolute", [False, True])
+def test_execute_denies_project_executable_without_option(tmp_path, absolute):
+    project, script = _project_exec_path(tmp_path)
+
+    result = CodeEditor._request_execute(
+        {"path": str(script) if absolute else "build", "arguments": []},
+        cwd=str(project),
+        allow_system_tools=True,
+        execute_allowlist=[],
+        allow_project_executables=False,
+    )
+
+    assert result["ok"] is False
+    assert "g:ollama_execute_allow_project_executables" in result["message"]
+
+
+def test_execute_denies_absolute_path_outside_project_with_option(tmp_path):
+    result = CodeEditor._request_execute(
+        {"path": "/usr/bin/sh", "arguments": []},
+        cwd=str(tmp_path / "workspace"),
+        allow_system_tools=True,
+        execute_allowlist=[],
+        allow_project_executables=True,
+    )
+
+    assert result["ok"] is False
+    assert "g:ollama_execute_allowlist" in result["message"]
+
+
+def test_execute_denies_project_symlink_that_resolves_outside(tmp_path):
+    project = tmp_path / "workspace"
+    project.mkdir()
+    script = tmp_path / "outside"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    (project / "build").symlink_to(script)
+
+    result = CodeEditor._request_execute(
+        {"path": "build", "arguments": []},
+        cwd=str(project),
+        allow_project_executables=True,
+    )
+
+    assert result["ok"] is False
+    assert "system executables are disabled" in result["message"]
 
 
 @pytest.mark.parametrize("field", ["timeout", "kill_timeout"])

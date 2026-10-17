@@ -1135,6 +1135,16 @@ g:ollama_bwrap_execute_allow_project_write
       remains read-only.
     - Default: 'v:false'
 
+                                *g:ollama_execute_allow_project_executables*
+g:ollama_execute_allow_project_executables
+    - Description: Allows `execute` to run relative or absolute executable
+      paths whose canonical (symlink-resolved) location stays below the current
+      project directory, without listing each one in
+      `g:ollama_execute_allowlist`. Paths that resolve outside the project
+      directory are still denied unless separately allowed as sandboxed system
+      executables. Project executables are denied when this option is disabled.
+    - Default: 'v:false'
+
                                                             *g:ollama_no_maps*
 g:ollama_no_maps
     - Description: Disables all default mappings except for `<tab>` which has

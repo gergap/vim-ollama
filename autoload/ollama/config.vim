@@ -59,6 +59,7 @@ let s:help_text = {
 \ 'ollama_bwrap_confirm': 'Confirm sandboxed tool launches; Permanent approvals are stored in ~/.vim/config.',
 \ 'ollama_bwrap_execute_allow_project_write': 'Allow sandboxed execute to write project files.',
 \ 'ollama_execute_allowlist': 'Absolute executable paths allowed for system execute calls (default=[]).',
+\ 'ollama_execute_allow_project_executables': 'Allow execute to run executables that resolve below the current project directory (default=v:false).',
 \ 'ollama_stop_on_error': 'Stop OllamaEdit immediately after a tool error (default=v:false).',
 \ 'ollama_nothinking': 'Disable thinking output of reasoning models (default=v:false)',
 \ 'ollama_debug': 'Enable debug logging (0=Off, 1=Errors, 2=Warnings, 3=Info, 4=Debug, default=0).',

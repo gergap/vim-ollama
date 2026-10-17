@@ -1064,29 +1064,46 @@ function! ollama#edit#RunExecute(request_id, arguments) abort
         if type(l:execute_cwd) != v:t_string || empty(l:execute_cwd) || l:execute_cwd =~# '\.\.[\\/]\|^[A-Za-z]:[\\/]\|^/'
             throw 'execute cwd must be project-relative and remain below the current directory'
         endif
-        if empty(l:relative) || l:relative =~# '^\.\.[\\/]\|[\\/]\.\.[\\/]\|[\\/]\.\.$' || l:relative =~# '^[A-Za-z]:[\\/]'
-            throw 'execute path must be relative and remain below the current directory'
-        endif
-        if l:relative =~# '^/' && !get(g:, 'ollama_bwrap_enabled', v:false)
-            throw 'absolute system paths require bubblewrap and an execute allowlist entry'
+        if empty(l:relative) || l:relative =~# '^[A-Za-z]:[\\/]'
+            throw 'execute path must be a non-empty Unix path'
         endif
         let l:is_absolute = l:relative =~# '^/'
-        let l:path = l:is_absolute ? simplify(l:relative) : simplify(g:ollama_edit_cwd .. '/' .. l:relative)
-        let l:is_project_executable = !l:is_absolute && getftype(l:path) ==# 'file'
-                    \ && getftype(l:path) !=# 'link' && executable(l:path)
+        let l:canonical_project = simplify(resolve(fnamemodify(g:ollama_edit_cwd, ':p')))
+        if l:canonical_project !=# '/'
+            let l:canonical_project = substitute(l:canonical_project, '/\+$', '', '')
+        endif
+        let l:path = simplify(resolve(fnamemodify(l:is_absolute ? l:relative : l:canonical_project .. '/' .. l:relative, ':p')))
+        let l:is_project_path = l:path ==# l:canonical_project
+                    \ || (l:canonical_project ==# '/' ? l:path =~# '^/'
+                                \ : stridx(l:path, l:canonical_project .. '/') == 0)
+        let l:is_project_executable = l:is_project_path && getftype(l:path) ==# 'file'
+                    \ && executable(l:path)
         let l:execute_cwd = simplify(g:ollama_edit_cwd .. '/' .. l:execute_cwd)
         if getftype(l:execute_cwd) ==# 'link' || !isdirectory(l:execute_cwd)
             throw 'execute cwd must be an existing project directory'
         endif
+        if l:is_project_path && !l:is_project_executable
+                    \ && (l:is_absolute || l:relative =~# '[\\/]')
+            throw 'project executable not found'
+        endif
+        if l:is_project_executable && !get(g:, 'ollama_execute_allow_project_executables', v:false)
+            throw 'project executables are disabled; set g:ollama_execute_allow_project_executables to v:true'
+        endif
+        if !l:is_project_path && l:relative =~# '[\\/]' && !l:is_absolute
+            throw 'execute path resolves outside the current project'
+        endif
+        if l:is_absolute && !l:is_project_executable && !get(g:, 'ollama_bwrap_enabled', v:false)
+            throw 'absolute system paths require bubblewrap and an execute allowlist entry'
+        endif
         if get(g:, 'ollama_bwrap_enabled', v:false) && (l:is_absolute || l:relative !~# '[\\/]')
-                    \ && (l:is_absolute || getftype(l:path) !=# 'file' || !executable(l:path))
+                    \ && !l:is_project_executable
             let l:path = l:is_absolute ? resolve(l:path) : exepath(l:relative)
         endif
-        if get(g:, 'ollama_bwrap_enabled', v:false) && l:is_absolute
+        if get(g:, 'ollama_bwrap_enabled', v:false) && !l:is_project_executable
                     \ && l:path !~# '^/usr/\|^/bin/\|^/sbin/\|^/lib/\|^/lib64/'
             throw 'absolute path is outside the sandbox system paths'
         endif
-        if l:is_absolute || !l:is_project_executable
+        if !l:is_project_executable
             let l:allowlist = get(g:, 'ollama_execute_allowlist', [])
             if type(l:allowlist) != v:t_list
                 throw 'ollama_execute_allowlist must be a list of absolute executable paths'
@@ -1423,6 +1440,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),
                 \ 'sandbox_system_tools': get(g:, 'ollama_bwrap_enabled', v:false),
                 \ 'execute_allowlist': get(g:, 'ollama_execute_allowlist', []),
+                \ 'execute_allow_project_executables': get(g:, 'ollama_execute_allow_project_executables', v:false),
                 \ }
     let l:session_settings = extend(l:session_settings, a:settings)
     let l:code_json = json_encode(a:code)

@@ -263,6 +263,9 @@ endif
 if !exists('g:ollama_execute_allowlist')
     let g:ollama_execute_allowlist = []
 endif
+if !exists('g:ollama_execute_allow_project_executables')
+    let g:ollama_execute_allow_project_executables = v:false
+endif
 if !exists('g:ollama_split_vertically')
     let g:ollama_split_vertically = 1
 endif

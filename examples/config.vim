@@ -72,6 +72,9 @@ let g:ollama_bwrap_confirm = v:true
 let g:ollama_bwrap_execute_allow_project_write = v:false
 " Whitelist executables that may be run by the execute tool.
 let g:ollama_execute_allowlist = ['/usr/bin/clang-format', '/usr/bin/glab']
+" Allow execute to run executables that resolve below the current project
+" directory (for example build executables or unit tests). Disabled by default.
+let g:ollama_execute_allow_project_executables = v:false
 " Whitelist executables that may access the network inside bubblewrap.
 " glab needs this for GitLab API calls; network access remains denied for all
 " other executables.
