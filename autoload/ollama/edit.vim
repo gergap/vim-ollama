@@ -36,6 +36,10 @@ function! s:CloseProgress() abort
     call ollama#edit#StopSpinner(v:false)
 endfunction
 
+function! s:RedrawStatusAfterModeChange(timer) abort
+    redrawstatus
+endfunction
+
 function! ollama#edit#StartSpinner(text) abort
     let s:spinner_active = v:true
     let s:spinner_frame = 0
@@ -1368,6 +1372,10 @@ function! ollama#edit#EditCodeDone(status, ...) abort
         let s:resume_conversation_insert = v:false
         if win_gotoid(s:conversation_winid)
             startinsert
+            if mode(1) ==# 'n'
+                call feedkeys('a', 'n')
+            endif
+            call timer_start(0, function('s:RedrawStatusAfterModeChange'))
         endif
     endif
 
