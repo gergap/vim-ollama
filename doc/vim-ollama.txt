@@ -148,6 +148,9 @@ The vim-ollama plugin provides the following commands:
     recent requests are persisted in ~/.vim/config/ollama-edit-history, so
     they remain available after restarting Vim. The number of saved requests
     is controlled by |g:ollama_edit_prompt_history_limit|.
+    Press <PageUp> or <PageDown> to complete the current prompt by prefix:
+    only matching history entries are selected, and repeated presses cycle
+    through those matches.
     - Usage:
 >
         :[range]OllamaEdit [prompt]

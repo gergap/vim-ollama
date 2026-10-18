@@ -133,6 +133,8 @@ function! s:OpenConversation(request) abort
     inoremap <silent><buffer> <Tab> <C-R>=ollama#edit#ToggleMode()<CR>
     inoremap <silent><buffer> <Up> <C-R>=ollama#edit#PromptHistory(-1)<CR>
     inoremap <silent><buffer> <Down> <C-R>=ollama#edit#PromptHistory(1)<CR>
+    inoremap <silent><buffer> <PageUp> <C-R>=ollama#edit#PromptHistoryCompletion(-1)<CR>
+    inoremap <silent><buffer> <PageDown> <C-R>=ollama#edit#PromptHistoryCompletion(1)<CR>
 endfunction
 
 function! s:PromptHistoryPath() abort
@@ -231,6 +233,7 @@ function! ollama#edit#PromptHistory(direction) abort
     if empty(l:history)
         return ''
     endif
+    let b:ollama_edit_prompt_completion = {}
     let l:index = get(b:, 'ollama_edit_prompt_history_index', len(l:history))
     if a:direction < 0
         let l:index = max([0, l:index - 1])
@@ -244,6 +247,39 @@ function! ollama#edit#PromptHistory(direction) abort
     " Replace the active prompt through insert mode; prompt buffers keep the
     " editable prompt separate from the ordinary buffer lines.
     return "\<C-E>\<C-U>" .. l:text
+endfunction
+
+function! ollama#edit#PromptHistoryCompletion(direction) abort
+    let l:history = get(b:, 'ollama_edit_prompt_history', [])
+    if empty(l:history)
+        return ''
+    endif
+    let l:prompt = prompt_getprompt(bufnr('%'))
+    let l:line = getline('.')
+    let l:text = strpart(l:line, strlen(l:prompt))
+    let l:last = get(b:, 'ollama_edit_prompt_completion', {})
+    if type(l:last) != v:t_dict || !get(l:last, 'active', v:false)
+                \ || get(l:last, 'text', '') !=# l:text
+        let l:matches = filter(copy(l:history), {_, value -> strpart(value, 0, strlen(l:text)) ==# l:text})
+        let l:last = {'active': v:true, 'prefix': l:text, 'matches': l:matches, 'index': -1, 'text': l:text}
+    endif
+    let l:matches = get(l:last, 'matches', [])
+    if empty(l:matches)
+        let b:ollama_edit_prompt_completion = l:last
+        return ''
+    endif
+    let l:index = get(l:last, 'index', -1)
+    if l:index < 0
+        let l:index = a:direction < 0 ? len(l:matches) - 1 : 0
+    elseif a:direction < 0
+        let l:index = (l:index - 1 + len(l:matches)) % len(l:matches)
+    else
+        let l:index = (l:index + 1) % len(l:matches)
+    endif
+    let l:last.index = l:index
+    let l:last.text = l:matches[l:index]
+    let b:ollama_edit_prompt_completion = l:last
+    return "\<C-E>\<C-U>" .. l:last.text
 endfunction
 
 function! ollama#edit#UpdateStickScroll() abort
@@ -1325,6 +1361,7 @@ function! ollama#edit#PromptEntered(text) abort
     let s:resume_conversation_insert = v:true
     stopinsert
     call s:AddPromptToHistory(a:text)
+    let b:ollama_edit_prompt_completion = {}
     if g:edit_in_progress
         call ollama#edit#AppendProgress('An OllamaEdit request is already running.')
         return
