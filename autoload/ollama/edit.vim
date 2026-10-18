@@ -400,6 +400,39 @@ function! ollama#edit#ContextStatus() abort
     return get(g:, 'ollama_context_status', '')
 endfunction
 
+function! s:FormatContextTokens(value) abort
+    if a:value == 0
+        return '0K'
+    endif
+    if a:value < 1000
+        return string(a:value)
+    endif
+    return substitute(printf('%.1fK', a:value / 1000.0), '\.0K$', 'K', '')
+endfunction
+
+function! ollama#edit#ContextBudgetStatus() abort
+    let l:used = max([0, get(g:, 'ollama_context_used_tokens', 0)])
+    let l:limit = get(g:, 'ollama_context_limit_tokens', 0)
+    if l:limit <= 0
+        let l:options = get(g:, 'ollama_edit_options', {})
+        let l:configured_limit = type(l:options) == v:t_dict ? get(l:options, 'num_ctx', 0) : 0
+        if type(l:configured_limit) == v:t_number && l:configured_limit > 0
+            let l:limit = l:configured_limit
+        else
+            let l:limit = get(g:, 'ollama_autocompact_context_limit', 32768)
+        endif
+    endif
+    return '~' .. s:FormatContextTokens(l:used) .. '/' .. s:FormatContextTokens(l:limit)
+endfunction
+
+function! ollama#edit#ContextProgressStatus() abort
+    let l:percentage = max([0, get(g:, 'ollama_context_percentage', 0)])
+    let l:percentage = min([100, l:percentage])
+    let l:width = 10
+    let l:filled = float2nr(round(l:percentage * l:width / 100.0))
+    return '[' .. repeat('█', l:filled) .. repeat('░', l:width - l:filled) .. '] ~' .. l:percentage .. '%'
+endfunction
+
 function! ollama#edit#TaskTopicStatus() abort
     let l:topic = get(g:, 'ollama_task_topic', '')
     return empty(l:topic) ? '' : 'Task: ' .. l:topic
@@ -1426,6 +1459,9 @@ try:
             vim.command('call ollama#edit#ShowSpinner()')
         if event.get('type') == 'context_usage':
             vim.command('let g:ollama_context_status = ' + vim_json(event.get('text', '')))
+            vim.command('let g:ollama_context_used_tokens = ' + str(int(event.get('used_tokens', -1))))
+            vim.command('let g:ollama_context_limit_tokens = ' + str(int(event.get('context_limit', -1))))
+            vim.command('let g:ollama_context_percentage = ' + str(int(event.get('percentage', -1))))
             vim.command('redrawstatus')
         if event.get('type') == 'task_topic':
             topic = event.get('topic', '') if event.get('status') == 'active' else ''
@@ -1497,6 +1533,9 @@ function! s:StartEditSession(request, code, filetype, settings) abort
     let g:ollama_edit_changedtick = b:changedtick
     let g:ollama_edit_cwd = getcwd()
     let g:ollama_context_status = ''
+    let g:ollama_context_used_tokens = -1
+    let g:ollama_context_limit_tokens = -1
+    let g:ollama_context_percentage = -1
     let g:ollama_task_topic = ''
     let g:ollama_edit_checker = get(a:settings, 'checker', {})
 

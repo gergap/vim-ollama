@@ -2797,6 +2797,11 @@ def _model_options(settings):
 
 
 def _context_usage(message, settings):
+    details = _context_usage_details(message, settings)
+    return details["text"] if details else None
+
+
+def _context_usage_details(message, settings):
     usage = message.get("_ollama_usage") if isinstance(message, dict) else None
     usage_kind = "ollama"
     if not isinstance(usage, dict) and isinstance(message, dict):
@@ -2825,7 +2830,12 @@ def _context_usage(message, settings):
         return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
 
     percentage = round(used * 100 / num_ctx)
-    return f"Context: {format_tokens(used)} / {format_tokens(num_ctx)} ({percentage}%)"
+    return {
+        "text": f"Context: {format_tokens(used)} / {format_tokens(num_ctx)} ({percentage}%)",
+        "used_tokens": used,
+        "context_limit": num_ctx,
+        "percentage": percentage,
+    }
 
 
 def _autocompact_options(settings):
@@ -3373,9 +3383,15 @@ def _run_edit(request, code, filetype, settings):
         if log is not None:
             log.debug("Complete edit prompt:\n" + json.dumps({"messages": messages, "tools": tools}, indent=2))
         message = _ollama_request(messages, settings, tools) if provider == "ollama" else _openai_request(messages, settings, tools)
-        context = _context_usage(message, settings)
+        context = _context_usage_details(message, settings)
         if context:
-            _progress(context, type="context_usage")
+            _progress(
+                context["text"],
+                type="context_usage",
+                used_tokens=context["used_tokens"],
+                context_limit=context["context_limit"],
+                percentage=context["percentage"],
+            )
         tool_calls = message.get("tool_calls", []) if isinstance(message, dict) else (message.tool_calls or [])
         if isinstance(message, dict):
             messages.append({

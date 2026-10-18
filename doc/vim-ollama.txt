@@ -368,6 +368,19 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
     information. It then displays values such as `Context: 8.9k / 160.0k
     (6%)`. The value is refreshed after each provider response.
 
+    Airline also provides two compact context-budget parts. Use
+    `ollama_context_budget` for the token count (for example `~69.4K/160K`)
+    and `ollama_context_progress` for a visual bar and percentage (for
+    example `[████░░░░░░] ~43%`):
+>
+         let g:airline_extensions = get(g:, 'airline_extensions', []) + ['ollama']
+         let g:airline_section_x = airline#section#create([
+                     \ 'ollama_context_budget', ' ', 'ollama_context_progress'])
+<
+    Both parts show a zero-state before the first OllamaEdit provider response
+    and update after each response. The existing `ollama_context` part is
+    unchanged.
+
     Vim Airline users can enable the bundled `ollama` extension and add its
     `ollama_context` part to an Airline section. To display only the context
     value in section X:

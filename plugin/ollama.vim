@@ -211,6 +211,15 @@ endif
 if !exists('g:ollama_context_status')
     let g:ollama_context_status = ''
 endif
+if !exists('g:ollama_context_used_tokens')
+    let g:ollama_context_used_tokens = -1
+endif
+if !exists('g:ollama_context_limit_tokens')
+    let g:ollama_context_limit_tokens = -1
+endif
+if !exists('g:ollama_context_percentage')
+    let g:ollama_context_percentage = -1
+endif
 if !exists('g:ollama_task_topic')
     let g:ollama_task_topic = ''
 endif
@@ -220,6 +229,8 @@ function! s:RegisterAirlineContext() abort
         return
     endif
     call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+    call airline#parts#define_function('ollama_context_budget', 'ollama#edit#ContextBudgetStatus')
+    call airline#parts#define_function('ollama_context_progress', 'ollama#edit#ContextProgressStatus')
     call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
     if exists('*airline#update_statusline')
         call airline#update_statusline()
