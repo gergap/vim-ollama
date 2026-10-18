@@ -18,6 +18,8 @@ let g:ollama_model_options = {
             \ 'temperature': 0,
             \ 'top_p': 0.95,
             \ 'num_predict': 128,
+            \ 'num_ctx': 8192,
+            \ 'keep_alive': 300,
             \ }
 " Number of context lines before and after the cursor.
 let g:ollama_context_lines = 30

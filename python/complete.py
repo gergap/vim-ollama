@@ -30,7 +30,7 @@ except ImportError:
 DEFAULT_HOST = 'http://localhost:11434'
 DEFAULT_PROVIDER = 'ollama'
 DEFAULT_MODEL = 'qwen2.5-coder:7b'
-DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95 }'
+DEFAULT_OPTIONS = '{ "temperature": 0, "top_p": 0.95, "num_predict": 128, "num_ctx": 8192, "keep_alive": 300 }'
 DEFAULT_MISTRAL_MODEL = 'codestral-2501'
 DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini'
 DEFAULT_OPENAI_LEGACY_MODEL = 'gpt-3.5-turbo-instruct'
@@ -163,9 +163,14 @@ def generate_code_completion(config, prompt, baseurl, model, options, credential
             'raw' : False,
         }
     completions = []
+    ollama_options = copy.deepcopy(options)
+    # Ollama expects keep_alive alongside options, not inside the options map.
+    keep_alive = ollama_options.pop('keep_alive', None)
     for candidate in range(max(1, candidates)):
         data = copy.deepcopy(base_data)
-        data['options'] = copy.deepcopy(options)
+        data['options'] = copy.deepcopy(ollama_options)
+        if keep_alive is not None:
+            data['keep_alive'] = keep_alive
         if candidates > 1:
             # Sampling is required for distinct alternatives. Keep the legacy
             # deterministic default for the normal single-candidate path.

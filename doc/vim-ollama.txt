@@ -706,16 +706,23 @@ g:ollama_model
 <
                                                       *g:ollama_model_options*
 g:ollama_model_options
-    - Description: Sets the default Ollama model options.
-    - Default: '{"temperature": 0, "top_p": 0.95}'
-      Different REST APIs may require different options. OpenAI uses
-      `max_tokens` instead of `num_predict` to give one example.
+    - Description: Sets the default code completion model options.
+      `num_ctx` and `keep_alive` are Ollama-specific. `keep_alive` is sent at
+      the Ollama request top level; the other Ollama generation settings are
+      sent inside the `options` object. Different REST APIs may require
+      different options. OpenAI and Mistral use `max_tokens` instead of
+      `num_predict`; the plugin uses a 300-token fallback when it is not
+      configured.
+    - Default: '{"temperature": 0, "top_p": 0.95, "num_predict": 128,
+      "num_ctx": 8192, "keep_alive": 300}'
     - Example:
 >
         let g:ollama_model_options = {
                 \ 'temperature': 0,
                 \ 'top_p': 0.95,
-                \ 'num_predict': 256
+                \ 'num_predict': 128,
+                \ 'num_ctx': 8192,
+                \ 'keep_alive': 300
                 \ }
 <
                                               *g:ollama_completion_candidates*
