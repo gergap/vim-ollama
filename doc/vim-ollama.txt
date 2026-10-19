@@ -368,41 +368,42 @@ AUTOMATIC CONTEXT COMPACTION                                  *vim-ollama-autoco
     information. It then displays values such as `Context: 8.9k / 160.0k
     (6%)`. The value is refreshed after each provider response.
 
-    Airline also provides two compact context-budget parts. Use
-    `ollama_context_budget` for the token count (for example `~69.4K/160K`)
-    and `ollama_context_progress` for a visual bar and percentage (for
-    example `[████░░░░░░] ~43%`):
->
-         let g:airline_extensions = get(g:, 'airline_extensions', []) + ['ollama']
-         let g:airline_section_x = airline#section#create([
-                     \ 'ollama_context_budget', ' ', 'ollama_context_progress'])
-<
-    Both parts show a zero-state before the first OllamaEdit provider response
-    and update after each response. The existing `ollama_context` part is
-    unchanged.
-
-    Vim Airline users can enable the bundled `ollama` extension and add its
-    `ollama_context` part to an Airline section. To display only the context
-    value in section X:
+    Vim Airline users can enable the bundled `ollama` extension. Before using
+    its parts in an Airline section, call `airline#parts#define_function()` for
+    each part. These calls must come before `airline#section#create()` so the
+    parts are available while the vimrc is evaluated:
 >
         let g:airline_extensions = get(g:, 'airline_extensions', []) + ['ollama']
         call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
+        call airline#parts#define_function('ollama_context_budget', 'ollama#edit#ContextBudgetStatus')
+        call airline#parts#define_function('ollama_context_progress', 'ollama#edit#ContextProgressStatus')
+        call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
+<
+    To display the compact token budget (for example `~69.4K/160K`) and visual
+    progress (for example `[████░░░░░░] ~43%`) in section X:
+>
+        let g:airline_section_x = airline#section#create([
+                \ ' | ', 'ollama_context_budget', ' | ', 'ollama_context_progress', ' | '])
+<
+    Both parts show a zero-state before the first OllamaEdit provider response
+    and update after each response.
+
+    To display only the context value in section X:
+>
         let g:airline_section_x = airline#section#create(['ollama_context'])
 <
-    To display both the filename and context, use:
+    To display both the filename and context:
 >
-        call airline#parts#define_function('ollama_context', 'ollama#edit#ContextStatus')
         let g:airline_section_x = airline#section#create(['filename', ' ', 'ollama_context'])
 <
     `filename` is an Airline part and is not added by vim-ollama. If you
     already customize `g:airline_section_x`, keep those existing parts and
-    append `ollama_context` to that list. The extension only defines the part;
+    append `ollama_context` to that list. The extension only defines the parts;
     it does not replace Airline sections automatically.
 
-    The same extension provides `ollama_task_topic`, which displays the active
-    OllamaEdit task topic. For example, show the topic and context together:
+    The `ollama_task_topic` part displays the active OllamaEdit task topic. To
+    show the topic and context together:
 >
-        call airline#parts#define_function('ollama_task_topic', 'ollama#edit#TaskTopicStatus')
         let g:airline_section_x = airline#section#create(['ollama_task_topic', ' ', 'ollama_context'])
 <
     The task topic is cleared when the OllamaEdit session finishes.
