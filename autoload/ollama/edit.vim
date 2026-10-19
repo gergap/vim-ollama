@@ -22,6 +22,7 @@ let s:spinner_line = 0
 let s:spinner_start = []
 let s:thinking_line = 0
 let s:resume_conversation_insert = v:false
+let s:fold_highlight_timer = 0
 let g:edit_in_progress = 0
 
 if empty(sign_getdefined('OllamaEditChange'))
@@ -105,6 +106,8 @@ function! s:OpenConversation(request) abort
     syntax match OllamaEditCross /^✗/
     syntax match OllamaEditThinking /^> .*/
     highlight default OllamaEditThinking cterm=italic ctermfg=2 gui=italic guifg=#5fd787
+    highlight default OllamaEditFoldSuccess ctermfg=0 ctermbg=10 guifg=#1b4332 guibg=#b7e4c7
+    highlight default OllamaEditFoldFailed ctermfg=0 ctermbg=9 guifg=#7f1d1d guibg=#f4b8b8
     syntax match OllamaPlanPrompt /^\[Plan\]/ containedin=ALL
     syntax match OllamaBuildPrompt /^\[Build\]/ containedin=ALL
     "setlocal wrap
@@ -121,6 +124,7 @@ function! s:OpenConversation(request) abort
         autocmd! * <buffer>
         autocmd BufWinEnter,BufWritePost,InsertEnter,InsertLeave,CursorHold,CursorHoldI <buffer>
                     \ call ollama#edit#SetupConversationFolding()
+        autocmd BufWinLeave,BufUnload <buffer> call ollama#edit#ClearFoldHighlights()
         autocmd CursorMoved,CursorMovedI <buffer> call ollama#edit#UpdateStickScroll()
         autocmd WinLeave <buffer> let b:ollama_stick_to_bottom = v:true
     augroup END
@@ -293,20 +297,129 @@ function! ollama#edit#UpdateStickScroll() abort
     let b:ollama_stick_to_bottom = line('.') == line('$')
 endfunction
 
-function! ollama#edit#ConversationFoldText() abort
-    let l:start = getline(v:foldstart)
+function! s:ConversationFoldText(start_line, end_line) abort
+    let l:start = getline(a:start_line)
     let l:label = substitute(l:start, '^#StartDiagnostic\s*', '', '')
-    let l:end = getline(v:foldend)
+    let l:end = getline(a:end_line)
     let l:status = substitute(l:end, '^#EndDiagnostic\s*', '', '')
     if empty(l:label)
         let l:label = 'diagnostic'
     endif
-    let l:line_count = v:foldend - v:foldstart + 1
+    let l:line_count = a:end_line - a:start_line + 1
     let l:prefix = '+-- ' .. l:line_count .. ' lines: '
     if empty(l:status)
         return l:prefix .. l:label
     endif
     return l:prefix .. l:label .. '  ' .. l:status
+endfunction
+
+function! ollama#edit#ConversationFoldText() abort
+    return s:ConversationFoldText(v:foldstart, v:foldend)
+endfunction
+
+function! s:CloseFoldHighlightPopups() abort
+    for l:id in get(b:, 'ollama_fold_highlight_popups', [])
+        silent! call popup_close(l:id)
+    endfor
+    let b:ollama_fold_highlight_popups = []
+endfunction
+
+function! ollama#edit#ClearFoldHighlights() abort
+    call s:CloseFoldHighlightPopups()
+    let b:ollama_fold_highlight_signature = ''
+    if s:fold_highlight_timer != 0
+        call timer_stop(s:fold_highlight_timer)
+        let s:fold_highlight_timer = 0
+    endif
+endfunction
+
+function! ollama#edit#RefreshFoldHighlights() abort
+    if !get(b:, 'ollama_edit_conversation', v:false)
+                \ || !exists('*popup_create') || !exists('*screenpos')
+                \ || !exists('*win_screenpos')
+        return
+    endif
+
+    let l:folds = []
+    let l:lnum = line('w0')
+    let l:last_visible_line = line('w$')
+    while l:lnum <= l:last_visible_line
+        if getline(l:lnum) !~# '^#StartDiagnostic\>' || foldclosed(l:lnum) != l:lnum
+            let l:lnum += 1
+            continue
+        endif
+        let l:end_line = foldclosedend(l:lnum)
+        let l:status = substitute(getline(l:end_line), '^#EndDiagnostic\s*', '', '')
+        if l:status ==# 'SUCCESS' || l:status ==# 'FAILED'
+            let l:position = screenpos(win_getid(), l:lnum, 1)
+            if l:position.row > 0 && l:position.col > 0
+                call add(l:folds, [l:lnum, l:end_line, l:status,
+                            \ l:position.row, l:position.col,
+                            \ s:ConversationFoldText(l:lnum, l:end_line)])
+            endif
+        endif
+        let l:lnum = l:end_line + 1
+    endwhile
+
+    let l:cursor_position = screenpos(win_getid(), line('.'), col('.'))
+    let l:cursor_mask = [0, 0]
+    for l:fold in l:folds
+        if l:cursor_position.row == l:fold[3]
+                    \ && l:cursor_position.col >= l:fold[4]
+                    \ && l:cursor_position.col < l:fold[4] + strdisplaywidth(l:fold[5])
+            let l:cursor_mask = [l:fold[3], l:cursor_position.col - l:fold[4] + 1]
+            break
+        endif
+    endfor
+    let l:signature = string([win_screenpos(win_getid()), winwidth(0), l:folds,
+                \ l:cursor_mask])
+    if get(b:, 'ollama_fold_highlight_signature', '') ==# l:signature
+        return
+    endif
+    let b:ollama_fold_highlight_signature = l:signature
+    call s:CloseFoldHighlightPopups()
+
+    let l:window_position = win_screenpos(win_getid())
+    let l:window_right = l:window_position[1] + winwidth(0) - 1
+    for l:fold in l:folds
+        let l:popup_width = max([1, l:window_right - l:fold[4] + 1])
+        let l:options = {
+                    \ 'line': l:fold[3],
+                    \ 'col': l:fold[4],
+                    \ 'pos': 'topleft',
+                    \ 'fixed': v:true,
+                    \ 'wrap': v:false,
+                    \ 'minwidth': l:popup_width,
+                    \ 'maxwidth': l:popup_width,
+                    \ 'border': [0, 0, 0, 0],
+                    \ 'padding': [0, 0, 0, 0],
+                    \ 'scrollbar': v:false,
+                    \ 'zindex': 10,
+                    \ 'highlight': l:fold[2] ==# 'SUCCESS'
+                    \     ? 'OllamaEditFoldSuccess' : 'OllamaEditFoldFailed',
+                    \ }
+        if l:cursor_mask[0] == l:fold[3]
+            let l:options.mask = [[l:cursor_mask[1], l:cursor_mask[1], 1, 1]]
+        endif
+        call add(b:ollama_fold_highlight_popups, popup_create(l:fold[5], l:options))
+    endfor
+endfunction
+
+function! s:RefreshFoldHighlightsTimer(timer) abort
+    if !bufexists(s:conversation_bufnr)
+        call timer_stop(a:timer)
+        let s:fold_highlight_timer = 0
+    elseif s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+        call win_execute(s:conversation_winid, 'call ollama#edit#RefreshFoldHighlights()')
+    endif
+endfunction
+
+function! s:StartFoldHighlightTimer() abort
+    if s:fold_highlight_timer == 0 && exists('*popup_create')
+                \ && exists('*screenpos') && exists('*win_screenpos')
+        let s:fold_highlight_timer = timer_start(150, function('s:RefreshFoldHighlightsTimer'),
+                    \ {'repeat': -1})
+    endif
 endfunction
 
 function! s:ConversationFoldCache() abort
@@ -348,6 +461,8 @@ function! ollama#edit#SetupConversationFolding() abort
         if &l:foldexpr !=# 'ollama#edit#ConversationFold(v:lnum)'
             setlocal foldexpr=ollama#edit#ConversationFold(v:lnum)
         endif
+        call s:StartFoldHighlightTimer()
+        call ollama#edit#RefreshFoldHighlights()
     endif
 endfunction
 
@@ -448,6 +563,7 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
     endif
     let l:append = a:0 > 0 && a:1
     let l:status = a:0 > 1 ? a:2 : ''
+    let l:refresh_fold_highlights = v:false
     let l:internal_update = getbufvar(s:conversation_bufnr, 'ollama_internal_update', v:false)
     let l:stick = getbufvar(s:conversation_bufnr, 'ollama_stick_to_bottom', v:true)
     call setbufvar(s:conversation_bufnr, 'ollama_internal_update', v:true)
@@ -476,6 +592,7 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
         for l:i in range(l:end_line, l:end_line + l:n)
             if l:i > 0 && getbufline(s:conversation_bufnr, l:i)[0] =~# '^#EndDiagnostic\>'
                 call setbufline(s:conversation_bufnr, l:i, '#EndDiagnostic ' .. l:status)
+                let l:refresh_fold_highlights = v:true
                 break
             endif
         endfor
@@ -484,6 +601,12 @@ function! ollama#edit#AppendDiagnostic(title, content, ...) abort
         " Keep diagnostic folds closed without toggling the fold under the cursor.
         call win_execute(s:conversation_winid, 'silent! setlocal foldlevel=0')
         call win_execute(s:conversation_winid, 'silent! normal! G')
+    endif
+    if l:refresh_fold_highlights
+        call s:StartFoldHighlightTimer()
+        if s:conversation_winid != -1 && win_id2win(s:conversation_winid) != 0
+            call win_execute(s:conversation_winid, 'call ollama#edit#RefreshFoldHighlights()')
+        endif
     endif
     finally
         call setbufvar(s:conversation_bufnr, 'ollama_internal_update', l:internal_update)
