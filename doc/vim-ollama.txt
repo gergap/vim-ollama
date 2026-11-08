@@ -1083,6 +1083,22 @@ g:ollama_edit_show_thinking
         let g:ollama_edit_show_thinking = v:true
 <
 
+                                              *g:ollama_edit_reasoning_effort*
+g:ollama_edit_reasoning_effort
+    - Description: Reasoning effort for OllamaEdit model requests. Accepts
+      'low', 'medium', 'high', or '' (the default, preserving existing behavior).
+      Native Ollama sends the value as the top-level `think` field; an empty
+      value retains the existing `think: true` behavior. OpenAI-compatible
+      providers send `reasoning_effort` only when a nonempty value is set.
+      Requires a model and server that support the selected effort level;
+      not all thinking models support effort levels. Leave empty for models
+      that only support boolean thinking. This does not control display of
+      thinking output; see |g:ollama_edit_show_thinking|.
+    - Example:
+>
+        let g:ollama_edit_reasoning_effort = 'high'
+<
+
                                                 *g:ollama_edit_max_operations*
 g:ollama_edit_max_operations
     - Description: Sets the maximum number of model tool calls allowed in one

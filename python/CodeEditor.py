@@ -2690,6 +2690,7 @@ def _check_ollama_tool_support(settings):
 
 
 def _ollama_request(messages, settings, tools):
+    reasoning_effort = _reasoning_effort(settings)
     _check_ollama_tool_support(settings)
     baseurl = settings.get("url") or DEFAULT_HOST
     endpoint = baseurl.rstrip("/") + "/api/chat"
@@ -2708,10 +2709,8 @@ def _ollama_request(messages, settings, tools):
     request = {"model": model, "messages": messages, "tools": tools, "stream": True, "options": options}
     if keep_alive is not None:
         request["keep_alive"] = keep_alive
-    # Native Ollama otherwise decides independently whether a thinking model
-    # should spend the request budget reasoning. Keep edit behavior aligned
-    # with the OpenCode setup while allowing callers to disable it explicitly.
-    request["think"] = settings.get("think", True)
+    # Ollama uses the top-level think field for models with effort levels.
+    request["think"] = reasoning_effort or settings.get("think", True)
     if settings.get("show_llm_request", False):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     content = []
@@ -2782,6 +2781,13 @@ def _ollama_request(messages, settings, tools):
     if done_reason:
         message["_ollama_done_reason"] = done_reason
     return message
+
+
+def _reasoning_effort(settings):
+    effort = settings.get("reasoning_effort", "")
+    if effort not in ("", "low", "medium", "high"):
+        raise ValueError("reasoning_effort must be empty, 'low', 'medium', or 'high'")
+    return effort
 
 
 def _model_options(settings):
@@ -3035,6 +3041,7 @@ def _provider_model_context_limit(settings):
 
 
 def _openai_request(messages, settings, tools):
+    reasoning_effort = _reasoning_effort(settings)
     if OpenAI is None:
         raise ImportError("OpenAI package not found. Install it with pip install openai.")
     credentialname = settings.get("credentialname")
@@ -3060,6 +3067,8 @@ def _openai_request(messages, settings, tools):
         "temperature": options.get("temperature", 0),
         "max_tokens": options.get("max_tokens", 5000),
     }
+    if reasoning_effort:
+        request["reasoning_effort"] = reasoning_effort
     if settings.get("show_llm_request", False):
         _progress(_request_diagnostic(request), fold=True, fold_title="LLM request")
     response = client.chat.completions.create(**request)

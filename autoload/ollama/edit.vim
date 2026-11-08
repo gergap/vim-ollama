@@ -1695,6 +1695,7 @@ function! s:StartEditSession(request, code, filetype, settings) abort
                 \ 'stop_on_error': get(g:, 'ollama_stop_on_error', v:false),
                 \ 'show_llm_request': get(g:, 'ollama_show_llm_request', v:false),
                 \ 'show_thinking': get(g:, 'ollama_edit_show_thinking', v:false),
+                \ 'reasoning_effort': get(g:, 'ollama_edit_reasoning_effort', ''),
                 \ 'max_operations': get(g:, 'ollama_edit_max_operations', 64),
                 \ 'mode': get(g:, 'ollama_edit_mode', 'build'),
                 \ 'extract_max_size': get(g:, 'ollama_extract_max_size', 100 * 1024 * 1024),

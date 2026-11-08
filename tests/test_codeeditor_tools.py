@@ -1176,7 +1176,8 @@ def test_reasoning_only_response_requests_continuation(monkeypatch):
     )
 
 
-def test_ollama_request_can_report_streamed_thinking(monkeypatch):
+@pytest.mark.parametrize("effort", [None, "", "low", "medium", "high"])
+def test_ollama_request_can_report_streamed_thinking(monkeypatch, effort):
     class Response:
         def __enter__(self):
             return self
@@ -1201,17 +1202,52 @@ def test_ollama_request_can_report_streamed_thinking(monkeypatch):
         return Response()
 
     monkeypatch.setattr(CodeEditor.requests, "post", post)
+    settings = {"url": "http://localhost:11434", "model": "qwen3.8:27b", "show_thinking": True}
+    if effort is not None:
+        settings["reasoning_effort"] = effort
     message = CodeEditor._ollama_request(
         [{"role": "user", "content": "work"}],
-        {"url": "http://localhost:11434", "model": "qwen3.8:27b", "show_thinking": True},
+        settings,
         [],
     )
 
-    assert captured["request"]["think"] is True
+    assert captured["request"]["think"] == (effort or True)
+    assert "reasoning_effort" not in captured["request"]["options"]
     assert message["content"] == "done"
     thinking_events = [text for text, details in progress if details.get("type") == "thinking"]
     assert thinking_events
     assert all(not text.startswith("Thinking:") for text in thinking_events)
+
+
+@pytest.mark.parametrize("effort", [None, "", "low", "medium", "high"])
+def test_openai_request_reasoning_effort(monkeypatch, effort):
+    captured = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def create(**request):
+        captured.update(request)
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content="done", tool_calls=[]))])
+
+    monkeypatch.setattr(CodeEditor, "OpenAI", lambda **kwargs: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    settings = {}
+    if effort is not None:
+        settings["reasoning_effort"] = effort
+    message = CodeEditor._openai_request([{"role": "user", "content": "work"}], settings, [])
+
+    assert message["content"] == "done"
+    if effort:
+        assert captured["reasoning_effort"] == effort
+    else:
+        assert "reasoning_effort" not in captured
+
+
+@pytest.mark.parametrize("effort", [None, True, False, 1, [], {}, "invalid", "HIGH"])
+@pytest.mark.parametrize("request_fn", [CodeEditor._ollama_request, CodeEditor._openai_request])
+def test_request_rejects_invalid_reasoning_effort(effort, request_fn):
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        request_fn([], {"reasoning_effort": effort}, [])
 
 
 def test_ollama_request_sends_keep_alive_at_top_level(monkeypatch):
